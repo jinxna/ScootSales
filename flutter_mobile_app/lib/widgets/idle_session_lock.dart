@@ -286,10 +286,28 @@ class _IdleSessionLockState extends State<IdleSessionLock>
       if (!mounted) return;
       setState(() => _signingOut = false);
     }
-    widget.navigatorKey?.currentState?.popUntil(
-      (Route<dynamic> route) => route.isFirst,
-    );
+    _removeScreensAboveFirst();
     _release();
+  }
+
+  void _removeScreensAboveFirst() {
+    final NavigatorState? navigator = widget.navigatorKey?.currentState;
+    if (navigator == null) return;
+    Route<dynamic>? top;
+    bool readTop(Route<dynamic> route) {
+      top = route;
+      return true;
+    }
+
+    navigator.popUntil(readTop);
+    while (top != null && !top!.isFirst) {
+      final Route<dynamic> previousTop = top!;
+      navigator.removeRoute(previousTop);
+      navigator.popUntil(readTop);
+      if (identical(top, previousTop)) {
+        throw StateError('The previous user\'s screen could not be closed.');
+      }
+    }
   }
 
   void _release() {

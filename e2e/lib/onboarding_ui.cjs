@@ -227,7 +227,7 @@ async function acceptFirstAdminInvitation(db, project, email) {
 }
 
 function stripId(row) {
-  const { id, ...rest } = row;
+  const { id: _id, ...rest } = row;
   return rest;
 }
 

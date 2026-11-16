@@ -57,7 +57,7 @@ function applyCorsHeaders(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
-async function handleApi(req, res, body) {
+async function handleApi(req, res) {
   const url      = new URL(req.url, `http://${req.headers.host}`);
   const pathname = url.pathname;
 
@@ -174,9 +174,8 @@ function createServer(options = {}) {
     const urlPath = req.url.split('?')[0];
 
     if (urlPath.startsWith('/api/')) {
-      let body = '';
-      req.on('data', (chunk) => { body += chunk; });
-      req.on('end', () => handleApi(req, res, body));
+      req.resume();
+      req.on('end', () => handleApi(req, res));
       return;
     }
 

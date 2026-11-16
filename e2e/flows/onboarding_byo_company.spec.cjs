@@ -74,6 +74,9 @@ module.exports = {
         const nameField = operator.page.getByRole('textbox', { name: 'Company name', exact: true });
         await nameField.waitFor({ timeout: 15000 });
         await nameField.click();
+        const readOnly = () => nameField.evaluate((field) => field.readOnly);
+        for (let tries = 0; tries < 50 && !(await readOnly()); tries += 1) await operator.page.waitForTimeout(100);
+        ui.expectEqual(await readOnly(), true, 'Company name field is read-only after Connect');
         await operator.page.keyboard.type('ZZ');
         ui.expectEqual(await nameField.inputValue(), LEGAL_NAME, 'Company name is locked after Connect: typing does not change it');
         await text(operator, 'Locked after the project is connected.').first().waitFor({ timeout: 5000 });

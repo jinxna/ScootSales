@@ -928,7 +928,6 @@ async function dismissPhone(page) {
   await page.waitForTimeout(500);
 }
 
-const STAFF_EMAILS = { owner: 'e2e.owner@example.test', operator: 'e2e.operator@example.test', support: 'e2e.support@example.test' };
 async function serveFolder(root) {
   const MIME = {
     '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
@@ -1164,7 +1163,7 @@ async function controlPart(t) {
   }
 }
 
-function writeReport(t) {
+function writeReport() {
   const trailing = [];
   for (const [s, st] of sessionState) {
     const seen = drain(s);
@@ -1269,7 +1268,7 @@ module.exports = {
       if (ONLY.includes('control')) await t.step('Control Centre: owner, operator and support', () => controlPart(t));
     } finally {
       if (!hadFonts) delete process.env.E2E_ALLOW_FONTS;
-      const totals = writeReport(t);
+      const totals = writeReport();
       console.log(`  walkthrough: ${totals.opened}/${totals.pages} pages opened, report in ${path.relative(process.cwd(), OUT)}`);
     }
     if (unreachable.length) {

@@ -10,11 +10,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function records() {
   let text = '';
-  try { text = fs.readFileSync(STUB_FILE, 'utf8'); } catch (error) { return []; }
+  try { text = fs.readFileSync(STUB_FILE, 'utf8'); } catch { return []; }
   const rows = [];
   for (const line of text.split('\n')) {
     if (!line.trim()) continue;
-    try { rows.push(JSON.parse(line)); } catch (error) { }
+    try { rows.push(JSON.parse(line)); } catch { }
   }
   return rows;
 }
@@ -31,7 +31,7 @@ function summary(row) {
 }
 
 function remove(file) {
-  try { fs.unlinkSync(file); } catch (error) { }
+  try { fs.unlinkSync(file); } catch { }
 }
 
 async function startMailSink() {

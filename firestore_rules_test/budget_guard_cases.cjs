@@ -93,7 +93,6 @@ async function commitStop(db, parentState, event, stopIds) {
 }
 let lcState = null;
 
-const sdb = (env, user) => { H.setTestEnv(env); return H.dbFor(user); };
 const phone = [
   { name: 'live_tracking create (session start)', actor: U.salesman,
     prep: (env) => admin(env, (db) => deleteDoc(doc(db, 'live_tracking', S))),

@@ -140,7 +140,7 @@ module.exports = {
     const mailTo = async (address, timeout = 20000) => {
       const end = Date.now() + timeout;
       while (Date.now() < end) {
-        const hit = (await sink.messages()).find((m) => m.To.some((to) => to.Address === address) && /^Invoice /.test(m.Subject));
+        const hit = (await sink.messages()).find((m) => m.To.some((to) => to.Address === address) && m.Subject.startsWith("Invoice "));
         if (hit) return sink.message(hit.ID);
         await new Promise((resolve) => setTimeout(resolve, 300));
       }

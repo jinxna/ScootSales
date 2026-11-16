@@ -365,4 +365,56 @@ void main() {
     expect(find.text('Session locked'), findsNothing);
     expect(await _savedLockedUid(), isNull);
   });
+
+  testWidgets(
+    'the next user never sees the previous user\'s open screen, not even while it closes',
+    (WidgetTester tester) async {
+      final _FakeAuth auth = _FakeAuth();
+      final GlobalKey<NavigatorState> navigatorKey =
+          GlobalKey<NavigatorState>();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: <SingleChildWidget>[
+            Provider<AuthProvider>.value(value: auth),
+          ],
+          child: MaterialApp(
+            navigatorKey: navigatorKey,
+            builder: (BuildContext context, Widget? navigator) =>
+                IdleSessionLock(
+                  enabled: true,
+                  timeout: const Duration(minutes: 10),
+                  reauthenticate: (_) async => null,
+                  navigatorKey: navigatorKey,
+                  child: navigator!,
+                ),
+            home: const Scaffold(body: Text('Home')),
+          ),
+        ),
+      );
+      navigatorKey.currentState!.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('Previous user order')),
+        ),
+      );
+      await _goIdle(tester);
+      expect(find.text('Session locked'), findsOneWidget);
+
+      await tester.tap(find.text('Sign in as a different user'));
+      for (int frame = 0; frame < 60; frame += 1) {
+        await tester.pump(const Duration(milliseconds: 16));
+        if (find.text('Session locked').evaluate().isEmpty) {
+          expect(
+            find.text('Previous user order'),
+            findsNothing,
+            reason: 'frame $frame after the lock lifted',
+          );
+        }
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Session locked'), findsNothing);
+      expect(find.text('Previous user order'), findsNothing);
+      expect(find.text('Home'), findsOneWidget);
+    },
+  );
 }

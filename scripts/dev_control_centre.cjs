@@ -111,7 +111,7 @@ async function waitForUrl(url, emulators) {
   for (;;) {
     try {
       if ((await fetch(url)).ok) return;
-    } catch (_) {}
+    } catch {}
     if (emulators.child.exitCode !== null || Date.now() > deadline) {
       throw new Error(`The Firebase emulators did not start:\n${emulators.tail()}`);
     }
@@ -232,7 +232,7 @@ function watchSignInCodes(file) {
         const invite = mail.request && mail.request.params && mail.request.params.inviteUrl;
         const hash = typeof invite === 'string' ? invite.indexOf('#') : -1;
         if (hash >= 0) console.log(`Invitation for ${to}: open ${WEB_URL}/${invite.slice(hash)}`);
-      } catch (_) {}
+      } catch {}
     }
   }, 1000);
 }

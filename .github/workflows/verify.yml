@@ -9,10 +9,30 @@ permissions:
   contents: read
 
 concurrency:
-  group: verify-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: verify-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  scope:
+    name: Choose the jobs this change can reach
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      flutter: ${{ steps.reach.outputs.flutter }}
+      e2e: ${{ steps.reach.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: List what the changed files reach
+        id: reach
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/ci_reach.py >> "$GITHUB_OUTPUT"
+
   core:
     name: Guard, Python, Node, config
     runs-on: ubuntu-latest
@@ -73,6 +93,9 @@ jobs:
 
       - name: Run Node tests
         run: npm run test:node
+
+      - name: Lint JavaScript with oxlint
+        run: npx oxlint --deny-warnings .
 
       - name: Validate Firebase configuration JSON
         run: |
@@ -232,6 +255,8 @@ jobs:
 
   admin:
     name: Admin Flutter web
+    needs: scope
+    if: needs.scope.outputs.flutter == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -261,6 +286,8 @@ jobs:
 
   directory-client:
     name: Directory client package
+    needs: scope
+    if: needs.scope.outputs.flutter == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -291,6 +318,8 @@ jobs:
 
   mobile:
     name: Mobile Flutter Android
+    needs: scope
+    if: needs.scope.outputs.flutter == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -422,12 +451,14 @@ jobs:
   # the flows that need a different build or sign-in runner have their own jobs.
   e2e:
     name: End-to-end (shard ${{ matrix.shard }})
+    needs: scope
+    if: needs.scope.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3, 4, 5, 6]
     env:
       E2E_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
     steps:
@@ -469,11 +500,18 @@ jobs:
   # sign tokens for the platform project. These flows use the Control Centre
   # build (lib/control_centre/main.dart) and the sign-in runner.
   e2e-control-centre:
-    name: End-to-end (Control Centre sign-in)
+    name: End-to-end (Control Centre sign-in, shard ${{ matrix.shard }})
+    needs: scope
+    if: needs.scope.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       E2E_ADMIN_BUILD: web_control_signin_e2e
+      E2E_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
@@ -490,8 +528,9 @@ jobs:
         run: npm run e2e:signin
 
       - name: Run the Control Centre part of the walkthrough
-        if: success() || failure()
+        if: matrix.shard == 1 && (success() || failure())
         env:
+          E2E_SHARD: ""
           E2E_OUTPUT_TAG: walkthrough-control
           E2E_FILTER: walkthrough
           WALKTHROUGH_CONTROL_BUILD: web_control_signin_e2e
@@ -504,6 +543,7 @@ jobs:
           {
             echo "commit: ${GITHUB_SHA}"
             echo "runner: sign-in (emulator project demo-scoot-platform)"
+            echo "shard: ${E2E_SHARD}"
             echo "admin build: ${E2E_ADMIN_BUILD} from lib/control_centre/main.dart"
           } > e2e/output/RUN_INFO.txt
 
@@ -511,7 +551,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: e2e-control-centre-output
+          name: e2e-control-centre-output-shard-${{ matrix.shard }}
           path: |
             e2e/output/
             firestore-debug.log
@@ -522,6 +562,8 @@ jobs:
   # the platform service (E2E_TENANT_ROUTING=1, output folders web_e2e_v4).
   e2e-company-routing:
     name: End-to-end (company routing)
+    needs: scope
+    if: needs.scope.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -561,6 +603,8 @@ jobs:
   # build. It runs beside the shards above and runs only the edition flow.
   e2e-basic:
     name: End-to-end (basic edition)
+    needs: scope
+    if: needs.scope.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

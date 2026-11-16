@@ -34,6 +34,12 @@ runs:
       shell: bash
       run: npm ci
 
+    - name: Restore the Playwright browser
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
     - name: Install Chromium for Playwright
       shell: bash
       run: npx playwright-core install --with-deps chromium

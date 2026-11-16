@@ -11,7 +11,6 @@ const directory = require('../lib/platform_api.cjs');
 const staff = require('../lib/staff.cjs');
 const { startMailSink } = require('../lib/mail_sink.cjs');
 
-const BILLING = 'e2e.billing@example.test';
 const INVOICE_OUT = path.join(E.OUTPUT_DIR, 'v4_control_centre');
 
 async function mailedPdf(sink, recipient, subject) {
@@ -94,8 +93,8 @@ module.exports = {
       const s = await t.session('admin', { name: `control-${role}` });
       sessions[role] = s;
       s.tenantSdkRequests = [];
-      s.page.on('request', (r) => { if (/\/package$/.test(r.url())) packageStatuses.push(`req ${r.method()} ${Date.now() % 100000}`); });
-      s.page.on('requestfailed', (r) => { if (/\/package$/.test(r.url())) packageStatuses.push(`failed ${r.failure() && r.failure().errorText}`); });
+      s.page.on('request', (r) => { if (r.url().endsWith('/package')) packageStatuses.push(`req ${r.method()} ${Date.now() % 100000}`); });
+      s.page.on('requestfailed', (r) => { if (r.url().endsWith('/package')) packageStatuses.push(`failed ${r.failure() && r.failure().errorText}`); });
       s.page.on('request', (request) => {
         if (/firestore\.googleapis/.test(request.url())) {
           s.tenantSdkRequests.push(request.url());
@@ -107,19 +106,19 @@ module.exports = {
         const response = await route.fetch({ url: `${service.url}${pathname}${new URL(request.url()).search}`,
           headers: { ...request.headers(), host: new URL(t.urls.admin).host } }).catch(() => null);
         if (!response) {
-          if (/\/approve$/.test(pathname)) approveRequests.push(`${pathname} not delivered`);
-          if (/\/package$/.test(pathname)) packageStatuses.push('not delivered');
+          if (pathname.endsWith('/approve')) approveRequests.push(`${pathname} not delivered`);
+          if (pathname.endsWith('/package')) packageStatuses.push('not delivered');
           return route.abort('failed').catch(() => null);
         }
-        if (role === 'operator' && request.method() === 'POST' && /\/payments$/.test(pathname)) {
+        if (role === 'operator' && request.method() === 'POST' && pathname.endsWith('/payments')) {
           paymentRequests.push({ key: request.headers()['idempotency-key'], body: request.postData() });
           if (!dropped && response.status() === 201) { dropped = true; return route.abort('failed'); }
         }
-        if (role === 'operator' && request.method() === 'PUT' && /\/lifecycle$/.test(pathname)) {
+        if (role === 'operator' && request.method() === 'PUT' && pathname.endsWith('/lifecycle')) {
           lifecycleRequests.push({ key: request.headers()['idempotency-key'], body: request.postData() });
           if (!lifecycleDropped && response.status() === 200) { lifecycleDropped = true; return route.abort('failed'); }
         }
-        if (role === 'operator' && request.method() === 'POST' && /\/package$/.test(pathname)) {
+        if (role === 'operator' && request.method() === 'POST' && pathname.endsWith('/package')) {
           packageRequests.push({ key: request.headers()['idempotency-key'], body: request.postData() });
           packageStatuses.push(response.status());
           if (!packageDropped && [200, 201, 202].includes(response.status())) { packageDropped = true; return route.abort('failed'); }
@@ -374,7 +373,6 @@ module.exports = {
         const operator = sessions.operator;
         await button(operator, /^Inbox/).click();
         await button(operator, 'Refresh').click();
-        await operator.page.waitForTimeout(2000);
         await openCompany(operator, NEW_NAME);
         await text(operator, 'Standard · monthly').first().waitFor({ timeout: 25000 });
         await t.shot(operator, 'company-created');

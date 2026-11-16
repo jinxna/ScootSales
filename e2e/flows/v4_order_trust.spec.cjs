@@ -15,8 +15,8 @@ const cents = (value) => Math.round(value * 100);
 
 async function setOverride(db, retailerId, productId, unitPrice) {
   const sheet = await db.get('retailer_score_sheet_settings', retailerId);
-  const overrides = { ...(sheet.productOverrides || {}) };
-  overrides[productId] = { ...(overrides[productId] || {}), unitPrice, price: unitPrice };
+  const overrides = { ...sheet.productOverrides };
+  overrides[productId] = { ...overrides[productId], unitPrice, price: unitPrice };
   await db.put('retailer_score_sheet_settings', retailerId, { ...sheet, productOverrides: overrides, updatedAt: new Date() });
 }
 

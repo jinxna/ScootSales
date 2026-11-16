@@ -146,7 +146,7 @@ module.exports = {
       const [productId, , quantity, unit] = lines[0];
       Object.assign(altered, { productId, quantity: Number(quantity), expectedUnitSen: Number(unit), submittedUnitSen: Number(unit) + 100 });
       lines[0][3] = String(altered.submittedUnitSen);
-      const { serverPriceCheck, ...clean } = submitted;
+      const { serverPriceCheck: _serverPriceCheck, ...clean } = submitted;
       altered.totalPrice = Math.round(submitted.totalPrice * 100 + altered.quantity * 100) / 100;
       await db.put('orders', ALTERED_ORDER_ID, {
         ...clean,

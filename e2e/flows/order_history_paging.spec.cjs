@@ -86,7 +86,7 @@ module.exports = {
       for (let i = 0; i < 6 && !(await countText(page, exact(OLD_ID))); i += 1) {
         try {
           await scrollToFooter(page, 'Load older orders');
-        } catch (_) {
+        } catch {
           break;
         }
         await page.getByRole('button', { name: 'Load older orders' }).click();

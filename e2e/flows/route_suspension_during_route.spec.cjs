@@ -287,7 +287,7 @@ module.exports = {
       });
 
       await t.step('the route is closed on the server and the phone clears the stuck skip', async () => {
-        const { approvedAt, publishedAt, ...plan } = await db.get('route_plans', planId);
+        const { approvedAt: _approvedAt, publishedAt: _publishedAt, ...plan } = await db.get('route_plans', planId);
         await db.put('route_plans', planId, { ...plan, status: 'draft' });
         await phone.page.getByRole('button', { name: 'Back' }).first().click();
         await B.semantic(phone.page, /stops? today · Assigned by/).first().waitFor({ state: 'detached', timeout: 30000 });

@@ -12,6 +12,7 @@ const platform = require('./lib/platform.cjs');
 const directory = require('./lib/platform_api.cjs');
 
 const FLOWS_DIR = path.join(__dirname, 'flows');
+const FLOW_TIMES_FILE = path.join(__dirname, 'flow_times.json');
 const knownBugs = [];
 
 const OTHER_RUNNERS = {
@@ -32,7 +33,18 @@ function shardOf(files) {
   const index = match && Number(match[1]);
   const total = match && Number(match[2]);
   if (!match || index > total) throw new Error('E2E_SHARD must look like 2/5, got ' + spec);
-  return files.filter((_, position) => position % total === index - 1);
+  const recorded = JSON.parse(fs.readFileSync(FLOW_TIMES_FILE, 'utf8'));
+  const known = Object.values(recorded).sort((a, b) => a - b);
+  const fallback = known.length ? known[Math.floor(known.length / 2)] : 60;
+  const secondsOf = (file) => recorded[file.replace(/\.spec\.cjs$/, '')] ?? fallback;
+  const shards = Array.from({ length: total }, () => ({ seconds: 0, files: [] }));
+  const longestFirst = [...files].sort((a, b) => secondsOf(b) - secondsOf(a) || a.localeCompare(b));
+  for (const file of longestFirst) {
+    const lightest = shards.reduce((best, shard) => (shard.seconds < best.seconds ? shard : best));
+    lightest.seconds += secondsOf(file);
+    lightest.files.push(file);
+  }
+  return shards[index - 1].files.sort();
 }
 
 function listFlows(filter) {
@@ -160,7 +172,7 @@ async function runFlow(file, { db, urls: appUrls, browser }) {
   console.log(`${failure ? 'FAILED' : 'PASSED'} ${flowName} (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(path.join(outDir, 'result.json'), JSON.stringify({
-    flow: flowName, passed: !failure, failedStep: failure ? failure.step || '' : null,
+    flow: flowName, passed: !failure, filtered: Boolean(process.argv[2] || process.env.E2E_FILTER), failedStep: failure ? failure.step || '' : null,
     seconds: Number(((Date.now() - t0) / 1000).toFixed(1)), finishedAt: new Date().toISOString(),
     steps: stepResults, screenshots: fs.readdirSync(outDir).filter((f) => f.endsWith('.png')).sort(),
   }, null, 2));

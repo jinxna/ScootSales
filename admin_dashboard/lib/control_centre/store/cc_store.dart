@@ -107,6 +107,7 @@ class CcStore extends ChangeNotifier {
   final Map<String, int> _generation = <String, int>{};
   final Map<String, Future<void>> _inFlight = <String, Future<void>>{};
   Future<void>? _loadAllRun;
+  bool _loadAllForced = false;
 
   String get me => profile?.email ?? '';
 
@@ -154,11 +155,13 @@ class CcStore extends ChangeNotifier {
 
   Future<void> loadAll({bool force = false}) {
     final Future<void>? running = _loadAllRun;
-    if (running != null) return running;
-    final Future<void> run = _runLoadAll(force).whenComplete(() {
-      _loadAllRun = null;
+    if (running != null && (_loadAllForced || !force)) return running;
+    late final Future<void> run;
+    run = _runLoadAll(force).whenComplete(() {
+      if (identical(_loadAllRun, run)) _loadAllRun = null;
     });
     _loadAllRun = run;
+    _loadAllForced = force;
     return run;
   }
 

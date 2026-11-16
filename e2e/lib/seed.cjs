@@ -1,6 +1,6 @@
 'use strict';
 
-const E = require('./emulator.cjs');
+require('./emulator.cjs');
 
 const BRANCH = { id: 'B1', name: 'E2E Kuching Branch' };
 

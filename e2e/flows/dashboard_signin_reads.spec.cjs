@@ -59,7 +59,7 @@ async function meterReads(session) {
     try {
       const url = new URL(e.request.url);
       if (url.port === port && url.pathname.includes('google.firestore.v1.Firestore')) meter.firestore.add(e.requestId);
-    } catch (_) {}
+    } catch {}
   });
   cdp.on('Network.responseReceived', (e) => {
     if (!meter.firestore.has(e.requestId) || meter.streamed.has(e.requestId)) return;

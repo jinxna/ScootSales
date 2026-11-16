@@ -430,7 +430,7 @@ module.exports = {
     await t.step('9. P7: with no services the dashboard Scout panel, Reports page and phone Scout show no error and nothing calls a cos40005 service', async () => {
       await admin.goToPage(adminS.page, 'Dashboard');
       const labels = await admin.sidebarLabels(adminS.page, { railWidth: 280 });
-      const intelligencePages = labels.filter((label) => /forecast|insight|intelligence|AI/i.test(label));
+      const intelligencePages = labels.filter((label) => /forecast|insight|intelligence|\bAI\b/i.test(label));
       record('9 sidebar', { labels, intelligencePages });
       expectTrue(labels.some((label) => /^Reports(,|$)/.test(label)), `the sidebar lists Reports: ${JSON.stringify(labels)}`);
       await adminS.page.getByRole('button', { name: /^Scout(?:\s|$)/ }).click();

@@ -9,7 +9,6 @@ const {
 } = require('@firebase/rules-unit-testing');
 const {
   Timestamp,
-  deleteDoc,
   doc,
   getDoc,
   serverTimestamp,
@@ -115,8 +114,6 @@ describe('company lifecycle lapse: disabledReasons', () => {
   });
 
 
-  for (const reason of ['billing_lapse', 'trial_expired', 'cancelled']) {
-  }
 
 
 

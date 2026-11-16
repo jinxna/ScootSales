@@ -130,15 +130,15 @@ async function seedLegacyCompany(projectClient, authEmulator, { shapes = [] } = 
   }
   if (people.profileWithoutUid) {
     const person = people.profileWithoutUid;
-    const { uid: omitted, ...profile } = profileOf(person, person.uid);
+    const { uid: _omitted, ...profile } = profileOf(person, person.uid);
     await projectClient.put('users', person.code, profile);
     await projectClient.put('user_access', person.uid, legacyAccessOf(person, person.uid));
   }
   if (people.userGroupRole) {
     const person = people.userGroupRole;
-    const { role: omitted, ...profile } = profileOf(person, person.uid, { user_group: 'Sales Representative' });
+    const { role: _omitted, ...profile } = profileOf(person, person.uid, { user_group: 'Sales Representative' });
     await projectClient.put('users', person.code, profile);
-    const { role: omittedAccessRole, ...access } = legacyAccessOf(person, person.uid, { user_group: 'Sales Representative' });
+    const { role: _omittedAccessRole, ...access } = legacyAccessOf(person, person.uid, { user_group: 'Sales Representative' });
     await projectClient.put('user_access', person.uid, access);
   }
   if (people.inactive) {
@@ -168,7 +168,7 @@ async function seedLegacyCompany(projectClient, authEmulator, { shapes = [] } = 
   }
   if (people.noLink) {
     const person = people.noLink;
-    const { userDocId: omitted, ...access } = legacyAccessOf(person, person.uid);
+    const { userDocId: _omitted, ...access } = legacyAccessOf(person, person.uid);
     await projectClient.put('user_access', person.uid, access);
   }
 

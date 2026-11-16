@@ -12,10 +12,7 @@ const rules = fs.readFileSync(
 );
 
 const ADMIN = 'mig-admin';
-const SALES = 'mig-sales';
 const SUPERVISOR = 'mig-supervisor';
-const UID_ONLY = 'mig-uid-only';
-const SALES_PROFILE = 'profile-mig-sales';
 const SUPERVISOR_PROFILE = 'profile-mig-supervisor';
 
 const v2Fields = (uid, fields) => ({ accessVersion: 2, uid, status: 'active', disabledReasons: [], ...fields });
@@ -24,14 +21,6 @@ const aliasAdminRow = (reasons = []) => ({
   uid: ADMIN, role: 'Administrator', branch_id: '', staffId: 'A9',
   ...v2Fields(ADMIN, { role: 'admin', branchId: '', employeeCode: 'A9', disabledReasons: reasons }),
 });
-
-const linkedSalesProfile = {
-  uid: SALES, role: 'sales representative', branch_id: 'B1', salesman_code: 'S002', status: 'active',
-};
-const linkedSalesRow = {
-  uid: SALES, user_doc_id: SALES_PROFILE,
-  ...v2Fields(SALES, { role: 'salesman', branchId: 'B1', employeeCode: 'S002', userDocId: SALES_PROFILE }),
-};
 
 const supervisorProfile = {
   uid: SUPERVISOR, role: 'supervisor', branchId: 'B1', employeeCode: 'SUP1', assignedSalesmanCodes: ['S002'],
@@ -42,11 +31,6 @@ const supervisorRow = {
     role: 'supervisor', branchId: 'B1', employeeCode: 'SUP1', assignedSalesmanCodes: ['S002'], userDocId: SUPERVISOR_PROFILE,
   }),
 };
-
-const uidOnlyProfile = {
-  uid: UID_ONLY, role: 'salesman', branch_id: 'B1', staffId: 'S007', status: 'active', displayName: 'Before',
-};
-const uidOnlyRow = v2Fields(UID_ONLY, { role: 'salesman', branchId: 'B1', employeeCode: 'S007', userDocId: UID_ONLY });
 
 const product = {
   productId: 'mig-p1', itemName: 'Orange Juice', productName: 'Orange Juice', unitPrice: 12.5, price: 12.5,
@@ -128,9 +112,5 @@ describe('rows written by the access v2 migration', function () {
     await assertSucceeds(getDoc(doc(db, 'orders', 'ORD-MIG-S2')));
     await assertFails(updateDoc(doc(db, 'products', 'mig-p1'), { unitPrice: 13, price: 13 }));
   });
-
-  for (const reason of ['billing_lapse', 'trial_expired', 'cancelled']) {
-  }
-
 
 });

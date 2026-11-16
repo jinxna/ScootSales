@@ -17,7 +17,7 @@ const USAGE = { usageSchemaVersion: 2, products: 0, activeAdmins: 0,
   seats: { salesmen: 0, supervisors: 0, admins: 0, branchManagers: 0 } };
 
 const PACKAGES = [
-  { planId: 'STARTER', name: 'Starter', edition: 'basic', sortOrder: 10, prices: [75, 900], then: [80, 960],
+  { planId: 'STARTER', name: 'Starter', edition: 'basic', sortOrder: 10, prices: [75, 900], afterPrices: [80, 960],
     limits: { salesmen: 5, supervisors: 1, admins: 1, branchManagers: 1, products: 100 } },
   { planId: 'STANDARD', name: 'Standard', edition: 'basic', sortOrder: 20, prices: [300, 3000],
     limits: { salesmen: 10, supervisors: 2, admins: 1, branchManagers: 2, products: 500 } },
@@ -109,7 +109,7 @@ async function seedDemo({ service, key, log = console.log }) {
 
   if (await platformDb.get('demo_seed', MARKER)) {
     log('Control Centre demo data is already in place. Nothing was added.');
-    return summarise({ call, platformDb });
+    return summarise({ call });
   }
 
   const bankDate = () => {
@@ -126,17 +126,17 @@ async function seedDemo({ service, key, log = console.log }) {
       });
       const key = pack.planId.toLowerCase();
       const raise = async (prices, note, creating = false) => {
-        const { visibility, reason, ...version } = body(prices);
+        const { visibility, reason: _reason, ...version } = body(prices);
         const [asker, decider] = creating ? ['cassie', 'ali'] : ['ali', 'cassie'];
         const request = await ask(asker, 'package.price', null, note, { planId: pack.planId, version, visibility }, `demo-price-${key}-${prices[0]}`);
         await decide(decider, request);
       };
       try {
         await call('cassie', 'PUT', `/plans/${pack.planId}`, body(pack.prices), `demo-plan-${key}`);
-        if (pack.then) await raise(pack.then, 'New price list from 1 December');
+        if (pack.afterPrices) await raise(pack.afterPrices, 'New price list from 1 December');
       } catch (error) {
         if (!/package\.price/.test(error.message)) throw error;
-        await raise(pack.then || pack.prices, 'Set the price list for the first invoices', true);
+        await raise(pack.afterPrices || pack.prices, 'Set the price list for the first invoices', true);
       }
     }
     for (const planId of ['GROWTH', 'PRO', 'SCALE']) {
@@ -191,7 +191,7 @@ async function seedDemo({ service, key, log = console.log }) {
         adminName: `${c.name} Administrator`, adminEmployeeCode: 'ADM001', adminEmail: `admin@${c.slug}.example.test`,
         billingEmail: c.email || `billing.pending@${c.slug}.example.test`,
       }, `demo-draft-${c.slug}`);
-      const connected = await call('daniel', 'POST', `/onboarding-drafts/${draft.draftId}/connect`, { projectId: `demo-cc-${c.slug}` });
+      await call('daniel', 'POST', `/onboarding-drafts/${draft.draftId}/connect`, { projectId: `demo-cc-${c.slug}` });
       const tenantId = (await call('cassie', 'GET', `/onboarding-drafts/${draft.draftId}`)).tenantId;
       if (!tenantId) throw new Error(`No company was created for ${c.name}`);
       c.tenantId = tenantId;
@@ -337,10 +337,10 @@ async function seedDemo({ service, key, log = console.log }) {
   });
   await platformDb.put('demo_seed', MARKER, { at: new Date() });
   log('  audit: events spread over the weeks and the hash chain re-verified');
-  return summarise({ call, platformDb });
+  return summarise({ call });
 }
 
-async function summarise({ call, platformDb }) {
+async function summarise({ call }) {
   const companies = (await call('daniel', 'GET', '/companies')).companies;
   const states = {};
   for (const company of companies) {

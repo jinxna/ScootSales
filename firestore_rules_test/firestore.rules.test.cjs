@@ -759,7 +759,7 @@ describe('salesman route ownership', () => {
 
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const adminRef = doc(context.firestore(), 'route_plan_progress', 'route-own_sales-1');
-      const { routeSessionState, lastHeartbeatAt, ...apk102 } = (await getDoc(adminRef)).data();
+      const { routeSessionState: _routeSessionState, lastHeartbeatAt: _lastHeartbeatAt, ...apk102 } = (await getDoc(adminRef)).data();
       await setDoc(adminRef, apk102);
     });
     await assertFails(updateDoc(ref, { lastHeartbeatAt: serverTimestamp() }));
@@ -6414,7 +6414,7 @@ describe('route workflow lifecycle', () => {
         v2TerminalStopEvent(acceptedArrival, 'completed', 2),
         ['stop-1'],
         (patch) => {
-          const { routeSessionState, ...rest } = patch;
+          const { routeSessionState: _routeSessionState, ...rest } = patch;
           return rest;
         },
       ),
@@ -7482,7 +7482,7 @@ describe('FR-AUTH-07 role permission table', () => {
         { roles: { ...rows, salesman: viewRow() } },
         { roles: { ...rows, developer: fullAdminRow() } },
         { roles: { ...rows, admin: 'products:view' } },
-        { roles: { ...rows, admin: new Array(201).fill('products:view') } },
+        { roles: { ...rows, admin: Array.from({ length: 201 }, () => 'products:view') } },
         { roles: 'admin' },
         { extra: true },
         { updatedByUid: users.branchManager.uid },

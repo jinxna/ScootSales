@@ -15,7 +15,7 @@ module.exports = {
       try {
         await page().waitForFunction(() => ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName), null, { timeout: 3000 });
         return true;
-      } catch (e) {
+      } catch {
         return false;
       }
     };

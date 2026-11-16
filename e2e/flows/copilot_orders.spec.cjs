@@ -27,8 +27,6 @@ const weekStart = klDay0 - ((new Date(now + KL_MS).getUTCDay() + 6) % 7) * DAY;
 const lastWeekStart = weekStart - 7 * DAY;
 const klYear = new Date(now + KL_MS).getUTCFullYear();
 const klMonth = new Date(now + KL_MS).getUTCMonth();
-const monthStart = Date.UTC(klYear, klMonth, 1) - KL_MS;
-const nextMonthStart = Date.UTC(klYear, klMonth + 1, 1) - KL_MS;
 const lastMonthStart = Date.UTC(klYear, klMonth - 1, 1) - KL_MS;
 const lastMonthMid = lastMonthStart + 14 * DAY + 12 * 3600e3;
 
@@ -79,7 +77,6 @@ module.exports = {
     const countOf = (who, pred = () => true) => pick((o) => o.who === who && pred(o)).length;
     const thisWeek = (o) => o.ts >= weekStart && o.ts < weekStart + 7 * DAY;
     const lastWeek = (o) => o.ts >= lastWeekStart && o.ts < weekStart;
-    const thisMonth = (o) => o.ts >= monthStart && o.ts < nextMonthStart;
 
     const page = () => adminS.page;
     const find = (re) => page().getByLabel(re).or(page().getByText(re));

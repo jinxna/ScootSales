@@ -117,7 +117,7 @@ function orderFor(uid, code, branch, orderId, extra = {}) {
 }
 
 function storedOrder(uid, code, branch, orderId) {
-  const { submittedAt, createdAt, updatedAt, ...rest } = orderFor(uid, code, branch, orderId);
+  const { submittedAt: _submittedAt, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = orderFor(uid, code, branch, orderId);
   const now = new Date('2026-10-01T00:00:00Z');
   return { ...rest, submittedAt: now, createdAt: now, updatedAt: now };
 }
@@ -1024,11 +1024,11 @@ describe('boundary regressions against the real rules', function () {
     const s = stepper('C10-orders-by-code');
     const stored = (id, fields) => ({ ...storedOrder('sal1', 'S001', 'B1', id), ...fields });
     const withoutUidFields = (id, fields = {}) => {
-      const { uid, userUid, salesmanUid, submittedByUid, createdByUid, ...rest } = stored(id, fields);
+      const { uid: _uid, userUid: _userUid, salesmanUid: _salesmanUid, submittedByUid: _submittedByUid, createdByUid: _createdByUid, ...rest } = stored(id, fields);
       return rest;
     };
     const snakeOnly = (id) => {
-      const { salesmanCode, ...rest } = withoutUidFields(id);
+      const { salesmanCode: _salesmanCode, ...rest } = withoutUidFields(id);
       return { ...rest, salesman_code: 'S001' };
     };
     await seed([
@@ -1144,7 +1144,7 @@ describe('boundary regressions against the real rules', function () {
           }
           await setDoc(doc(admin, 'orders', 'own'), storedOrder('sal1', 'S001', 'B1', 'own'));
           await setDoc(doc(admin, 'orders', 'ownerless'), { ...storedOrder('sal1', 'S001', 'B1', 'ownerless'), uid: '', userUid: '', salesmanUid: '', submittedByUid: '', createdByUid: '' });
-          const { uid: u0, userUid: u1, salesmanUid: u2, submittedByUid: u3, createdByUid: u4, ...noUidFields } = storedOrder('sal1', 'S001', 'B1', 'noUidFields');
+          const { uid: _u0, userUid: _u1, salesmanUid: _u2, submittedByUid: _u3, createdByUid: _u4, ...noUidFields } = storedOrder('sal1', 'S001', 'B1', 'noUidFields');
           await setDoc(doc(admin, 'orders', 'noUidFields'), noUidFields);
           await setDoc(doc(admin, 'user_access', 'lapsedPhone'), row('lapsedPhone', { role: 'salesman', employeeCode: 'S030', disabledReasons: ['billing_lapse'] }));
           await setDoc(doc(admin, 'orders', 'lapsedOrder'), storedOrder('lapsedPhone', 'S030', 'B1', 'lapsedOrder'));
@@ -1173,62 +1173,6 @@ describe('boundary regressions against the real rules', function () {
       await baseEnv.cleanup();
     }
     s.finish();
-  });
-
-  describe('role reads', () => {
-    const targets = {
-      own: { orders: 'ord-own', retailers: 'ret-own', visits: 'vis-own', users: 'sal1' },
-      otherTeamSameBranch: { orders: 'ord-team', retailers: 'ret-team', visits: 'vis-team', users: 'sal2' },
-      otherBranch: { orders: 'ord-branch', retailers: 'ret-branch', visits: 'vis-branch', users: 'sal3' },
-    };
-    const scope = {
-      admin: { uid: 'adm', own: ALLOW, otherTeamSameBranch: ALLOW, otherBranch: ALLOW },
-      branch_manager: { uid: 'mgr1', own: ALLOW, otherTeamSameBranch: ALLOW, otherBranch: DENY },
-      supervisor: { uid: 'sup1', own: ALLOW, otherTeamSameBranch: DENY, otherBranch: DENY },
-      salesperson: { uid: 'sal1', own: ALLOW, otherTeamSameBranch: DENY, otherBranch: DENY },
-    };
-    const lists = {
-      admin: (d) => [
-        ['orders all', collection(d, 'orders'), ALLOW], ['retailers all', collection(d, 'retailers'), ALLOW],
-        ['visits all', collection(d, 'visits'), ALLOW], ['users all', collection(d, 'users'), ALLOW],
-      ],
-      branch_manager: (d) => ['orders', 'retailers', 'visits', 'users'].flatMap((name) => [
-        [`${name} where branchId B1`, query(collection(d, name), where('branchId', '==', 'B1')), ALLOW],
-        [`${name} where branchId B2`, query(collection(d, name), where('branchId', '==', 'B2')), DENY],
-        [`${name} no filter`, collection(d, name), DENY],
-      ]),
-      supervisor: (d) => [
-        ['orders', 'salesmanCode'], ['retailers', 'assignedSalesmanId'], ['visits', 'salesmanCode'], ['users', 'employeeCode'],
-      ].flatMap(([name, field]) => [
-        [`${name} where ${field} S001`, query(collection(d, name), where(field, '==', 'S001')), ALLOW],
-        [`${name} where ${field} S002`, query(collection(d, name), where(field, '==', 'S002')), DENY],
-        [`${name} no filter`, collection(d, name), DENY],
-      ]),
-      salesperson: (d) => [
-        ['orders', 'salesmanUid', 'sal1', 'sal2'], ['visits', 'ownerUid', 'sal1', 'sal2'], ['users', 'uid', 'sal1', 'sal2'],
-        ['retailers', 'assignedSalesmanId', 'S001', 'S002'],
-      ].flatMap(([name, field, mine, other]) => [
-        [`${name} where ${field} ${mine}`, query(collection(d, name), where(field, '==', mine)), ALLOW],
-        [`${name} where ${field} ${other}`, query(collection(d, name), where(field, '==', other)), DENY],
-        [`${name} no filter`, collection(d, name), DENY],
-      ]),
-    };
-
-    beforeEach(async () => {
-      const retailer = (id, code, branch) => [`retailers/${id}`, { retailerId: id, retailerName: id, assignedSalesmanId: code, branchId: branch }];
-      const planned = (id, uid, code, branch) => [`visits/${id}`, { ownerUid: uid, salesmanCode: code, branchId: branch, date: '2026-11-10' }];
-      await seed([
-        ['orders/ord-own', storedOrder('sal1', 'S001', 'B1', 'ord-own')],
-        ['orders/ord-team', storedOrder('sal2', 'S002', 'B1', 'ord-team')],
-        ['orders/ord-branch', storedOrder('sal3', 'S003', 'B2', 'ord-branch')],
-        retailer('ret-own', 'S001', 'B1'), retailer('ret-team', 'S002', 'B1'), retailer('ret-branch', 'S003', 'B2'),
-        planned('vis-own', 'sal1', 'S001', 'B1'), planned('vis-team', 'sal2', 'S002', 'B1'), planned('vis-branch', 'sal3', 'S003', 'B2'),
-      ]);
-    });
-
-    for (const [role, config] of Object.entries(scope)) {
-    }
-
   });
 
   const publishWeek = () => {

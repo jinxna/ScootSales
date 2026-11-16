@@ -17,6 +17,7 @@
     "firebase": "^12.7.0",
     "firebase-tools": "^15.20.0",
     "mocha": "^11.7.6",
+    "oxlint": "1.91.0",
     "playwright-core": "^1.63.0"
   }
 }

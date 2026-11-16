@@ -49,7 +49,7 @@ function order(orderId, extra = {}) {
 }
 
 const storedOrder = (orderId, extra = {}) => {
-  const { submittedAt, createdAt, updatedAt, ...rest } = order(orderId, extra);
+  const { submittedAt: _submittedAt, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = order(orderId, extra);
   const now = new Date('2026-10-01T00:00:00Z');
   return { ...rest, submittedAt: now, createdAt: now, updatedAt: now };
 };
@@ -103,9 +103,6 @@ describe('orders.serverPriceCheck is server-written only', function () {
     });
   }
 
-  for (const role of ['admin', 'supervisor']) {
-  }
-
   for (const role of ['salesman', 'supervisor', 'admin']) {
     const [uid] = actors[role];
     const approver = role === 'salesman' ? null : role;
@@ -130,13 +127,6 @@ describe('orders.serverPriceCheck is server-written only', function () {
         await assertSucceeds(updateDoc(doc(db, 'orders', 'ORD-SPC-8'), approval(uid, approver)));
         await assertSucceeds(getDoc(doc(db, 'orders', 'ORD-SPC-8')));
       });
-    }
-  }
-
-  const stamps = [['no stamp yet', undefined], ['a mismatch stamp', mismatch], ['an unverifiable stamp', { status: 'unverifiable', version: 1 }]];
-  for (const role of ['admin', 'supervisor']) {
-    const [uid] = actors[role];
-    for (const [label, stamp] of stamps) {
     }
   }
 

@@ -119,7 +119,8 @@ module.exports = {
         note('overdue retailers tile', { shown: overdueShown, seededOverdueShops: 6 });
         await absent(B.semantic(s.page, /Forecast Alerts/), 'Forecast Alerts card');
         await B.semantic(s.page, /^Edit dashboard$/).click();
-        await B.see(s.page, 'Overdue Retailers');
+        await s.page.getByRole('button', { name: 'Save layout' }).waitFor({ state: 'visible', timeout: 15000 });
+        await B.see(s.page, 'Salesman Performance Summary');
         await absent(B.semantic(s.page, /Forecast Alerts/), 'Forecast Alerts in the editor');
         await t.shot(s, 'overview-editor');
         await s.page.getByRole('button', { name: 'Close', exact: true }).first().click();

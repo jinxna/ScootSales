@@ -194,7 +194,7 @@ module.exports = {
           await B.see(tabA.page, line);
         }
         const lines = await admin.semanticsLines(tabA.page);
-        equal(lines.some((line) => /^Managers:/.test(line)), false, 'no legacy aggregate presented as a v2 allowance');
+        equal(lines.some((line) => line.startsWith('Managers:')), false, 'no legacy aggregate presented as a v2 allowance');
         const usage = await api('GET', 'usage');
         equal(usage.status, 200, 'v2 usage response');
         equal(usage.body.quotaSchemaVersion, 2, 'usage schema marker');
@@ -312,7 +312,7 @@ module.exports = {
         let rejected = false;
         try {
           plans([{ op: 'subscribe', planId: DOWNGRADE, planVersion: lower.version, status: 'active' }]);
-        } catch (_) {
+        } catch {
           rejected = true;
         }
         equal(rejected, true, 'downgrade command rejected');

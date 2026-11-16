@@ -38,7 +38,7 @@ async function newSession(browser, { viewport = { width: 1600, height: 1000 }, n
   const context = await browser.newContext({ viewport, serviceWorkers: 'block', ...timezone, ...opts });
   if (persistence) {
     await context.addInitScript(() => {
-      try { window.localStorage.setItem('e2e_persistence', '1'); } catch (_) {}
+      try { window.localStorage.setItem('e2e_persistence', '1'); } catch {}
     });
   }
   const logs = [];
@@ -238,7 +238,7 @@ async function see(page, text, { timeout = 20000 } = {}) {
   const loc = semantic(page, text);
   try {
     await loc.waitFor({ state: 'attached', timeout });
-  } catch (error) {
+  } catch {
     throw new Error(`expected to see ${text} on the page, but it never appeared`);
   }
   return loc;

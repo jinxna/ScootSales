@@ -241,7 +241,7 @@ module.exports = {
         await B.see(tabA.page, 'From MYR 100 per month');
         const monthly = await semantics(tabA.page);
         expectEqual(monthly.includes('From MYR 100 per month'), true, 'Monthly price line');
-        expectEqual(monthly.some((l) => /^Billed yearly/.test(l)), false, 'a yearly line while Monthly is selected');
+        expectEqual(monthly.some((l) => l.startsWith("Billed yearly")), false, 'a yearly line while Monthly is selected');
         await t.shot(tabA, 'e-plans-monthly');
 
         await tabA.page.getByRole('button', { name: 'Yearly', exact: true }).click();
@@ -250,7 +250,7 @@ module.exports = {
         expectEqual(yearly.includes('From MYR 80 per month'), true, 'Yearly per-month price');
         expectEqual(yearly.filter((l) => l === 'Billed yearly MYR 960').length, 2, 'Billed yearly lines (two explicit priced fixtures)');
         await t.shot(tabA, 'e-plans-yearly');
-        note('e. plans', { monthly: monthly.filter((l) => /^From /.test(l)), yearly: yearly.filter((l) => /^(From |Billed|Save)/.test(l)) });
+        note('e. plans', { monthly: monthly.filter((l) => l.startsWith("From ")), yearly: yearly.filter((l) => ["From ", "Billed", "Save"].some((p) => l.startsWith(p))) });
       });
 
       await t.step('e. Request this plan sends a request that staff can see', async () => {

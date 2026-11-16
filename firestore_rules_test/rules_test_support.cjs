@@ -1,32 +1,21 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const assert = require('node:assert/strict');
 
 const {
-  assertFails,
   assertSucceeds,
-  initializeTestEnvironment,
 } = require('@firebase/rules-unit-testing');
 const {
   GeoPoint,
   Timestamp,
   arrayUnion,
-  collection,
   deleteField,
   deleteDoc,
   doc,
-  getCountFromServer,
   getDoc,
-  getDocs,
-  increment,
-  limit,
-  orderBy,
-  query,
   runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
-  where,
   writeBatch,
 } = require('firebase/firestore');
 
@@ -1011,10 +1000,7 @@ async function seed() {
   });
 }
 
-const { addDoc } = require('firebase/firestore');
-
 const PROBE_SESSION = 'b'.repeat(32);
-const ADMIN_EMAIL_DOC = 'admin@probe.test';
 
 async function reshape(user, shape) {
   if (shape === 'uid') return;
@@ -1105,17 +1091,6 @@ function auditPayload(uid, overrides = {}) {
     createdAt: serverTimestamp(), ...overrides,
   };
 }
-
-const PERMISSION_SUMMARY = (() => {
-  const mods = ['products', 'departments', 'categories', 'retailer_scoresheets', 'department_pic', 'website_pages'];
-  const acts = ['view', 'create', 'edit', 'delete'];
-  const toks = [];
-  for (const r of ['admin', 'branch_manager', 'supervisor']) for (const m of mods) for (const a of acts) {
-    if (a === 'view' || r === 'admin' || ['retailer_scoresheets', 'department_pic'].includes(m)) toks.push(`${r}|${m}|${a}`);
-  }
-  toks.sort();
-  return `Updated role permissions. Granted: ${toks.join(', ')}. Revoked: none.`;
-})();
 
 module.exports = {
   projectId, rules,

@@ -88,7 +88,7 @@ async function startStaffApi(key, { extraEmails = {}, port = STAFF_PORT, roleEma
     for (;;) {
       try {
         if ((await fetch(`${url}/health`)).ok) break;
-      } catch (_) {}
+      } catch {}
       if (child.exitCode !== null || Date.now() > deadline) throw new Error(`Staff API unavailable: ${logs.slice(-1500)}`);
       await new Promise((resolve) => setTimeout(resolve, 200));
     }

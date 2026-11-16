@@ -281,6 +281,6 @@ module.exports = {
 };
 
 function stripId(doc) {
-  const { id, ...fields } = doc;
+  const { id: _id, ...fields } = doc;
   return fields;
 }

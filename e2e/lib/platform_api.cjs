@@ -122,7 +122,7 @@ async function startPlatformApi({ origin, keys, mail = false, scheduler = false 
 ${output}`);
     try {
       if ((await fetch(`${platform.PLATFORM_API_URL}/health`)).ok) break;
-    } catch (error) { }
+    } catch { }
     if (Date.now() > deadline) {
       stopProcess(child);
       throw new Error(`platform API did not start within 30 s:

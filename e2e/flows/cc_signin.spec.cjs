@@ -73,7 +73,7 @@ async function startStaffApi(key) {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'x' }),
       });
       if (response.status < 500) break;
-    } catch (_) {}
+    } catch {}
     if (child.exitCode !== null || Date.now() > deadline) {
       stop();
       throw new Error(`Staff API unavailable: ${logs.slice(-400)}`);

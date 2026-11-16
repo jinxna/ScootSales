@@ -105,25 +105,6 @@ describe('plans and limits: server-only writes', () => {
       await assertSucceeds(setDoc(doc(dbFor(ADMIN), 'products', 'pl-new'), product()));
     });
 
-    for (const [label, overrides] of [
-      ['visible', { isVisible: true, status: 'active' }],
-      ['visible flag only', { isVisible: true }],
-      ['active status only', { status: 'active' }],
-      ['no isVisible', { isVisible: undefined }],
-      ['no status', { status: undefined }],
-      ['visible key', { visible: false }],
-      ['productStatus key', { productStatus: 'hidden' }],
-    ]) {
-    }
-
-
-    for (const [key, value] of [
-      ['status', 'hidden'],
-      ['isVisible', false],
-      ['visible', false],
-      ['productStatus', 'hidden'],
-    ]) {
-    }
 
   });
 
@@ -152,35 +133,6 @@ describe('plans and limits: server-only writes', () => {
       await assertFails(batch.commit());
     });
 
-    for (const [key, value] of [
-      ['user_group', 'supervisor'],
-      ['accountStatus', 'suspended'],
-      ['account_status', 'suspended'],
-      ['isActive', false],
-      ['is_active', false],
-      ['active', false],
-      ['enabled', false],
-      ['seatClass', 'salesman'],
-      ['seatHeld', false],
-      ['invitationState', 'revoked'],
-      ['accessVersion', 3],
-      ['uid', 'someone-else'],
-    ]) {
-    }
-
-    const seatMatrix = {
-      salesman: { ok: ['salesman', 'salesperson'], bad: ['supervisor', 'manager', 'none', 'free'] },
-      supervisor: { ok: ['supervisor', 'free'], bad: ['salesman', 'salesperson', 'manager', 'none'] },
-      admin: { ok: ['manager', 'free'], bad: ['salesman', 'salesperson', 'supervisor', 'none'] },
-      branch_manager: { ok: ['manager', 'free'], bad: ['salesman', 'salesperson', 'supervisor', 'none'] },
-      developer: { ok: ['none', 'free'], bad: ['salesman', 'salesperson', 'supervisor', 'manager'] },
-    };
-    for (const [role, { ok, bad }] of Object.entries(seatMatrix)) {
-      for (const [expected, seatClasses] of [[true, ok], [false, bad]]) {
-        for (const seatClass of seatClasses) {
-        }
-      }
-    }
   });
 
   describe('users', () => {
