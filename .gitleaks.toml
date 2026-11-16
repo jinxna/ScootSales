@@ -1,0 +1,22 @@
+title = "Scoot Sales secret scan"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures, Firebase client config, type names and storage key names"
+paths = [
+  '''^platform_service/tests/''',
+  '''^e2e/''',
+  '''^packages/scoot_directory_client/test/''',
+  '''^admin_dashboard/test/''',
+  '''^flutter_mobile_app/test/''',
+]
+regexTarget = "line"
+regexes = [
+  '''^\s*"(android|ios|web)": "AIza[0-9A-Za-z_\-]{35}",\s*$''',
+  '''^\s*apiKey: 'AIza[0-9A-Za-z_\-]{35}',\s*$''',
+  '''^\s*"current_key": "AIza[0-9A-Za-z_\-]{35}"\s*$''',
+  '''^\s*static const String storageKey = '[a-z0-9_.]+';\s*$''',
+  '''private_key: Ed25519PrivateKey''',
+]
