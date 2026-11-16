@@ -132,13 +132,6 @@
   },
   "flutter": {
     "platforms": {
-      "android": {
-        "default": {
-          "projectId": "cos40005",
-          "appId": "1:789087499876:android:c16ca809ca7ffeda1ed171",
-          "fileOutput": "android/app/google-services.json"
-        }
-      },
       "dart": {
         "lib/firebase_options.dart": {
           "projectId": "cos40005",

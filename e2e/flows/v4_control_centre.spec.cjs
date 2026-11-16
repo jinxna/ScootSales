@@ -217,7 +217,9 @@ module.exports = {
         await button(s, 'More actions').click();
         await s.page.getByRole('menuitem', { name: 'Change status…' }).click();
         await s.page.getByRole('button', { name: 'New status' }).first().click();
-        await s.page.getByRole('menuitem', { name: 'Active', exact: true }).waitFor({ timeout: 15000 });
+        for (const label of ['Active', 'Awaiting first payment']) {
+          await s.page.getByRole('menuitem', { name: label, exact: true }).waitFor({ timeout: 15000 });
+        }
         const offered = async (label) => s.page.getByRole('menuitem', { name: label, exact: true }).count();
         equal([await offered('Awaiting first payment'), await offered('Active'), await offered('Trial')], [1, 1, 0],
           'first states served by the API');
