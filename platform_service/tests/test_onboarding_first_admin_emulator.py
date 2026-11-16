@@ -142,6 +142,29 @@ def test_no_sign_in_account_gets_one_invitation_and_the_task_waits(world, assert
     assert len(first_admin_events(world, draft_id)) == 1
 
 
+def test_an_expired_first_admin_invitation_offers_resend_and_resend_sends_a_new_code(
+    world, assertion, paid_company,
+):
+    draft_id, tenant = paid_company("late.owner@newco.example")
+    operator.plant_checked_payment(world, tenant)
+    made = give_access(world, assertion, draft_id).json()
+    world.db.collection("invitations").document(made["invitation"]["invitationId"]).update(
+        {"expiresAt": datetime.now(timezone.utc) - timedelta(minutes=1)})
+    swept = world.app.post(f"/staff/v1/companies/{tenant}/seats/sweep", headers=operator.headers(assertion))
+    assert swept.status_code == 200 and swept.json()["released"] == 1, swept.text
+    row = company_of(world).db.collection("user_access").document(made["uid"]).get().to_dict()
+    assert row["invitationState"] == "expired"
+    draft = world.app.get(f"/staff/v1/onboarding-drafts/{draft_id}", headers=operator.headers(assertion)).json()
+    step = step_of(draft, "admin")
+    assert step["state"] == "red" and step["button"]["id"] == "resend_invitation", step
+    resent = world.app.post(f"/staff/v1/onboarding-drafts/{draft_id}/first-admin/resend",
+                            headers=operator.headers(assertion, operator.OWNER))
+    assert resent.status_code == 200, resent.text
+    body = resent.json()
+    assert body["state"] == "invited" and body["invitation"]["code"] != made["invitation"]["code"]
+    assert pending_invitations(world, tenant) == [body["invitation"]["invitationId"]]
+
+
 @pytest.mark.parametrize("case", ["other_role", "disabled", "code_taken"])
 def test_first_admin_refusals_say_why_and_change_nothing(world, assertion, paid_company, case):
     draft_id, tenant = paid_company("taken@newco.example")

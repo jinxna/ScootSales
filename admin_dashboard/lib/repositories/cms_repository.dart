@@ -2192,8 +2192,9 @@ class CmsRepository {
   static final Map<String, Map<String, DateTime>> _retailerMisses =
       <String, Map<String, DateTime>>{};
 
-  static final Map<String, Future<List<Map<String, dynamic>>>>
-  _retailerDirectories = <String, Future<List<Map<String, dynamic>>>>{};
+  static final Map<String, (Future<List<Map<String, dynamic>>>, DateTime)>
+  _retailerDirectories =
+      <String, (Future<List<Map<String, dynamic>>>, DateTime)>{};
 
   static final Map<String, (Future<List<Map<String, dynamic>>>, DateTime)>
   _retailerFullListings =
@@ -2248,12 +2249,12 @@ class CmsRepository {
       'retailers',
       limit: limit,
     );
-    _retailerDirectories[uid] = read;
+    _retailerDirectories[uid] = (read, DateTime.now());
     unawaited(
       read.then<void>(
         (_) {},
         onError: (Object _) {
-          if (identical(_retailerDirectories[uid], read)) {
+          if (identical(_retailerDirectories[uid]?.$1, read)) {
             _retailerDirectories.remove(uid);
           }
         },
@@ -2344,8 +2345,12 @@ class CmsRepository {
     required bool nameOnly,
   }) async {
     final String uid = _signedInUid();
-    final Future<List<Map<String, dynamic>>>? sharedDirectory =
+    final (Future<List<Map<String, dynamic>>>, DateTime)? cachedDirectory =
         _retailerDirectories[uid];
+    final Future<List<Map<String, dynamic>>>? sharedDirectory =
+        cachedDirectory != null && _fresh(cachedDirectory.$2)
+        ? cachedDirectory.$1
+        : null;
     List<Map<String, dynamic>> directory = const <Map<String, dynamic>>[];
     bool directoryRead = false;
     if (sharedDirectory != null) {

@@ -372,6 +372,9 @@ module.exports = {
         await text(s, 'Next: step 5, First payment').waitFor({ timeout: 25000 });
         await atWidths(s, 'checklist-after');
         const operator = sessions.operator;
+        await button(operator, /^Inbox/).click();
+        await button(operator, 'Refresh').click();
+        await operator.page.waitForTimeout(2000);
         await openCompany(operator, NEW_NAME);
         await text(operator, 'Standard · monthly').first().waitFor({ timeout: 25000 });
         await t.shot(operator, 'company-created');

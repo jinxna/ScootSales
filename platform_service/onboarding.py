@@ -235,6 +235,8 @@ def _step_admin(run: _Run) -> tuple[bool | None, str, str | None]:
         return True, f"{email} is an active administrator.", None
     if admin["state"] == "invited":
         return False, f"An invitation was sent to {email}. The person has not accepted it yet.", "resend_invitation"
+    if admin["state"] == "expired":
+        return False, admin["line"], "resend_invitation"
     return False, admin["line"], "give_access"
 
 

@@ -122,7 +122,8 @@ module.exports = {
         await B.see(s.page, 'Overdue Retailers');
         await absent(B.semantic(s.page, /Forecast Alerts/), 'Forecast Alerts in the editor');
         await t.shot(s, 'overview-editor');
-        await s.page.keyboard.press('Escape');
+        await s.page.getByRole('button', { name: 'Close', exact: true }).first().click();
+        await s.page.getByRole('button', { name: 'Save layout' }).waitFor({ state: 'detached', timeout: 15000 });
         note('dashboard cards', { forecastAlerts: false, savedSelectionWithHiddenKeyLoaded: true });
       });
 

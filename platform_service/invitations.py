@@ -2596,7 +2596,7 @@ def first_admin_state(access: CompanyAccess, email: str) -> dict[str, Any]:
         return {"state": "invited", "uid": user.uid,
                 "line": f"The invitation to {address} is sent. Waiting for the person to accept."}
     if row.get("invitationState") == "expired":
-        return {"state": "missing", "uid": user.uid, "line": f"The invitation to {address} expired. Resend it."}
+        return {"state": "expired", "uid": user.uid, "line": f"The invitation to {address} expired. Resend it."}
     if role not in ("admin", "developer"):
         return {"state": "blocked", "uid": user.uid,
                 "line": f"{address} already has access in this company as {ROLE_LABELS.get(role, role)}. "
