@@ -1,0 +1,57 @@
+{
+  "description": "v2 salesman without a branch: rules deny the write. Readers do not check non-admin branches, so a record that already exists still reads as active.",
+  "uid": "ct-sales-nobranch",
+  "userDoc": {
+    "uid": "ct-sales-nobranch",
+    "email": "ct-sales-nobranch@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "employeeCode": "S103",
+    "branchId": ""
+  },
+  "producer": {
+    "inputs": {
+      "uid": "ct-sales-nobranch",
+      "userDocId": "ct-sales-nobranch@contracts.test",
+      "employeeCode": "S103",
+      "email": "ct-sales-nobranch@contracts.test",
+      "roleRaw": "salesman",
+      "statusRaw": "active",
+      "branchId": "",
+      "supervisorId": "",
+      "supervisorUid": "",
+      "assignedSalesmanCodes": null
+    }
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-sales-nobranch",
+    "userDocId": "ct-sales-nobranch@contracts.test",
+    "employeeCode": "S103",
+    "userId": "S103",
+    "email": "ct-sales-nobranch@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "isActive": true,
+    "branchId": "",
+    "branch_id": "",
+    "supervisorId": "",
+    "supervisor_id": "",
+    "supervisorUid": "",
+    "seatClass": "salesperson",
+    "assignedSalesmanCodes": {
+      "$sentinel": "delete"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "active",
+    "pythonIdentity": "active",
+    "pythonAdminAccess": "deny"
+  }
+}

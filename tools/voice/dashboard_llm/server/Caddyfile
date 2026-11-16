@@ -1,0 +1,3 @@
+{$COPILOT_DOMAIN} {
+	reverse_proxy copilot:8080
+}

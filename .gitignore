@@ -1,0 +1,301 @@
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100/
+.Trashes/
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Editor and IDE state
+.atom/
+.history/
+.idea/
+*.iml
+*.ipr
+*.iws
+*.swp
+*.swo
+*~
+**/.vscode/*
+!**/.vscode/settings.json
+!**/.vscode/tasks.json
+!**/.vscode/launch.json
+!**/.vscode/extensions.json
+
+# Logs, caches, and local temp files
+*.log
+*.tmp
+*.temp
+*.cache
+.cache/
+tmp/
+temp/
+.build/
+.buildlog/
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# Local secrets and machine-specific config
+.env
+.env.*
+!.env.example
+!.env.sample
+**/ORS_API_KEY.local
+*.pem
+*.p12
+*.pfx
+**/serviceAccountKey*.json
+**/*service-account*.json
+# Firebase Admin SDK keys download as "<project>-firebase-adminsdk-xxxxx.json",
+# which none of the patterns above match — cover that name explicitly.
+**/*firebase-adminsdk*.json
+**/*-adminsdk-*.json
+cos40005-*.json
+service_account.json
+key.properties
+.keys/
+*.env
+*.bak
+*.old
+*.orig
+
+# Archives and generated artifacts
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+*.pyc
+*.class
+
+# Node, npm, pnpm, and Yarn
+**/node_modules/
+**/.npm/
+**/.pnpm-store/
+**/.yarn/cache/
+**/.yarn/unplugged/
+**/.yarn/build-state.yml
+**/.yarn/install-state.gz
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Firebase
+**/.firebase/
+
+# Dart, Flutter, and Pub
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.pub-cache/
+**/.pub/
+**/build/
+**/coverage/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+**/app.*.symbols
+**/app.*.map.json
+
+# Android and Gradle
+**/android/.gradle/
+**/android/.kotlin/
+**/android/captures/
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+**/android/**/.cxx/
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+**/*.jks
+**/*.keystore
+
+# iOS, macOS, CocoaPods, and Xcode
+**/dgph
+*.mode1v3
+*.mode2v3
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+**/*sync/
+.sconsign.dblite
+.tags*
+**/.vagrant/
+**/DerivedData/
+**/Pods/
+**/.symlinks/
+**/xcuserdata/
+**/.generated/
+**/ios/**/Icon?
+**/ios/**/profile
+**/Flutter/App.framework
+**/Flutter/Flutter.framework
+**/Flutter/Flutter.podspec
+**/Flutter/Generated.xcconfig
+**/Flutter/ephemeral/
+**/Flutter/app.flx
+**/Flutter/app.zip
+**/Flutter/flutter_assets/
+**/Flutter/flutter_export_environment.sh
+**/ServiceDefinitions.json
+**/Runner/GeneratedPluginRegistrant.*
+
+# Exceptions for default Xcode metadata files
+!default.mode1v3
+!default.mode2v3
+!default.pbxuser
+!default.perspectivev3
+
+# Linux desktop generated files
+**/linux/flutter/ephemeral/
+
+# Windows and Visual Studio generated files
+**/windows/flutter/ephemeral/
+**/windows/**/*.suo
+**/windows/**/*.user
+**/windows/**/*.userosscache
+**/windows/**/*.sln.docstates
+**/windows/x64/
+**/windows/x86/
+**/windows/**/*.[Cc]ache
+!**/windows/**/*.[Cc]ache/
+
+# Python (forecasting service) — venv + runtime artifacts
+**/__pycache__/
+**/.pytest_cache/
+*.pyo
+**/.venv/
+**/venv/
+forecasting/.deps_installed
+forecasting/imports/
+
+# ── Do NOT commit these ────────────────────────────────────────────────────────
+#
+# Rule: only source code, config, and assets needed to BUILD and RUN the system
+# belong in git. Everything below stays on your local machine only.
+#
+# Pattern                          Reason
+# ───────────────────────────────  ─────────────────────────────────────────────
+
+# Word/Excel/binary documents — use git for code, not office files
+*.docx
+*.xlsx
+*.pdf
+*.pptx
+
+# Private and internal documentation stays local.
+*.md
+docs/
+!/README.md
+!/CHANGELOG.md
+!/deploy/INCIDENT_RUNBOOK.md
+!tools/voice/dashboard_llm/README.md
+!tools/voice/dashboard_llm/server/README.md
+# Claude/Codex state and root development guidance remain developer-local.
+.claude/
+.codex/
+.agents/
+
+# Admin/maintenance/migration scripts are local operational tools unless
+# explicitly reviewed and force-added. The tracked AI demo/reset scripts remain
+# available because ignore rules do not remove already tracked files.
+admin_dashboard/scripts/diagnostics/
+admin_dashboard/scripts/maintenance/
+admin_dashboard/scripts/migrations/
+
+!flutter_mobile_app/README.md
+!forecasting/README.md
+!website/README.md
+
+# Deprecated script archives stay local.
+admin_dashboard/scripts/archive/
+
+# Generated output files — always reproducible, never commit
+admin_dashboard/scripts/output/
+*.csv
+*.json.bak
+retailer_coordinate_candidates.*
+
+# Local presentation and QA workspaces. These folders can contain rendered
+# screenshots, temporary builders, validation reports, and captured test data.
+.presentation_*/
+presentation_output/
+qa_artifacts/
+# E2E flow evidence (the scripts in e2e/ are tracked; their output is not).
+e2e/output/
+.voice_working/
+logs/
+
+# Local Firebase QA configuration may contain project-specific endpoints or
+# emulator settings and is generated outside the production application.
+firebase_mobile_qa*.json
+
+# Secrets — NEVER commit these under any circumstances
+*.key
+# Local dev quick sign-in credentials (real test passwords) - never commit.
+# The .example template is committed; the real file is not.
+**/dev_accounts.local.json
+**/dev_accounts.*.local.json
+
+# Offline evaluation output (generated locally, never committed)
+eval_reports/
+
+# Ingested client data + its evaluation artifacts (real proposal-order data
+# stays on the local machine only — never committed).
+forecasting/data/
+
+# Local-only project documentation; do not commit or push.
+
+/document/
+
+# E2E harness scratch: run evidence and the cached Firebase JS SDK copies.
+/e2e/.cache/
+# E2E development signing keys (private seeds; created on first use).
+/e2e/.keys/
+/admin_dashboard/web/workspace.json
+
+# Root investigation helpers.
+/.tmp_*.py
+
+# Generated FunctionGemma training artifacts; evaluation fixtures stay tracked.
+/tools/voice/dashboard_llm/train/RUN_METADATA.json
+
+# Generated dashboard-voice training data (deterministic; rebuild with make_dataset)
+tools/voice/dashboard_llm/train/data/
+
+# Generated copilot training data and local adapters (deterministic; rebuild with make_copilot_dataset)
+tools/voice/dashboard_llm/train/data_copilot/
+
+# Identity migration manifests/backups (contain personal data)
+admin_dashboard/scripts/identity_migration/output/
+# Test documentation that explains how to regenerate fixtures and goldens.
+!contracts/README.md
+!admin_dashboard/test/golden/README.md
+!flutter_mobile_app/test/golden/README.md
+!admin_dashboard/test/goldens/README.md
+!flutter_mobile_app/test/goldens/README.md
+
+# Flutter writes golden diffs here on failure.
+**/test/goldens/failures/
+
+# Hosted copilot Docker build folder (contains model weights)
+tools/voice/dashboard_llm/server/bundle/
+
+# Local credential and export files (never commit).
+*-key.json
+/perf/
+/tools/verification/
+company-keys/
+tenten-products-export.json
+
+# Copilot acceptance run output (local evidence)
+tools/voice/dashboard_llm/acceptance/out/
+
+# Platform service local signing keys (development only)
+/platform_service/.keys/
+/platform_service/.emulator/

@@ -1,0 +1,34 @@
+{
+  "stagedRows": [],
+  "summary": {
+    "columnsDetected": {
+      "retailerName": "Shop"
+    },
+    "errorRows": 1,
+    "issueCounts": {
+      "missing_date": 1
+    },
+    "issues": [
+      {
+        "detail": "No order date.",
+        "field": "submittedAt",
+        "issueType": "missing_date",
+        "row": 2,
+        "severity": "error"
+      }
+    ],
+    "monthsCovered": [],
+    "products": 0,
+    "retailers": 0,
+    "sourceFile": "missing_required_columns.input.csv",
+    "totalRows": 1,
+    "unmappedRequired": [
+      "submittedAt",
+      "productName",
+      "quantity"
+    ],
+    "validRows": 0,
+    "warningRows": 0,
+    "writtenToRaw": false
+  }
+}

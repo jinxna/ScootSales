@@ -1,0 +1,22 @@
+{
+  "asOf": "2026-03-25",
+  "users": [
+    {"uid": "uid-s001", "employeeCode": "S001", "branchId": "KCH-01", "displayName": "Ahmad Faizal"},
+    {"uid": "uid-s002", "employeeCode": "S002", "branchId": "KCH-02", "displayName": "Lim Siew Ling"}
+  ],
+  "products": [
+    {"productId": "P-MILO-1KG", "productName": "Milo Tin 1kg", "unitPrice": 24.9},
+    {"productId": "P-MAGGI-5", "productName": "Maggi Curry 5s", "unitPrice": 6.5},
+    {"productId": "P-SARDIN-155", "productName": "Ayam Brand Sardines 155g", "unitPrice": 4.2}
+  ],
+  "retailers": [
+    {"retailerId": "R-KCH-0001", "retailerName": "Kedai Runcit Pelita", "assignedSalesmanUid": "uid-s001", "branchId": "KCH-01", "latitude": 1.5535, "longitude": 110.3592},
+    {"retailerId": "R-KCH-0002", "retailerName": "Mydin Mall Kuching", "assignedSalesmanId": "S002", "latitude": 1.4927, "longitude": 110.3414}
+  ],
+  "orders": [
+    {"orderId": "ORD-2026-0001", "retailerId": "R-KCH-0001", "status": "approved", "submittedAt": "2026-02-03T09:15:00+08:00", "items": [{"productId": "P-MILO-1KG", "qty": 6, "price": 24.9}, {"productId": "P-MAGGI-5", "qty": 12}]},
+    {"orderId": "ORD-2026-0002", "retailerId": "R-KCH-0001", "status": "approved", "submittedAt": "2026-02-10T09:40:00+08:00", "items": [{"productId": "P-MILO-1KG", "qty": 8, "price": 24.9}]},
+    {"orderId": "ORD-2026-0003", "retailerId": "R-KCH-0001", "status": "approved", "submittedAt": "2026-02-10T15:00:00+08:00", "items": [{"productId": "P-MILO-1KG", "qty": 2, "price": 24.9}]},
+    {"orderId": "ORD-2026-0004", "retailerId": "R-KCH-0002", "status": "submitted", "submittedAt": "2026-03-04T11:05:00+08:00", "items": [{"productId": "P-SARDIN-155", "qty": 24}, {"productId": "P-MAGGI-5", "qty": 30, "price": 6.2}]}
+  ]
+}

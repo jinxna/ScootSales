@@ -1,0 +1,23 @@
+[Unit]
+Description=Scoot Sales copilot (Gemini only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=scoot-copilot
+Group=scoot-copilot
+WorkingDirectory=/opt/scoot/platform
+EnvironmentFile=/etc/scoot/copilot.env
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ExecStart=/opt/scoot/platform/venv/bin/python -m tools.voice.dashboard_llm.server.app
+Restart=on-failure
+RestartSec=5
+MemoryMax=300M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

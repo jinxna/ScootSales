@@ -1,0 +1,13 @@
+# Runtime pins for the hosted copilot server (CPU only). torch is installed
+# separately from the PyTorch CPU index in the Dockerfile.
+transformers==5.17.0
+tokenizers==0.23.2
+safetensors==0.8.0
+peft==0.21.1
+google-auth>=2.30,<3
+requests>=2.32,<3
+cachecontrol>=0.14,<0.15
+fastapi>=0.110,<1.0
+cryptography>=42.0
+google-cloud-firestore>=2.16,<3.0
+firebase-admin>=6.5,<8.0

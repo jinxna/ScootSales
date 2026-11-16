@@ -1,0 +1,9 @@
+Invoice {{ params.invoiceNumber }} for {{ params.companyName }}.
+
+Amount: {{ params.amount }}
+Period: {{ params.periodStart }} to {{ params.periodEnd }}
+
+Pay by bank transfer by {{ params.dueAt }}. Use {{ params.invoiceNumber }} as the payment reference.
+
+Scoot Sales
+This is an automatic message.

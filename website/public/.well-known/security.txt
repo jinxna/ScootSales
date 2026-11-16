@@ -1,0 +1,4 @@
+# Placeholder contact. The owner replaces it with a real security address before launch.
+Contact: mailto:SECURITY-CONTACT-NOT-SET@example.invalid
+Expires: 2027-11-09T00:00:00.000Z
+Preferred-Languages: en

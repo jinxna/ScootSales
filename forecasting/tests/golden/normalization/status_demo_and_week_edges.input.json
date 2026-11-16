@@ -1,0 +1,29 @@
+{
+  "asOf": "2026-03-25T10:00:00+08:00",
+  "users": [],
+  "products": [
+    {"productId": "P-100PLUS-500", "productName": "100PLUS Original 500ml", "unitPrice": 2.5},
+    {"productId": "demo-P-1", "productName": "Demo Biscuit", "unitPrice": 1.0, "isDemo": true}
+  ],
+  "retailers": [
+    {"retailerId": "R-MYR-0003", "retailerName": "Sin Hup Hin Sdn Bhd", "branchId": "MYR-01", "assignedSalesmanId": "S004"},
+    {"retailerId": "ai-1-R1", "retailerName": "Demo Retailer"}
+  ],
+  "orders": [
+    {"orderId": "E-FIRST-WEEK", "retailerId": "R-MYR-0003", "submittedAt": "2026-01-25T16:30:00Z", "items": [{"productId": "P-100PLUS-500", "qty": 10}]},
+    {"orderId": "E-BEFORE-WINDOW", "retailerId": "R-MYR-0003", "submittedAt": "2026-01-25T15:30:00Z", "items": [{"productId": "P-100PLUS-500", "qty": 99}]},
+    {"orderId": "E-CURRENT-WEEK", "retailerId": "R-MYR-0003", "submittedAt": "2026-03-22T17:00:00Z", "items": [{"productId": "P-100PLUS-500", "qty": 77}]},
+    {"orderId": "E-LAST-SUNDAY", "retailerId": "R-MYR-0003", "submittedAt": "2026-03-22T15:59:59Z", "items": [{"productId": "P-100PLUS-500", "qty": 4}]},
+    {"orderId": "E-CANCELLED", "retailerId": "R-MYR-0003", "status": "Cancelled", "submittedAt": "2026-03-02T01:00:00Z", "items": [{"productId": "P-100PLUS-500", "qty": 5}]},
+    {"orderId": "E-DRAFT", "retailerId": "R-MYR-0003", "status": " draft ", "submittedAt": "2026-03-02T01:00:00Z", "items": [{"productId": "P-100PLUS-500", "qty": 5}]},
+    {"orderId": "E-NODATE", "retailerId": "R-MYR-0003", "items": [{"productId": "P-100PLUS-500", "qty": 5}]},
+    {"orderId": "E-BADDATE", "retailerId": "R-MYR-0003", "submittedAt": "yesterday", "items": [{"productId": "P-100PLUS-500", "qty": 5}]},
+    {"orderId": "E-NORETAILER", "submittedAt": "2026-03-02T01:00:00Z", "items": [{"productId": "P-100PLUS-500", "qty": 5}]},
+    {"orderId": "E-DEMO-FLAG", "retailerId": "R-MYR-0003", "isDemo": "TRUE", "submittedAt": "2026-03-03T01:00:00Z", "items": [{"productId": "P-100PLUS-500", "qty": 3}]},
+    {"orderId": "E-DEMO-COHERENT", "retailerId": "ai-1-R1", "isDemo": true, "submittedAt": "2026-03-03T01:00:00Z", "items": [{"productId": "demo-P-1", "qty": 3}]},
+    {"orderId": "E-DEMOGRAPHIC", "retailerId": "R-MYR-0003", "source": "demographic_import", "submittedAt": "2026-03-03T01:00:00Z", "items": [{"productId": "P-100PLUS-500", "qty": 6}]},
+    {"orderId": "E-NAIVE-TS", "retailerId": "R-MYR-0003", "submittedAt": "2026-03-09T00:30:00", "items": [{"productId": "P-100PLUS-500", "qty": 2}]},
+    {"orderId": "E-DUP", "retailerId": "R-MYR-0003", "submittedAt": "2026-03-10T02:00:00+08:00", "items": [{"productId": "P-100PLUS-500", "qty": 1}, {"productId": "P-100PLUS-500", "qty": 1}]},
+    {"orderId": "E-DUP", "retailerId": "R-MYR-0003", "submittedAt": "2026-03-10T02:00:00+08:00", "items": [{"productId": "P-100PLUS-500", "qty": 1}]}
+  ]
+}

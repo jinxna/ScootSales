@@ -1,0 +1,8 @@
+# Python 3.11 runtime pins. Install from the repository root with the PyTorch
+# CUDA 12.4 wheel index as an extra index (see README.md in this directory).
+torch==2.6.0+cu124
+transformers==5.17.0
+tokenizers==0.23.2
+safetensors==0.8.0
+huggingface-hub==1.33.0
+numpy==1.26.4

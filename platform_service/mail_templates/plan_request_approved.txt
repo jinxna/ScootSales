@@ -1,0 +1,6 @@
+The Scoot Sales team accepted your request to change the plan for {{ params.companyName }} to {{ params.planName }}, billed {{ params.interval }}.
+
+The new plan is in use now.
+
+Scoot Sales
+This is an automatic message.

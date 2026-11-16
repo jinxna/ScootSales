@@ -1,0 +1,43 @@
+{
+  "description": "v2 role must be a canonical token; a display label is denied by rules and rejected by readers.",
+  "uid": "ct-badrole",
+  "userDoc": {
+    "uid": "ct-badrole",
+    "email": "ct-badrole@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "employeeCode": "S114",
+    "branchId": "B1"
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-badrole",
+    "userDocId": "ct-badrole@contracts.test",
+    "employeeCode": "S114",
+    "userId": "S114",
+    "email": "ct-badrole@contracts.test",
+    "role": "sales representative",
+    "user_group": "sales representative",
+    "status": "active",
+    "isActive": true,
+    "branchId": "B1",
+    "branch_id": "B1",
+    "supervisorId": "",
+    "supervisor_id": "",
+    "supervisorUid": "",
+    "seatClass": "salesperson",
+    "assignedSalesmanCodes": {
+      "$sentinel": "delete"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "rejected",
+    "pythonIdentity": "rejected",
+    "pythonAdminAccess": "deny"
+  }
+}

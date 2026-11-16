@@ -1,0 +1,8 @@
+The audit log for {{ params.day }} has {{ params.count }} events.
+
+Final hash: {{ params.headHash }}
+
+Keep this message. It lets you check later that the log was not changed.
+
+Scoot Sales
+This is an automatic message.

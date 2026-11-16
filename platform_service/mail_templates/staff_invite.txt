@@ -1,0 +1,8 @@
+{{ params.invitedBy }} invited you to the Scoot Sales Control Centre as {{ params.role }}.
+
+Open {{ params.inviteUrl }} to choose a password.
+
+This invitation expires at {{ params.expiresAt }}.
+
+Scoot Sales
+This is an automatic message.

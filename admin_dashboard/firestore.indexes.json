@@ -1,0 +1,523 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "route_plan_progress",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "weekStart", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "conversation_outcomes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "conversation_outcomes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ai_insights",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ai_insights",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "visit_briefs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "generatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "visit_briefs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "generatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "retailer_memory",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "retailer_memory",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "retailer_priority_rankings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "generatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "retailer_priority_rankings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "generatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_stop_progress",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "arrivedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_stop_progress",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "arrivedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_stop_progress",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanUid", "order": "ASCENDING" },
+        { "fieldPath": "deviceOccurredAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_plan_progress",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanUid", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_plan_progress",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_plan_progress",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanUid", "order": "ASCENDING" },
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_plan_progress",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ai_insights",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "priority", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ai_insights",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ai_insights",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanUid", "order": "ASCENDING" },
+        { "fieldPath": "weekStart", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "weekStart", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanUid", "order": "ASCENDING" },
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "weekStart", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "weekStart", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "purchase_orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "issuedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "visit_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanUid", "order": "ASCENDING" },
+        { "fieldPath": "retailerId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "visit_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanId", "order": "ASCENDING" },
+        { "fieldPath": "retailerId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "weekly_ai_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "scopeType", "order": "ASCENDING" },
+        { "fieldPath": "scopeKey", "order": "ASCENDING" },
+        { "fieldPath": "weekStart", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "weekly_ai_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "scopeType", "order": "ASCENDING" },
+        { "fieldPath": "weekStart", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "branchId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "assignedSalesmanCodes", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isVisible", "order": "ASCENDING" },
+        { "fieldPath": "departmentId", "order": "ASCENDING" },
+        { "fieldPath": "categoryId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "weekStart", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_plan_progress",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_plan_progress",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanUid", "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanUid", "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "staffId", "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "conversation_outcomes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "followUpStatus", "order": "ASCENDING" },
+        { "fieldPath": "followUpDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "conversation_outcomes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "followUpStatus", "order": "ASCENDING" },
+        { "fieldPath": "followUpDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "conversation_outcomes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "followUpStatus", "order": "ASCENDING" },
+        { "fieldPath": "followUpDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "conversation_outcomes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanUid", "order": "ASCENDING" },
+        { "fieldPath": "followUpDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "conversation_outcomes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanUid", "order": "ASCENDING" },
+        { "fieldPath": "retailerId", "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "gps_tracking",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "gps_tracking",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "live_tracking",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "live_tracking",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesman_code", "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "visit_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "arrivalTime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "visit_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "arrivalTime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "special_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "special_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "dashboard_notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "roleTarget", "order": "ASCENDING" },
+        { "fieldPath": "salesmanCode", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "dashboard_notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "roleTarget", "order": "ASCENDING" },
+        { "fieldPath": "branchId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "retailer_score_sheet_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "retailerId", "order": "ASCENDING" },
+        { "fieldPath": "isVisible", "order": "ASCENDING" },
+        { "fieldPath": "sortOrder", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "route_stop_progress",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesmanUid", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

@@ -1,0 +1,67 @@
+{
+  "description": "Regression: an admin self-save that writes the full v2 payload onto a legacy record adds accessVersion/seatClass, which counts as self privilege escalation: deny. The dashboard must send only email + updatedAt.",
+  "actor": "self",
+  "uid": "ct-self-admin",
+  "userDoc": {
+    "uid": "ct-self-admin",
+    "email": "ct-self-admin@contracts.test",
+    "role": "admin",
+    "user_group": "admin",
+    "status": "active",
+    "employeeCode": "A0100",
+    "branchId": ""
+  },
+  "existingAccess": {
+    "uid": "ct-self-admin",
+    "userDocId": "ct-self-admin@contracts.test",
+    "role": "admin",
+    "user_group": "admin",
+    "status": "active",
+    "isActive": true,
+    "employeeCode": "A0100",
+    "userId": "A0100",
+    "branchId": "",
+    "branch_id": ""
+  },
+  "producer": {
+    "inputs": {
+      "uid": "ct-self-admin",
+      "userDocId": "ct-self-admin@contracts.test",
+      "employeeCode": "A0100",
+      "email": "ct-self-admin@contracts.test",
+      "roleRaw": "admin",
+      "statusRaw": "active",
+      "branchId": "",
+      "supervisorId": "",
+      "supervisorUid": "",
+      "assignedSalesmanCodes": null
+    }
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-self-admin",
+    "userDocId": "ct-self-admin@contracts.test",
+    "employeeCode": "A0100",
+    "userId": "A0100",
+    "email": "ct-self-admin@contracts.test",
+    "role": "admin",
+    "user_group": "admin",
+    "status": "active",
+    "isActive": true,
+    "branchId": "",
+    "branch_id": "",
+    "supervisorId": "",
+    "supervisor_id": "",
+    "supervisorUid": "",
+    "seatClass": "free",
+    "assignedSalesmanCodes": {
+      "$sentinel": "delete"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny"
+  }
+}

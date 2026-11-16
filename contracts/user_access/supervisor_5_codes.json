@@ -1,0 +1,67 @@
+{
+  "description": "Supervisor at the 5-salesman cap enforced by validV2AccessRecord.",
+  "uid": "ct-sup-5",
+  "userDoc": {
+    "uid": "ct-sup-5",
+    "email": "ct-sup-5@contracts.test",
+    "role": "supervisor",
+    "user_group": "supervisor",
+    "status": "active",
+    "employeeCode": "SV15",
+    "branchId": "B1"
+  },
+  "producer": {
+    "inputs": {
+      "uid": "ct-sup-5",
+      "userDocId": "ct-sup-5@contracts.test",
+      "employeeCode": "SV15",
+      "email": "ct-sup-5@contracts.test",
+      "roleRaw": "supervisor",
+      "statusRaw": "active",
+      "branchId": "B1",
+      "supervisorId": "",
+      "supervisorUid": "",
+      "assignedSalesmanCodes": [
+        "S101",
+        "S102",
+        "S103",
+        "S104",
+        "S105"
+      ]
+    }
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-sup-5",
+    "userDocId": "ct-sup-5@contracts.test",
+    "employeeCode": "SV15",
+    "userId": "SV15",
+    "email": "ct-sup-5@contracts.test",
+    "role": "supervisor",
+    "user_group": "supervisor",
+    "status": "active",
+    "isActive": true,
+    "branchId": "B1",
+    "branch_id": "B1",
+    "supervisorId": "",
+    "supervisor_id": "",
+    "supervisorUid": "",
+    "seatClass": "free",
+    "assignedSalesmanCodes": [
+      "S101",
+      "S102",
+      "S103",
+      "S104",
+      "S105"
+    ],
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "active",
+    "pythonIdentity": "active",
+    "pythonAdminAccess": "deny"
+  }
+}

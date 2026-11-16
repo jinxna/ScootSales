@@ -1,0 +1,4 @@
+{
+  "_comment": "Copy this file to dev_accounts.hardware.local.json (git-ignored) and fill in the hardware client's test accounts (Firebase project hardware-client-sales). Debug-only quick sign-in used by START.bat option [8]. Format of DEV_ACCOUNTS: records separated by ';;', fields by '|' as label|email|password|role.",
+  "DEV_ACCOUNTS": "Hardware Admin|admin@example.com|changeme|Admin;;Hardware Salesman|salesman@example.com|changeme|Salesman"
+}

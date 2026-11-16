@@ -1,0 +1,34 @@
+services:
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+
+  otp-api:
+    build: .
+    container_name: otp-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      NODE_ENV: development
+      OTP_MODE: dev-mailpit
+      OTP_DEV_ACKNOWLEDGED: "1"
+      PORT: 8080
+      # The container only receives traffic via the published 127.0.0.1:8080
+      # port mapping below, so binding 0.0.0.0 inside the container stays
+      # loopback-only from outside the host.
+      OTP_BIND_HOST: "0.0.0.0"
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_USER: ""
+      SMTP_PASS: ""
+      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5000,http://localhost:8080,http://127.0.0.1:3000,http://127.0.0.1:5000,http://127.0.0.1:8080}"
+    depends_on:
+      - mailpit

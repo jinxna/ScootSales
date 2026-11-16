@@ -1,0 +1,214 @@
+{
+  "invitation": {
+    "subject": "Your invitation to {{ params.companyName }}",
+    "params": [
+      "companyName",
+      "inviteUrl",
+      "expiresAt"
+    ],
+    "brevoTemplateName": "scoot-sales-invitation"
+  },
+  "invoice": {
+    "subject": "Invoice {{ params.invoiceNumber }}",
+    "params": [
+      "companyName",
+      "invoiceNumber",
+      "amount",
+      "periodStart",
+      "periodEnd",
+      "dueAt"
+    ],
+    "brevoTemplateName": "scoot-sales-invoice"
+  },
+  "receipt": {
+    "subject": "Payment receipt {{ params.receiptNumber }}",
+    "params": [
+      "companyName",
+      "invoiceReference",
+      "receiptNumber",
+      "amount",
+      "paidAt"
+    ],
+    "brevoTemplateName": "scoot-sales-receipt"
+  },
+  "plan_request_received": {
+    "subject": "We received your plan request",
+    "params": [
+      "companyName",
+      "planName",
+      "interval"
+    ],
+    "brevoTemplateName": "scoot-sales-plan-request-received"
+  },
+  "plan_request_approved": {
+    "subject": "Your plan request was accepted",
+    "params": [
+      "companyName",
+      "planName",
+      "interval"
+    ],
+    "brevoTemplateName": "scoot-sales-plan-request-approved"
+  },
+  "plan_request_declined": {
+    "subject": "Your plan request was not accepted",
+    "params": [
+      "companyName",
+      "planName",
+      "reason"
+    ],
+    "brevoTemplateName": "scoot-sales-plan-request-declined"
+  },
+  "plan_request_notice": {
+    "subject": "New plan request from {{ params.companyName }}",
+    "params": [
+      "companyName",
+      "requesterEmail",
+      "planName",
+      "interval",
+      "requestedAt"
+    ],
+    "brevoTemplateName": "scoot-sales-plan-request-notice"
+  },
+  "renewal_reminder": {
+    "subject": "Your Scoot Sales payment period ends on {{ params.expiresAt }}",
+    "params": [
+      "companyName",
+      "expiresAt"
+    ],
+    "brevoTemplateName": "scoot-sales-renewal-reminder"
+  },
+  "past_due": {
+    "subject": "Your Scoot Sales payment is overdue",
+    "params": [
+      "companyName"
+    ],
+    "brevoTemplateName": "scoot-sales-past-due"
+  },
+  "billing_email_changed": {
+    "subject": "The billing email for your Scoot Sales account was changed",
+    "params": [
+      "companyName",
+      "newEmailHint"
+    ],
+    "brevoTemplateName": "scoot-sales-billing-email-changed"
+  },
+  "status_changed_suspended": {
+    "subject": "Your Scoot Sales account is suspended",
+    "params": [
+      "companyName"
+    ],
+    "brevoTemplateName": "scoot-sales-status-changed-suspended"
+  },
+  "status_changed_read_only": {
+    "subject": "Your Scoot Sales account is read-only",
+    "params": [
+      "companyName"
+    ],
+    "brevoTemplateName": "scoot-sales-status-changed-read-only"
+  },
+  "status_changed_restored": {
+    "subject": "Your Scoot Sales account is restored",
+    "params": [
+      "companyName"
+    ],
+    "brevoTemplateName": "scoot-sales-status-changed-restored"
+  },
+  "account_deletion_notice": {
+    "subject": "Account deletion request in {{ params.companyName }}",
+    "params": [
+      "companyName",
+      "requestedAt",
+      "deleteAfter"
+    ],
+    "brevoTemplateName": "scoot-sales-account-deletion-notice"
+  },
+  "staff_digest": {
+    "subject": "Scoot Sales daily digest for {{ params.date }}",
+    "params": [
+      "date",
+      "paymentsToCheck",
+      "approvalsWaiting",
+      "invoicesToIssue",
+      "invoicesToSend",
+      "companiesPastDue",
+      "companiesGraceOver"
+    ],
+    "brevoTemplateName": "scoot-sales-staff-digest"
+  },
+  "audit_anchor": {
+    "subject": "Scoot Sales audit anchor for {{ params.day }}",
+    "params": [
+      "day",
+      "count",
+      "headHash"
+    ],
+    "brevoTemplateName": "scoot-sales-audit-anchor"
+  },
+  "staff_signin_code": {
+    "subject": "Your Scoot Sales sign-in code",
+    "params": [
+      "code",
+      "minutes"
+    ],
+    "brevoTemplateName": "scoot-sales-staff-signin-code"
+  },
+  "invitation_email_code": {
+    "subject": "Your Scoot Sales verification code",
+    "params": [
+      "code",
+      "minutes"
+    ],
+    "brevoTemplateName": "scoot-sales-invitation-email-code"
+  },
+  "staff_notice": {
+    "subject": "Scoot Sales Control Centre security notice",
+    "params": [
+      "sentence",
+      "at"
+    ],
+    "brevoTemplateName": "scoot-sales-staff-notice"
+  },
+  "staff_invite": {
+    "subject": "You are invited to the Scoot Sales Control Centre",
+    "params": [
+      "invitedBy",
+      "role",
+      "inviteUrl",
+      "expiresAt"
+    ],
+    "brevoTemplateName": "scoot-sales-staff-invite"
+  },
+  "password_reset": {
+    "subject": "Reset your Scoot Sales password",
+    "params": [
+      "accountName",
+      "resetUrl"
+    ],
+    "brevoTemplateName": "scoot-sales-password-reset"
+  },
+  "email_verification": {
+    "subject": "Confirm your Scoot Sales email address",
+    "params": [
+      "accountName",
+      "verifyUrl"
+    ],
+    "brevoTemplateName": "scoot-sales-email-verification"
+  },
+  "signin_alert": {
+    "subject": "New sign-in to your Scoot Sales account",
+    "params": [
+      "accountName",
+      "device",
+      "at"
+    ],
+    "brevoTemplateName": "scoot-sales-signin-alert"
+  },
+  "password_changed": {
+    "subject": "Your Scoot Sales password was changed",
+    "params": [
+      "accountName",
+      "at"
+    ],
+    "brevoTemplateName": "scoot-sales-password-changed"
+  }
+}

@@ -1,0 +1,8 @@
+Your sign-in code is {{ params.code }}.
+
+The code works once. It expires in {{ params.minutes }} minutes.
+
+If you did not try to sign in, tell the owner at once.
+
+Scoot Sales
+This is an automatic message.

@@ -1,0 +1,173 @@
+{
+  "data_quality": {
+    "itemsInvalidAmount": 0,
+    "itemsInvalidQuantity": 0,
+    "itemsMissingPrice": 0,
+    "itemsScanned": 3,
+    "itemsUnresolvedProduct": 0,
+    "missingPricePairs": [],
+    "ordersMissingDate": 0,
+    "ordersMissingRetailer": 0,
+    "ordersScanned": 4,
+    "ordersSkippedStatus": 0,
+    "retailersMissingCoordinates": [
+      "R-KCH-0001"
+    ]
+  },
+  "products": {
+    "P-MAGGI-5": {
+      "is_demo": false,
+      "packing_size": "",
+      "product_id": "P-MAGGI-5",
+      "product_name": "Maggi Curry 5s",
+      "unit_of_measure": "",
+      "unit_price_rm": 6.5
+    },
+    "P-MILO-1KG": {
+      "is_demo": false,
+      "packing_size": "",
+      "product_id": "P-MILO-1KG",
+      "product_name": "Milo Tin 1kg",
+      "unit_of_measure": "",
+      "unit_price_rm": 24.9
+    }
+  },
+  "retailers": {
+    "R-KCH-0001": {
+      "branch_id": "",
+      "has_coordinates": false,
+      "is_demo": false,
+      "is_retired": false,
+      "latitude": null,
+      "longitude": null,
+      "retailer_id": "R-KCH-0001",
+      "retailer_name": "Kedai Runcit Pelita",
+      "salesman_code": "S001",
+      "salesman_uid": ""
+    }
+  },
+  "series": [
+    {
+      "branch_id": "",
+      "coverage_weeks": 8,
+      "observations": [
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-01-26"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-16"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-23"
+        },
+        {
+          "order_count": 2,
+          "quantity": 7.0,
+          "revenue_rm": 45.5,
+          "week_start": "2026-03-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-16"
+        }
+      ],
+      "product_id": "P-MAGGI-5",
+      "product_name": "Maggi Curry 5s",
+      "retailer_id": "R-KCH-0001",
+      "retailer_name": "Kedai Runcit Pelita",
+      "salesman_code": "S001",
+      "salesman_uid": "",
+      "unit_price_rm": 6.5
+    },
+    {
+      "branch_id": "",
+      "coverage_weeks": 8,
+      "observations": [
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-01-26"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-16"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-23"
+        },
+        {
+          "order_count": 1,
+          "quantity": 3.0,
+          "revenue_rm": 74.69999999999999,
+          "week_start": "2026-03-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-16"
+        }
+      ],
+      "product_id": "P-MILO-1KG",
+      "product_name": "Milo Tin 1kg",
+      "retailer_id": "R-KCH-0001",
+      "retailer_name": "Kedai Runcit Pelita",
+      "salesman_code": "S001",
+      "salesman_uid": "",
+      "unit_price_rm": 24.9
+    }
+  ]
+}

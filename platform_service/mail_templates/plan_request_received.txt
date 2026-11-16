@@ -1,0 +1,9 @@
+We received your request to change the plan for {{ params.companyName }}.
+
+Plan: {{ params.planName }}
+Billing interval: {{ params.interval }}
+
+The Scoot Sales team will contact you to arrange payment.
+
+Scoot Sales
+This is an automatic message.

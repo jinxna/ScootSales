@@ -1,0 +1,57 @@
+{
+  "description": "Branch manager, display-label role normalised.",
+  "uid": "ct-mgr-1",
+  "userDoc": {
+    "uid": "ct-mgr-1",
+    "email": "ct-mgr-1@contracts.test",
+    "role": "branch_manager",
+    "user_group": "branch_manager",
+    "status": "active",
+    "employeeCode": "BM01",
+    "branchId": "B1"
+  },
+  "producer": {
+    "inputs": {
+      "uid": "ct-mgr-1",
+      "userDocId": "ct-mgr-1@contracts.test",
+      "employeeCode": "BM01",
+      "email": "ct-mgr-1@contracts.test",
+      "roleRaw": "Branch Manager",
+      "statusRaw": "active",
+      "branchId": "B1",
+      "supervisorId": "",
+      "supervisorUid": "",
+      "assignedSalesmanCodes": null
+    }
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-mgr-1",
+    "userDocId": "ct-mgr-1@contracts.test",
+    "employeeCode": "BM01",
+    "userId": "BM01",
+    "email": "ct-mgr-1@contracts.test",
+    "role": "branch_manager",
+    "user_group": "branch_manager",
+    "status": "active",
+    "isActive": true,
+    "branchId": "B1",
+    "branch_id": "B1",
+    "supervisorId": "",
+    "supervisor_id": "",
+    "supervisorUid": "",
+    "seatClass": "free",
+    "assignedSalesmanCodes": {
+      "$sentinel": "delete"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "active",
+    "pythonIdentity": "active",
+    "pythonAdminAccess": "deny"
+  }
+}

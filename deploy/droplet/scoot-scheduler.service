@@ -1,0 +1,23 @@
+[Unit]
+Description=Scoot Sales platform background jobs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=scoot
+Group=scoot
+WorkingDirectory=/opt/scoot/platform
+EnvironmentFile=/etc/scoot/platform.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+RuntimeDirectory=scoot-scheduler
+ExecStart=/usr/bin/env PLATFORM_SCHEDULER_ENABLED=true /opt/scoot/platform/venv/bin/python -m uvicorn platform_service.app:create_app --factory --uds /run/scoot-scheduler/uvicorn.sock
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

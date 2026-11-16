@@ -1,0 +1,333 @@
+{
+  "data_quality": {
+    "itemsInvalidAmount": 0,
+    "itemsInvalidQuantity": 4,
+    "itemsMissingPrice": 1,
+    "itemsScanned": 9,
+    "itemsUnresolvedProduct": 1,
+    "missingPricePairs": [
+      [
+        "R-SBW-0008",
+        "SKU-1003"
+      ]
+    ],
+    "ordersMissingDate": 0,
+    "ordersMissingRetailer": 1,
+    "ordersScanned": 5,
+    "ordersSkippedStatus": 0,
+    "retailersMissingCoordinates": [
+      "R-SBW-0008",
+      "R-SBW-0009"
+    ]
+  },
+  "products": {
+    "SKU-1001": {
+      "is_demo": false,
+      "packing_size": "",
+      "product_id": "SKU-1001",
+      "product_name": "Beras Cap Jati 10kg",
+      "unit_of_measure": "",
+      "unit_price_rm": 32.5
+    },
+    "SKU-1002": {
+      "is_demo": false,
+      "packing_size": "",
+      "product_id": "SKU-1002",
+      "product_name": "Minyak Masak Saji 2kg",
+      "unit_of_measure": "",
+      "unit_price_rm": 1024.0
+    },
+    "SKU-1003": {
+      "is_demo": false,
+      "packing_size": "",
+      "product_id": "SKU-1003",
+      "product_name": "Kicap Manis ABC 320ml",
+      "unit_of_measure": "",
+      "unit_price_rm": 0.0
+    }
+  },
+  "retailers": {
+    "R-SBW-0007": {
+      "branch_id": "SBW-01",
+      "has_coordinates": true,
+      "is_demo": false,
+      "is_retired": false,
+      "latitude": 2.2873,
+      "longitude": 111.83,
+      "retailer_id": "R-SBW-0007",
+      "retailer_name": "Kedai Runcit Ah Seng 阿成",
+      "salesman_code": "S003",
+      "salesman_uid": "uid-s003"
+    },
+    "R-SBW-0008": {
+      "branch_id": "",
+      "has_coordinates": false,
+      "is_demo": false,
+      "is_retired": false,
+      "latitude": null,
+      "longitude": null,
+      "retailer_id": "R-SBW-0008",
+      "retailer_name": "Pasar Mini Sri Aman",
+      "salesman_code": "",
+      "salesman_uid": ""
+    },
+    "R-SBW-0009": {
+      "branch_id": "",
+      "has_coordinates": false,
+      "is_demo": false,
+      "is_retired": false,
+      "latitude": null,
+      "longitude": 111.8,
+      "retailer_id": "R-SBW-0009",
+      "retailer_name": "Kedai Runcit Ah Seng 阿成",
+      "salesman_code": "",
+      "salesman_uid": ""
+    }
+  },
+  "series": [
+    {
+      "branch_id": "SBW-01",
+      "coverage_weeks": 8,
+      "observations": [
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-01-26"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-09"
+        },
+        {
+          "order_count": 1,
+          "quantity": 5.0,
+          "revenue_rm": 162.5,
+          "week_start": "2026-02-16"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-23"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-16"
+        }
+      ],
+      "product_id": "SKU-1001",
+      "product_name": "Beras Cap Jati 10kg",
+      "retailer_id": "R-SBW-0007",
+      "retailer_name": "Kedai Runcit Ah Seng 阿成",
+      "salesman_code": "S003",
+      "salesman_uid": "uid-s003",
+      "unit_price_rm": 32.5
+    },
+    {
+      "branch_id": "SBW-01",
+      "coverage_weeks": 8,
+      "observations": [
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-01-26"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-09"
+        },
+        {
+          "order_count": 1,
+          "quantity": 2000.0,
+          "revenue_rm": 2048000.0,
+          "week_start": "2026-02-16"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-23"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-16"
+        }
+      ],
+      "product_id": "SKU-1002",
+      "product_name": "Minyak Masak Saji 2kg",
+      "retailer_id": "R-SBW-0007",
+      "retailer_name": "Kedai Runcit Ah Seng 阿成",
+      "salesman_code": "S003",
+      "salesman_uid": "uid-s003",
+      "unit_price_rm": 1024.0
+    },
+    {
+      "branch_id": "",
+      "coverage_weeks": 8,
+      "observations": [
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-01-26"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-16"
+        },
+        {
+          "order_count": 1,
+          "quantity": 3.0,
+          "revenue_rm": 97.5,
+          "week_start": "2026-02-23"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-16"
+        }
+      ],
+      "product_id": "SKU-1001",
+      "product_name": "Beras Cap Jati 10kg",
+      "retailer_id": "R-SBW-0008",
+      "retailer_name": "Pasar Mini Sri Aman",
+      "salesman_code": "",
+      "salesman_uid": "",
+      "unit_price_rm": 32.5
+    },
+    {
+      "branch_id": "",
+      "coverage_weeks": 8,
+      "observations": [
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-01-26"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-16"
+        },
+        {
+          "order_count": 1,
+          "quantity": 4.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-23"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-16"
+        }
+      ],
+      "product_id": "SKU-1003",
+      "product_name": "Kicap Manis ABC 320ml",
+      "retailer_id": "R-SBW-0008",
+      "retailer_name": "Pasar Mini Sri Aman",
+      "salesman_code": "",
+      "salesman_uid": "",
+      "unit_price_rm": 0.0
+    }
+  ]
+}

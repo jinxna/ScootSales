@@ -1,0 +1,8 @@
+You have an invitation to join {{ params.companyName }}.
+
+Open {{ params.inviteUrl }}. This invitation expires at {{ params.expiresAt }}.
+
+If you did not expect this invitation, ignore this message.
+
+Scoot Sales
+This is an automatic message.

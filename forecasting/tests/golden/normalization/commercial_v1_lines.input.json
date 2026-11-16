@@ -1,0 +1,25 @@
+{
+  "asOf": "2026-03-25",
+  "users": [],
+  "products": [
+    {"productId": "P-MILO-1KG", "productName": "Milo Tin 1kg", "unitPrice": 24.9},
+    {"productId": "P-MAGGI-5", "productName": "Maggi Curry 5s", "unitPrice": 6.5}
+  ],
+  "retailers": [
+    {"retailerId": "R-KCH-0001", "retailerName": "Kedai Runcit Pelita", "assignedSalesmanId": "S001"}
+  ],
+  "orders": [
+    {"orderId": "V1-OK", "retailerId": "R-KCH-0001", "submittedAt": "2026-03-03T10:00:00+08:00", "commercialSchemaVersion": 1,
+     "commercialLines": ["P-MILO-1KG~TWlsbyBUaW4gMWtn~3~2490", "P-MAGGI-5~TWFnZ2kgQ3VycnkgNXM~5~650"],
+     "items": [{"productId": "P-MILO-1KG", "qty": 500, "price": 0.01}]},
+    {"orderId": "V1-QTY-OVER-LIMIT", "retailerId": "R-KCH-0001", "submittedAt": "2026-03-04T10:00:00+08:00", "commercialSchemaVersion": 1,
+     "commercialLines": ["P-MILO-1KG~TWlsbyBUaW4gMWtn~6~2490"],
+     "items": [{"productId": "P-MILO-1KG", "qty": 6, "price": 24.9}]},
+    {"orderId": "V1-MALFORMED-FALLBACK-BLOCKED", "retailerId": "R-KCH-0001", "submittedAt": "2026-03-05T10:00:00+08:00", "commercialSchemaVersion": 1,
+     "commercialLines": ["P-MILO-1KG~TWlsbyBUaW4gMWtn~two~2490"],
+     "items": [{"productId": "P-MILO-1KG", "qty": 4, "price": 24.9}]},
+    {"orderId": "LEGACY-NO-VERSION", "retailerId": "R-KCH-0001", "submittedAt": "2026-03-06T10:00:00+08:00",
+     "commercialLines": ["P-MAGGI-5~TWFnZ2kgQ3VycnkgNXM~1~650"],
+     "items": [{"productId": "P-MAGGI-5", "qty": 2}]}
+  ]
+}

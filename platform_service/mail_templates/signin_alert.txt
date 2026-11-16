@@ -1,0 +1,8 @@
+Your {{ params.accountName }} account was signed in to from a new device: {{ params.device }}.
+
+Time: {{ params.at }}.
+
+If this was you, you do not need to do anything. If it was not you, reset your password at once and tell your administrator.
+
+Scoot Sales
+This is an automatic message.

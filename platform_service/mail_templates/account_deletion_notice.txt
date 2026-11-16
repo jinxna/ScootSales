@@ -1,0 +1,10 @@
+A user in {{ params.companyName }} asked to delete their Scoot Sales account on {{ params.requestedAt }}.
+
+Their sign-in is turned off now.
+
+The account and personal data will be deleted on {{ params.deleteAfter }}.
+
+Open Role Assignment in the dashboard to delete it sooner or to cancel the request.
+
+Scoot Sales
+This is an automatic message.

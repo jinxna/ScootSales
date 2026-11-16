@@ -1,0 +1,23 @@
+{
+  "name": "fmcg-admin-server",
+  "version": "1.0.0",
+  "scripts": {
+    "test:node": "node --test test/server_cors.test.js",
+    "test:rules": "mocha --timeout 300000 \"firestore_rules_test/**/*.test.cjs\"",
+    "test:rules:budget": "node firestore_rules_test/budget_probe.cjs - 2 --route-lifecycle --guard && node firestore_rules_test/budget_guard.cjs",
+    "test:rules:budget:emulator": "firebase emulators:exec --only firestore --project demo-fyp-a --config admin_dashboard/firebase.json \"npm run test:rules:budget\"",
+    "test:rules:emulator": "firebase emulators:exec --only firestore --project demo-fyp-a --config admin_dashboard/firebase.json \"npm run test:rules && npm run test:rules:budget\"",
+    "e2e:build": "node e2e/build.cjs",
+    "e2e": "firebase emulators:exec --only firestore,auth --project cos40005 --config admin_dashboard/firebase.json \"node e2e/run.cjs\"",
+    "e2e:signin": "firebase emulators:exec --only firestore,auth --project demo-scoot-platform --config admin_dashboard/firebase.json \"node e2e/run_signin.cjs\"",
+    "test:e2e:device": "firebase emulators:exec --only firestore,auth --project cos40005 --config firebase.device.json \"powershell -NoProfile -ExecutionPolicy Bypass -File e2e/device/run_device.ps1\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
+    "firebase": "^12.7.0",
+    "firebase-tools": "^15.20.0",
+    "mocha": "^11.7.6",
+    "oxlint": "1.91.0",
+    "playwright-core": "^1.63.0"
+  }
+}
