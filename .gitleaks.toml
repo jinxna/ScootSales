@@ -1,0 +1,19 @@
+title = "Scoot Sales secret scan"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures, Firebase client config and type names"
+paths = [
+  '''^platform_service/tests/''',
+  '''^e2e/''',
+  '''^packages/scoot_directory_client/test/''',
+  '''^admin_dashboard/test/''',
+  '''^flutter_mobile_app/test/''',
+]
+regexTarget = "line"
+regexes = [
+  '''^\s*"(android|ios|web)": "AIza[0-9A-Za-z_\-]{35}",\s*$''',
+  '''private_key: Ed25519PrivateKey''',
+]
