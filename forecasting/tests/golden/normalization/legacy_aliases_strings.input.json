@@ -1,0 +1,23 @@
+{
+  "asOf": "2026-03-25",
+  "users": [
+    {"docId": "uid-s003", "staffId": "S003", "branch_id": "SBW-01"}
+  ],
+  "products": [
+    {"docId": "SKU-1001", "product_name": "Beras Cap Jati 10kg", "price": "RM 32.50"},
+    {"itemId": "SKU-1002", "itemName": "Minyak Masak Saji 2kg", "sellingPrice": "1,024.00"},
+    {"productId": "SKU-1003", "name": "Kicap Manis ABC 320ml", "unitPrice": 0}
+  ],
+  "retailers": [
+    {"retailer_id": "R-SBW-0007", "retailer_name": "Kedai Runcit Ah Seng 阿成", "salesmanCode": "S003", "lat": "2.2873", "lng": "111.8300"},
+    {"retailerCode": "R-SBW-0008", "name": "Pasar Mini Sri Aman", "location": null, "latitude": 0, "longitude": 0},
+    {"docId": "R-SBW-0009", "name": "Kedai Runcit Ah Seng 阿成", "latitude": 95, "longitude": 111.8}
+  ],
+  "orders": [
+    {"docId": "ord-a1", "retailer_id": "R-SBW-0007", "orderDate": "2026-02-17T01:00:00Z", "items": [{"sku": "SKU-1001", "quantity": "5"}, {"productCode": "SKU-1002", "orderQty": "2,000"}]},
+    {"docId": "ord-a2", "retailerName": "Pasar Mini Sri Aman", "createdAt": "2026-02-24T08:00:00Z", "items": [{"name": "Beras Cap Jati 10kg", "boxes": 3}, {"itemName": "kicap manis abc 320ml", "qty": 4}]},
+    {"docId": "ord-a3", "outlet": "Kedai Runcit Ah Seng 阿成", "createdAt": "2026-02-24T08:00:00Z", "items": [{"sku": "SKU-1001", "qty": 1}]},
+    {"docId": "ord-a4", "retailerCode": "R-SBW-0008", "submittedAt": "2026-03-10T03:00:00Z", "items": [{"sku": "SKU-1001", "qty": true}, {"sku": "SKU-1001", "qty": "abc"}, {"sku": "SKU-1001", "qty": -3}, {"sku": "SKU-1001", "qty": 1e300}, {"sku": "SKU-9999", "qty": 2}, "not-a-mapping"]},
+    {"docId": "ord-a5", "retailerId": "R-SBW-0007", "submittedAt": "2026-03-10T03:00:00Z", "items": "oops"}
+  ]
+}

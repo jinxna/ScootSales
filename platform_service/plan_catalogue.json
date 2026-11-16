@@ -1,0 +1,125 @@
+{
+  "plans": [
+    {
+      "planId": "INTERNAL",
+      "visibility": "private",
+      "name": "Internal",
+      "edition": "advanced",
+      "limits": {
+        "salesmen": null,
+        "supervisors": null,
+        "managers": null,
+        "products": null
+      },
+      "features": {},
+      "notes": "",
+      "prices": {
+        "currency": "MYR",
+        "monthly": null,
+        "yearly": null
+      },
+      "tagline": "For internal use",
+      "highlights": [
+        "Advanced edition",
+        "No limits on seats or products"
+      ],
+      "sortOrder": 40
+    },
+    {
+      "planId": "STARTER",
+      "visibility": "public",
+      "name": "Starter",
+      "quotaSchemaVersion": 2,
+      "edition": "basic",
+      "limits": {
+        "salesmen": 5,
+        "supervisors": 1,
+        "admins": 1,
+        "branchManagers": 1,
+        "products": 100
+      },
+      "features": {},
+      "notes": "",
+      "prices": {
+        "currency": "MYR",
+        "monthly": null,
+        "yearly": null
+      },
+      "tagline": "",
+      "highlights": [],
+      "sortOrder": 10
+    },
+    {
+      "planId": "STANDARD",
+      "visibility": "public",
+      "name": "Standard",
+      "quotaSchemaVersion": 2,
+      "edition": "basic",
+      "limits": {
+        "salesmen": 10,
+        "supervisors": 2,
+        "admins": 1,
+        "branchManagers": 2,
+        "products": 500
+      },
+      "features": {},
+      "notes": "",
+      "prices": {
+        "currency": "MYR",
+        "monthly": null,
+        "yearly": null
+      },
+      "tagline": "",
+      "highlights": [],
+      "sortOrder": 20
+    },
+    {
+      "planId": "PROFESSIONAL",
+      "visibility": "public",
+      "name": "Professional",
+      "quotaSchemaVersion": 2,
+      "edition": "advanced",
+      "limits": {
+        "salesmen": 20,
+        "supervisors": 4,
+        "admins": 2,
+        "branchManagers": 3,
+        "products": 2000
+      },
+      "features": {},
+      "notes": "",
+      "prices": {
+        "currency": "MYR",
+        "monthly": null,
+        "yearly": null
+      },
+      "tagline": "",
+      "highlights": [],
+      "sortOrder": 30
+    },
+    {
+      "planId": "ENTERPRISE",
+      "visibility": "public",
+      "name": "Enterprise",
+      "quotaSchemaVersion": 2,
+      "edition": "advanced",
+      "limits": {
+        "salesmen": 40,
+        "supervisors": 8,
+        "admins": 2,
+        "branchManagers": 5,
+        "products": 5000
+      },
+      "features": {},
+      "notes": "Priced by quote",
+      "prices": {
+        "currency": "MYR",
+        "monthly": null,
+        "yearly": null
+      },
+      "tagline": "",
+      "highlights": [],
+      "sortOrder": 40
+    }
+  ]
+}

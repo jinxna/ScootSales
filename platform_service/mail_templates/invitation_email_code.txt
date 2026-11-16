@@ -1,0 +1,8 @@
+Your Scoot Sales verification code is {{ params.code }}.
+
+It expires in {{ params.minutes }} minutes.
+
+If you did not ask to join, ignore this email.
+
+Scoot Sales
+This is an automatic message.

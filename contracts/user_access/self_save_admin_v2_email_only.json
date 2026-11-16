@@ -1,0 +1,47 @@
+{
+  "description": "An admin saving their own profile: only email and updatedAt are written (what the dashboard sends).",
+  "actor": "self",
+  "uid": "ct-self-admin",
+  "userDoc": {
+    "uid": "ct-self-admin",
+    "email": "ct-self-admin@contracts.test",
+    "role": "admin",
+    "user_group": "admin",
+    "status": "active",
+    "employeeCode": "A0100",
+    "branchId": ""
+  },
+  "existingAccess": {
+    "accessVersion": 2,
+    "uid": "ct-self-admin",
+    "userDocId": "ct-self-admin@contracts.test",
+    "employeeCode": "A0100",
+    "userId": "A0100",
+    "email": "ct-self-admin@contracts.test",
+    "role": "admin",
+    "user_group": "admin",
+    "status": "active",
+    "isActive": true,
+    "branchId": "",
+    "branch_id": "",
+    "supervisorId": "",
+    "supervisor_id": "",
+    "supervisorUid": "",
+    "seatClass": "free",
+    "assignedSalesmanCodes": {
+      "$sentinel": "delete"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "access": {
+    "email": "ct-self-admin@contracts.test",
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "allow"
+  }
+}

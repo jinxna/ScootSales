@@ -1,0 +1,82 @@
+{
+  "description": "A supervisor demoted to salesman via the dashboard. The existing record carries assignedSalesmanCodes and the dashboard saves with merge, so the payload must DELETE the field (rules deny a salesman that still has codes). Regression for a bug that shipped.",
+  "uid": "ct-demoted",
+  "userDoc": {
+    "uid": "ct-demoted",
+    "email": "ct-demoted@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "employeeCode": "SV20",
+    "branchId": "B1"
+  },
+  "producer": {
+    "inputs": {
+      "uid": "ct-demoted",
+      "userDocId": "ct-demoted@contracts.test",
+      "employeeCode": "SV20",
+      "email": "ct-demoted@contracts.test",
+      "roleRaw": "salesman",
+      "statusRaw": "active",
+      "branchId": "B1",
+      "supervisorId": "SV01",
+      "supervisorUid": "ct-sup-1",
+      "assignedSalesmanCodes": null
+    }
+  },
+  "existingAccess": {
+    "accessVersion": 2,
+    "uid": "ct-demoted",
+    "userDocId": "ct-demoted@contracts.test",
+    "employeeCode": "SV20",
+    "userId": "SV20",
+    "email": "ct-demoted@contracts.test",
+    "role": "supervisor",
+    "user_group": "supervisor",
+    "status": "active",
+    "isActive": true,
+    "branchId": "B1",
+    "branch_id": "B1",
+    "supervisorId": "",
+    "supervisor_id": "",
+    "supervisorUid": "",
+    "seatClass": "free",
+    "assignedSalesmanCodes": [
+      "S101",
+      "S102"
+    ],
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-demoted",
+    "userDocId": "ct-demoted@contracts.test",
+    "employeeCode": "SV20",
+    "userId": "SV20",
+    "email": "ct-demoted@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "isActive": true,
+    "branchId": "B1",
+    "branch_id": "B1",
+    "supervisorId": "SV01",
+    "supervisor_id": "SV01",
+    "supervisorUid": "ct-sup-1",
+    "seatClass": "salesperson",
+    "assignedSalesmanCodes": {
+      "$sentinel": "delete"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "active",
+    "pythonIdentity": "active",
+    "pythonAdminAccess": "deny"
+  }
+}

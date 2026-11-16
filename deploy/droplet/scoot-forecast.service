@@ -1,0 +1,22 @@
+[Unit]
+Description=Scoot Sales weekly forecast and retailer intelligence for cos40005
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=scoot
+Group=scoot
+WorkingDirectory=/opt/scoot/platform
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+Environment=GOOGLE_APPLICATION_CREDENTIALS=/etc/scoot/company-keys/cos40005.json
+ExecStart=-/opt/scoot/forecast-venv/bin/python -m forecasting.service.push_forecasts --project dev --apply --confirm APPLY-cos40005
+ExecStart=/opt/scoot/forecast-venv/bin/python -m forecasting.ai_service.cli --project dev --apply --confirm APPLY-cos40005
+TimeoutStartSec=30min
+MemoryMax=450M
+OOMPolicy=continue
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

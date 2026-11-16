@@ -1,0 +1,13 @@
+{
+  "asOf": "2026-03-25",
+  "cases": {
+    "steady_weekly_milo": {"retailerId": "R-KCH-0001", "productId": "P-MILO-1KG", "weeks": [10, 11, 9, 10, 12, 10, 11, 10]},
+    "growing_100plus": {"retailerId": "R-MYR-0003", "productId": "P-100PLUS-500", "weeks": [4, 5, 6, 8, 10, 12, 15, 18]},
+    "declining_sardines": {"retailerId": "R-KCH-0002", "productId": "P-SARDIN-155", "weeks": [24, 22, 20, 12, 10, 6, 5, 3]},
+    "stopped_after_active_run": {"retailerId": "R-SBW-0007", "productId": "SKU-1001", "weeks": [6, 5, 7, 6, 5, 6, 0, 0]},
+    "all_zero_no_demand": {"retailerId": "R-SBW-0008", "productId": "SKU-1002", "weeks": [0, 0, 0, 0, 0, 0, 0, 0]},
+    "intermittent_lumpy": {"retailerId": "R-KCH-0004", "productId": "P-KICAP-320", "weeks": [0, 0, 12, 0, 0, 0, 12, 0]},
+    "spike_in_latest_week": {"retailerId": "R-KCH-0001", "productId": "P-MAGGI-5", "weeks": [5, 5, 6, 5, 5, 6, 5, 40]},
+    "single_order_only_latest": {"retailerId": "R-KCH-0009", "productId": "P-GULA-1KG", "weeks": [0, 0, 0, 0, 0, 0, 0, 3]}
+  }
+}

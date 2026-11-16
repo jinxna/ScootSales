@@ -1,0 +1,9 @@
+{{ params.companyName }} asked for a plan change.
+
+Requested by: {{ params.requesterEmail }}
+Plan: {{ params.planName }}
+Billing interval: {{ params.interval }}
+Requested at: {{ params.requestedAt }}
+
+Scoot Sales
+This is an automatic message.

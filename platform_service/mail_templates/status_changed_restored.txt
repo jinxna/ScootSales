@@ -1,0 +1,6 @@
+The account for {{ params.companyName }} is restored.
+
+All users can sign in again.
+
+Scoot Sales
+This is an automatic message.

@@ -1,0 +1,69 @@
+{
+  "description": "Supervisor over the 5-salesman cap: rules deny the write. The dashboard builds this payload without guarding the cap (see README).",
+  "uid": "ct-sup-6",
+  "userDoc": {
+    "uid": "ct-sup-6",
+    "email": "ct-sup-6@contracts.test",
+    "role": "supervisor",
+    "user_group": "supervisor",
+    "status": "active",
+    "employeeCode": "SV16",
+    "branchId": "B1"
+  },
+  "producer": {
+    "inputs": {
+      "uid": "ct-sup-6",
+      "userDocId": "ct-sup-6@contracts.test",
+      "employeeCode": "SV16",
+      "email": "ct-sup-6@contracts.test",
+      "roleRaw": "supervisor",
+      "statusRaw": "active",
+      "branchId": "B1",
+      "supervisorId": "",
+      "supervisorUid": "",
+      "assignedSalesmanCodes": [
+        "S101",
+        "S102",
+        "S103",
+        "S104",
+        "S105",
+        "S106"
+      ]
+    }
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-sup-6",
+    "userDocId": "ct-sup-6@contracts.test",
+    "employeeCode": "SV16",
+    "userId": "SV16",
+    "email": "ct-sup-6@contracts.test",
+    "role": "supervisor",
+    "user_group": "supervisor",
+    "status": "active",
+    "isActive": true,
+    "branchId": "B1",
+    "branch_id": "B1",
+    "supervisorId": "",
+    "supervisor_id": "",
+    "supervisorUid": "",
+    "seatClass": "free",
+    "assignedSalesmanCodes": [
+      "S101",
+      "S102",
+      "S103",
+      "S104",
+      "S105",
+      "S106"
+    ],
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "active",
+    "pythonIdentity": "active",
+    "pythonAdminAccess": "deny"
+  }
+}

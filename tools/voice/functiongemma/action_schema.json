@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "actions": [
+    {
+      "actionId": "open_assigned_route",
+      "description": "Open the salesperson's assigned route. Use for requests to open, show, or view the assigned route, route plan, or stops.",
+      "risk": "green",
+      "enabled": true,
+      "requiresConfirmation": false,
+      "allowOffline": true,
+      "requiresAuthenticatedUser": true,
+      "permittedRoles": ["salesman", "sales representative", "sales_representative"],
+      "permittedSurfaces": ["overview", "assigned_route", "guided_visit"],
+      "parameters": {}
+    },
+    {
+      "actionId": "open_current_visit",
+      "description": "Open the active retailer visit in the assigned route. Use for requests to open or show the current visit.",
+      "risk": "green",
+      "enabled": true,
+      "requiresConfirmation": false,
+      "allowOffline": true,
+      "requiresAuthenticatedUser": true,
+      "permittedRoles": ["salesman", "sales representative", "sales_representative"],
+      "permittedSurfaces": ["assigned_route", "guided_visit"],
+      "parameters": {}
+    },
+    {
+      "actionId": "open_cart",
+      "description": "Open the order cart for the current visit. Use for requests to open the cart, order cart, or basket.",
+      "risk": "green",
+      "enabled": true,
+      "requiresConfirmation": false,
+      "allowOffline": true,
+      "requiresAuthenticatedUser": true,
+      "permittedRoles": ["salesman", "sales representative", "sales_representative"],
+      "permittedSurfaces": ["assigned_route", "guided_visit"],
+      "parameters": {}
+    },
+    {
+      "actionId": "open_order_history",
+      "description": "Open the salesperson's order history. Use for requests to view previous, past, or historical orders.",
+      "risk": "green",
+      "enabled": true,
+      "requiresConfirmation": false,
+      "allowOffline": true,
+      "requiresAuthenticatedUser": true,
+      "permittedRoles": ["salesman", "sales representative", "sales_representative"],
+      "permittedSurfaces": ["overview", "assigned_route", "guided_visit", "order_history"],
+      "parameters": {}
+    },
+    {
+      "actionId": "search_products",
+      "description": "Search the product catalogue using the user's product name, SKU, or barcode query. Do not change quantities.",
+      "risk": "green",
+      "enabled": true,
+      "requiresConfirmation": false,
+      "allowOffline": true,
+      "requiresAuthenticatedUser": true,
+      "permittedRoles": ["salesman", "sales representative", "sales_representative"],
+      "permittedSurfaces": ["add_to_cart", "order_cart"],
+      "parameters": {
+        "query": {"type": "string", "description": "Product name, SKU, or barcode to search for.", "minLength": 1, "maxLength": 200}
+      }
+    },
+    {
+      "actionId": "clear_product_search",
+      "description": "Clear the current product search or filter and show all products.",
+      "risk": "green",
+      "enabled": true,
+      "requiresConfirmation": false,
+      "allowOffline": true,
+      "requiresAuthenticatedUser": true,
+      "permittedRoles": ["salesman", "sales representative", "sales_representative"],
+      "permittedSurfaces": ["add_to_cart", "order_cart"],
+      "parameters": {}
+    },
+    {
+      "actionId": "show_visit_brief",
+      "description": "Show the brief for the active retailer visit, including notes and visit suggestions.",
+      "risk": "green",
+      "enabled": true,
+      "requiresConfirmation": false,
+      "allowOffline": true,
+      "requiresAuthenticatedUser": true,
+      "permittedRoles": ["salesman", "sales representative", "sales_representative"],
+      "permittedSurfaces": ["assigned_route", "guided_visit"],
+      "parameters": {}
+    },
+    {
+      "actionId": "set_draft_order_quantity",
+      "description": "Set an existing product line's draft order quantity in boxes. Use only when the exact product and quantity are stated. This does not submit the order and requires confirmation.",
+      "risk": "yellow",
+      "enabled": true,
+      "requiresConfirmation": true,
+      "allowOffline": true,
+      "requiresAuthenticatedUser": true,
+      "permittedRoles": ["salesman", "sales representative", "sales_representative"],
+      "permittedSurfaces": ["order_signature"],
+      "parameters": {
+        "productQuery": {"type": "string", "description": "Exact existing product name, SKU, or barcode.", "minLength": 1, "maxLength": 200},
+        "quantity": {"type": "integer", "description": "Number of boxes for the draft order line.", "minimum": 1, "maximum": 100},
+        "unit": {"type": "string", "description": "Order quantity unit; it must be box.", "enum": ["box"]}
+      }
+    },
+    {
+      "actionId": "submit_order",
+      "description": "Submit the order. This action is disabled for voice and must never be generated or executed by the voice engine.",
+      "risk": "red",
+      "enabled": false,
+      "requiresConfirmation": true,
+      "allowOffline": false,
+      "requiresAuthenticatedUser": true,
+      "permittedRoles": ["salesman", "sales representative", "sales_representative"],
+      "permittedSurfaces": ["guided_visit", "order_cart", "order_signature"],
+      "parameters": {}
+    },
+    {
+      "actionId": "complete_visit",
+      "description": "Complete the retailer visit. This action is disabled for voice and must never be generated or executed by the voice engine.",
+      "risk": "red",
+      "enabled": false,
+      "requiresConfirmation": true,
+      "allowOffline": false,
+      "requiresAuthenticatedUser": true,
+      "permittedRoles": ["salesman", "sales representative", "sales_representative"],
+      "permittedSurfaces": ["guided_visit"],
+      "parameters": {}
+    },
+    {
+      "actionId": "change_route_state",
+      "description": "Change route state. This action is disabled for voice and must never be generated or executed by the voice engine.",
+      "risk": "red",
+      "enabled": false,
+      "requiresConfirmation": true,
+      "allowOffline": false,
+      "requiresAuthenticatedUser": true,
+      "permittedRoles": ["salesman", "sales representative", "sales_representative"],
+      "permittedSurfaces": ["assigned_route"],
+      "parameters": {}
+    },
+    {
+      "actionId": "record_outcome",
+      "description": "Record a visit outcome. This action is disabled for voice and must never be generated or executed by the voice engine.",
+      "risk": "red",
+      "enabled": false,
+      "requiresConfirmation": true,
+      "allowOffline": false,
+      "requiresAuthenticatedUser": true,
+      "permittedRoles": ["salesman", "sales representative", "sales_representative"],
+      "permittedSurfaces": ["guided_visit"],
+      "parameters": {}
+    },
+    {
+      "actionId": "change_location_state",
+      "description": "Change location state or arrival status. This action is blocked for voice and must never be generated or executed by the voice engine.",
+      "risk": "blocked",
+      "enabled": false,
+      "requiresConfirmation": false,
+      "allowOffline": false,
+      "requiresAuthenticatedUser": true,
+      "permittedRoles": ["salesman", "sales representative", "sales_representative"],
+      "permittedSurfaces": ["guided_visit"],
+      "parameters": {}
+    },
+    {
+      "actionId": "change_permissions",
+      "description": "Change device or application permissions. This action is blocked for voice and must never be generated or executed by the voice engine.",
+      "risk": "blocked",
+      "enabled": false,
+      "requiresConfirmation": false,
+      "allowOffline": false,
+      "requiresAuthenticatedUser": true,
+      "permittedRoles": ["salesman", "sales representative", "sales_representative"],
+      "permittedSurfaces": [],
+      "parameters": {}
+    }
+  ]
+}

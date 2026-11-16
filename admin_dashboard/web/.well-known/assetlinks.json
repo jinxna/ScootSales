@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "my.scootsales.app",
+    "sha256_cert_fingerprints": [
+      "7F:19:E1:E4:93:B6:FE:92:B6:47:E2:45:C4:5A:6E:B8:F6:DD:7C:CC:13:10:0E:AA:1E:1F:2D:AA:A1:18:61:AD"
+    ]
+  }
+}]

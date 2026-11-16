@@ -1,0 +1,8 @@
+The billing email for {{ params.companyName }} was changed.
+
+New address: {{ params.newEmailHint }}
+
+If you did not expect this change, contact the Scoot Sales team now.
+
+Scoot Sales
+This is an automatic message.

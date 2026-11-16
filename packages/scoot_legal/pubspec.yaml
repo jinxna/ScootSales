@@ -1,0 +1,10 @@
+name: scoot_legal
+description: Privacy Policy and Terms & Conditions in English and Bahasa Malaysia. One copy shared by the company dashboard, the Control Centre and the salesperson phone app.
+publish_to: 'none'
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  flutter:
+    sdk: flutter

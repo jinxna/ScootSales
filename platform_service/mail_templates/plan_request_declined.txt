@@ -1,0 +1,8 @@
+The Scoot Sales team did not accept your request to change the plan for {{ params.companyName }} to {{ params.planName }}.
+
+Reason: {{ params.reason }}
+
+Contact the Scoot Sales team if you want to talk about it.
+
+Scoot Sales
+This is an automatic message.

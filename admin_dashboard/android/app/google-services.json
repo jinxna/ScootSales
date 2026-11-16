@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "789087499876",
+    "project_id": "cos40005",
+    "storage_bucket": "cos40005.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:789087499876:android:c16ca809ca7ffeda1ed171",
+        "android_client_info": {
+          "package_name": "com.example.flutter_application_1"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTvOSDWpkpNpgJf4uVpb74qBjHcN1g47A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,54 @@
+[
+  {
+    "planId": "STARTER",
+    "name": "Starter",
+    "edition": "basic",
+    "limits": {
+      "salesmen": 5,
+      "supervisors": 1,
+      "admins": 1,
+      "branchManagers": 1,
+      "products": 100
+    },
+    "price": "Contact sales for pricing"
+  },
+  {
+    "planId": "STANDARD",
+    "name": "Standard",
+    "edition": "basic",
+    "limits": {
+      "salesmen": 10,
+      "supervisors": 2,
+      "admins": 1,
+      "branchManagers": 2,
+      "products": 500
+    },
+    "price": "Contact sales for pricing"
+  },
+  {
+    "planId": "PROFESSIONAL",
+    "name": "Professional",
+    "edition": "advanced",
+    "limits": {
+      "salesmen": 20,
+      "supervisors": 4,
+      "admins": 2,
+      "branchManagers": 3,
+      "products": 2000
+    },
+    "price": "Contact sales for pricing"
+  },
+  {
+    "planId": "ENTERPRISE",
+    "name": "Enterprise",
+    "edition": "advanced",
+    "limits": {
+      "salesmen": 40,
+      "supervisors": 8,
+      "admins": 2,
+      "branchManagers": 5,
+      "products": 5000
+    },
+    "price": "Priced by quote"
+  }
+]

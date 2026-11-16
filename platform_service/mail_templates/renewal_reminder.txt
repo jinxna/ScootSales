@@ -1,0 +1,6 @@
+The paid period for {{ params.companyName }} ends on {{ params.expiresAt }}.
+
+Contact the Scoot Sales team to arrange your next payment. Then your account stays active.
+
+Scoot Sales
+This is an automatic message.

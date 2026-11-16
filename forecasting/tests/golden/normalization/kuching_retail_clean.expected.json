@@ -1,0 +1,313 @@
+{
+  "data_quality": {
+    "itemsInvalidAmount": 0,
+    "itemsInvalidQuantity": 0,
+    "itemsMissingPrice": 0,
+    "itemsScanned": 6,
+    "itemsUnresolvedProduct": 0,
+    "missingPricePairs": [],
+    "ordersMissingDate": 0,
+    "ordersMissingRetailer": 0,
+    "ordersScanned": 4,
+    "ordersSkippedStatus": 0,
+    "retailersMissingCoordinates": []
+  },
+  "products": {
+    "P-MAGGI-5": {
+      "is_demo": false,
+      "packing_size": "",
+      "product_id": "P-MAGGI-5",
+      "product_name": "Maggi Curry 5s",
+      "unit_of_measure": "",
+      "unit_price_rm": 6.5
+    },
+    "P-MILO-1KG": {
+      "is_demo": false,
+      "packing_size": "",
+      "product_id": "P-MILO-1KG",
+      "product_name": "Milo Tin 1kg",
+      "unit_of_measure": "",
+      "unit_price_rm": 24.9
+    },
+    "P-SARDIN-155": {
+      "is_demo": false,
+      "packing_size": "",
+      "product_id": "P-SARDIN-155",
+      "product_name": "Ayam Brand Sardines 155g",
+      "unit_of_measure": "",
+      "unit_price_rm": 4.2
+    }
+  },
+  "retailers": {
+    "R-KCH-0001": {
+      "branch_id": "KCH-01",
+      "has_coordinates": true,
+      "is_demo": false,
+      "is_retired": false,
+      "latitude": 1.5535,
+      "longitude": 110.3592,
+      "retailer_id": "R-KCH-0001",
+      "retailer_name": "Kedai Runcit Pelita",
+      "salesman_code": "S001",
+      "salesman_uid": "uid-s001"
+    },
+    "R-KCH-0002": {
+      "branch_id": "KCH-02",
+      "has_coordinates": true,
+      "is_demo": false,
+      "is_retired": false,
+      "latitude": 1.4927,
+      "longitude": 110.3414,
+      "retailer_id": "R-KCH-0002",
+      "retailer_name": "Mydin Mall Kuching",
+      "salesman_code": "S002",
+      "salesman_uid": "uid-s002"
+    }
+  },
+  "series": [
+    {
+      "branch_id": "KCH-01",
+      "coverage_weeks": 8,
+      "observations": [
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-01-26"
+        },
+        {
+          "order_count": 1,
+          "quantity": 12.0,
+          "revenue_rm": 78.0,
+          "week_start": "2026-02-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-16"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-23"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-16"
+        }
+      ],
+      "product_id": "P-MAGGI-5",
+      "product_name": "Maggi Curry 5s",
+      "retailer_id": "R-KCH-0001",
+      "retailer_name": "Kedai Runcit Pelita",
+      "salesman_code": "S001",
+      "salesman_uid": "uid-s001",
+      "unit_price_rm": 6.5
+    },
+    {
+      "branch_id": "KCH-01",
+      "coverage_weeks": 8,
+      "observations": [
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-01-26"
+        },
+        {
+          "order_count": 1,
+          "quantity": 6.0,
+          "revenue_rm": 149.39999999999998,
+          "week_start": "2026-02-02"
+        },
+        {
+          "order_count": 2,
+          "quantity": 10.0,
+          "revenue_rm": 249.0,
+          "week_start": "2026-02-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-16"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-23"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-16"
+        }
+      ],
+      "product_id": "P-MILO-1KG",
+      "product_name": "Milo Tin 1kg",
+      "retailer_id": "R-KCH-0001",
+      "retailer_name": "Kedai Runcit Pelita",
+      "salesman_code": "S001",
+      "salesman_uid": "uid-s001",
+      "unit_price_rm": 24.9
+    },
+    {
+      "branch_id": "KCH-02",
+      "coverage_weeks": 8,
+      "observations": [
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-01-26"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-16"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-23"
+        },
+        {
+          "order_count": 1,
+          "quantity": 30.0,
+          "revenue_rm": 186.0,
+          "week_start": "2026-03-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-16"
+        }
+      ],
+      "product_id": "P-MAGGI-5",
+      "product_name": "Maggi Curry 5s",
+      "retailer_id": "R-KCH-0002",
+      "retailer_name": "Mydin Mall Kuching",
+      "salesman_code": "S002",
+      "salesman_uid": "uid-s002",
+      "unit_price_rm": 6.5
+    },
+    {
+      "branch_id": "KCH-02",
+      "coverage_weeks": 8,
+      "observations": [
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-01-26"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-16"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-23"
+        },
+        {
+          "order_count": 1,
+          "quantity": 24.0,
+          "revenue_rm": 100.80000000000001,
+          "week_start": "2026-03-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-16"
+        }
+      ],
+      "product_id": "P-SARDIN-155",
+      "product_name": "Ayam Brand Sardines 155g",
+      "retailer_id": "R-KCH-0002",
+      "retailer_name": "Mydin Mall Kuching",
+      "salesman_code": "S002",
+      "salesman_uid": "uid-s002",
+      "unit_price_rm": 4.2
+    }
+  ]
+}
