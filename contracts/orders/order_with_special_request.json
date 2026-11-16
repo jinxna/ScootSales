@@ -1,0 +1,194 @@
+{
+  "description": "A submitted order that also issues a special request document, written right after the order.",
+  "salesman": {
+    "uid": "ct-order-sales",
+    "userDoc": {
+      "uid": "ct-order-sales",
+      "email": "ct-order-sales@contracts.test",
+      "role": "salesman",
+      "user_group": "salesman",
+      "status": "active",
+      "employeeCode": "S201",
+      "branchId": "B1"
+    },
+    "access": {
+      "accessVersion": 2,
+      "uid": "ct-order-sales",
+      "userDocId": "ct-order-sales@contracts.test",
+      "employeeCode": "S201",
+      "userId": "S201",
+      "email": "ct-order-sales@contracts.test",
+      "role": "salesman",
+      "user_group": "salesman",
+      "status": "active",
+      "isActive": true,
+      "branchId": "B1",
+      "branch_id": "B1",
+      "supervisorId": "SV01",
+      "supervisor_id": "SV01",
+      "supervisorUid": "ct-sup-1",
+      "seatClass": "salesperson",
+      "assignedSalesmanCodes": {
+        "$sentinel": "delete"
+      },
+      "updatedAt": {
+        "$sentinel": "serverTimestamp"
+      }
+    }
+  },
+  "builder": {
+    "orderId": "ORD-CT-1002",
+    "visitId": "",
+    "personalPlanner": true,
+    "guidedVisitFields": null,
+    "retailerId": "ct-retailer-1",
+    "retailerName": "Kedai Maju",
+    "identityFields": {
+      "uid": "ct-order-sales",
+      "userUid": "ct-order-sales",
+      "salesmanUid": "ct-order-sales",
+      "salesmanEmail": "ct-order-sales@contracts.test",
+      "salesmanId": "S201",
+      "salesmanName": "Sales Two",
+      "submittedByUid": "ct-order-sales",
+      "createdByUid": "ct-order-sales",
+      "branchId": "B1",
+      "supervisorId": "SV01"
+    },
+    "locationFields": {
+      "locationEvidence": {
+        "mode": "not_verified",
+        "failureCode": "unavailable"
+      }
+    },
+    "items": [
+      {
+        "productName": "Choc Biscuit",
+        "productId": "P-003",
+        "barcode": "",
+        "packingSize": "12 x 1L",
+        "unitPrice": 7.9,
+        "orderQty": 1,
+        "orderedExpiry": "2027-01-31",
+        "department": "Snacks",
+        "shelfBatches": [],
+        "remarks": "Fragile, deliver upright"
+      }
+    ],
+    "signatureTimestamps": {
+      "Beverage": "2026-10-05 10:15"
+    },
+    "specialRequest": {
+      "orderId": "ORD-CT-1002",
+      "typeCode": "urgent_delivery",
+      "description": "Retailer needs this before the weekend.",
+      "retailerName": "Kedai Maju",
+      "salesmanCode": "S201",
+      "branchId": "B1",
+      "salesmanUid": "ct-order-sales"
+    }
+  },
+  "order": {
+    "orderId": "ORD-CT-1002",
+    "visitSource": "personal_planner",
+    "retailerId": "ct-retailer-1",
+    "retailerName": "Kedai Maju",
+    "outlet": "Kedai Maju",
+    "uid": "ct-order-sales",
+    "userUid": "ct-order-sales",
+    "salesmanUid": "ct-order-sales",
+    "salesmanEmail": "ct-order-sales@contracts.test",
+    "salesmanId": "S201",
+    "salesmanName": "Sales Two",
+    "submittedByUid": "ct-order-sales",
+    "createdByUid": "ct-order-sales",
+    "branchId": "B1",
+    "supervisorId": "SV01",
+    "locationEvidence": {
+      "mode": "not_verified",
+      "failureCode": "unavailable"
+    },
+    "totalProducts": 1,
+    "totalBoxes": 1,
+    "totalPrice": 7.9,
+    "submittedAt": {
+      "$sentinel": "serverTimestamp"
+    },
+    "createdAt": {
+      "$sentinel": "serverTimestamp"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    },
+    "status": "submitted",
+    "items": [
+      {
+        "name": "Choc Biscuit",
+        "productName": "Choc Biscuit",
+        "productId": "P-003",
+        "packingSize": "12 x 1L",
+        "price": 7.9,
+        "qty": 1,
+        "expiry": "2027-01-31",
+        "department": "Snacks",
+        "departmentName": "Snacks",
+        "shelfBatches": [],
+        "remarks": "Fragile, deliver upright"
+      }
+    ],
+    "commercialSchemaVersion": 1,
+    "commercialLines": [
+      "P-003~Q2hvYyBCaXNjdWl0~1~790"
+    ],
+    "signatureTimestamps": {
+      "Beverage": "2026-10-05 10:15"
+    }
+  },
+  "specialRequest": {
+    "orderId": "ORD-CT-1002",
+    "requestType": "urgent_delivery",
+    "retailerName": "Kedai Maju",
+    "requestedItem": "Urgent delivery",
+    "reason": "Retailer needs this before the weekend.",
+    "salesmanCode": "S201",
+    "branchId": "B1",
+    "createdByUid": "ct-order-sales",
+    "createdByRole": "salesman",
+    "status": "pending_supervisor",
+    "approvalStep": "Supervisor",
+    "lastActorUid": "ct-order-sales",
+    "lastActorRole": "salesman",
+    "createdAt": {
+      "$sentinel": "serverTimestamp"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    },
+    "lastActionAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesSalesmanCreate": "allow",
+    "dashboard": {
+      "status": "submitted",
+      "isSubmittedOrApproved": true,
+      "isPendingApproval": true,
+      "revenue": 7.9,
+      "quantity": 1,
+      "itemCount": 1,
+      "salesmanName": "Sales Two",
+      "retailerName": "Kedai Maju",
+      "items": [
+        {
+          "name": "Choc Biscuit",
+          "productId": "P-003",
+          "qty": 1,
+          "price": 7.9,
+          "department": "Snacks"
+        }
+      ]
+    },
+    "rulesSpecialRequestCreate": "allow"
+  }
+}

@@ -1,0 +1,2136 @@
+rules_version = '2';
+service cloud.firestore {
+match /databases/{database} {
+function signedIn() { return request.auth != null; }
+function accessPath() { return /databases/$(database)/documents/user_access/$(request.auth.uid); }
+function uidProfilePath() { return /databases/$(database)/documents/users/$(request.auth.uid); }
+function hasAccessProfile() { return signedIn() && exists(accessPath()); }
+function hasUidProfile() { return signedIn() && exists(uidProfilePath()); }
+function text(data, camel, snake) { return data.get(camel, null) is string ? data[camel] : data.get(snake, null) is string ? data[snake] : ''; }
+function boundedText(data, key, maxLength) { return data.get(key, '') is string && data.get(key, '').size() <= maxLength; }
+function identityPathPart(value) { return value.replace('%', '%25').replace('/', '%2F'); }
+function canonicalStopDocId(planId, stopId) {
+  return (planId + request.auth.uid + stopId).matches('^[^%/]*$') ? planId + '_' + request.auth.uid + '_' + stopId
+      : identityPathPart(planId) + '_' + identityPathPart(request.auth.uid) + '_' + identityPathPart(stopId);
+}
+function canonicalRole(value) {
+  let role = value.lower().replace(' ', '_');
+  return role == 'administrator' ? 'admin' : role == 'sales_representative' ? 'salesman' : role;
+}
+function hasActiveStatus(data) {
+  let activeFlag = data.get( 'isActive', data.get('is_active', data.get('active', data.get('enabled', true))) );
+  let status = data.get( 'status', data.get('accountStatus', data.get('account_status', 'active')) );
+  return (activeFlag == true || activeFlag == 1 || (activeFlag is string && activeFlag.lower() in ['true', '1', 'yes']) ||
+      (activeFlag == null && data.get('active', false) == true)) && status in ['active', 'Active'];
+}
+function accessIdentityMatches(uid, data) { return data.get('uid', uid) == uid && data.get('user_uid', uid) == uid; }
+function caller() { return hasAccessProfile() ? callerAccessIdentity(get(accessPath()).data) : legacyUidIdentity(); }
+function callerAccessIdentity(accessData) {
+  let version = accessData.get('accessVersion', null);
+  return version == 2 ? strictAccessIdentity(request.auth.uid, accessData) : version == null ? (!('disabledReasons' in accessData) || lifecycleAllows(accessData.disabledReasons) ? legacyAccessIdentity(accessData) : {'_active': false}) : {'_active': false};
+}
+function accountAuthorityKeys() {
+  return [ 'role', 'user_group', 'status', 'accountStatus', 'account_status', 'isActive', 'is_active', 'active', 'enabled', 'seatClass', 'seatHeld',
+      'invitationState', 'disabledReasons', 'deletionRequestedAt', 'deletionPurgeAfter' ];
+}
+function employeeCodeKeys() { return [ 'employeeCode', 'employee_code', 'staffId', 'staff_id', 'salesmanCode', 'salesman_code' ]; }
+function lifecycleAllows(reasons) {
+  return reasons is list && (reasons.size() == 0 || (request.method in ['get', 'list'] && reasons.hasOnly(['lifecycle_readonly'])));
+}
+function lifecycleWritable() { return signedIn() && (hasAccessProfile() ? lifecycleAllows(get(accessPath()).data.get('disabledReasons', [])) : hasUidProfile() && lifecycleAllows(get(uidProfilePath()).data.get('disabledReasons', []))); }
+function strictAccessIdentity(uid, access) {
+  let codes = access.get('assignedSalesmanCodes', []);
+  return access.get('uid', '') == uid && access.get('status', '') == 'active' && access.get('role', '') in [
+      'admin', 'developer', 'branch_manager', 'supervisor', 'salesman' ] && access.get('branchId', '') is string && access.get('employeeCode', '') is string &&
+      lifecycleAllows(access.get('disabledReasons', [])) ? {
+        '_active': true, 'role': access.role, 'branchId': access.get('branchId', ''), 'salesmanCode': access.get('employeeCode', ''),
+        'assignedSalesmanCodes': codes is list ? codes : [],
+  }
+      : {'_active': false};
+}
+function legacyIdentity(record) {
+  let code = record.get('employeeCode', null) is string ? record.employeeCode : record.get('staffId', null) is string ? record.staffId : '';
+  let role = record.get('role', null) is string ? record.role : record.get('user_group', null) is string ? record.user_group : '';
+  let branchId = record.get('branchId', null) is string ? record.branchId : record.get('branch_id', null) is string ? record.branch_id : '';
+  return { '_active': true, 'role': canonicalRole(role), 'branchId': branchId,
+        'salesmanCode': code != '' ? code : text(record, 'salesmanCode', 'salesman_code'), 'assignedSalesmanCodes':
+        record.get('assignedSalesmanCodes', null) is list ? record.assignedSalesmanCodes : [], };
+}
+function legacyUidIdentity() {
+  let uidExists = hasUidProfile();
+  let uidData = uidExists ? get(uidProfilePath()).data : {};
+  return uidExists && hasActiveStatus(uidData) && lifecycleAllows(uidData.get('disabledReasons', [])) ? legacyIdentity(uidData) : {'_active': false};
+}
+function legacyAccessIdentity(accessData) {
+  let uid = request.auth.uid;
+  let accessIdentityValid = accessData.get('uid', uid) == uid && accessData.get('user_uid', uid) == uid;
+  let hasLink = accessData.keys().hasAny(['userDocId', 'user_doc_id']);
+  let linkedUserDocId = accessData.get('userDocId', null) is string ? accessData.userDocId : accessData.get('user_doc_id', null) is string
+      ? accessData.user_doc_id : '';
+  let linked = accessIdentityValid && hasLink && linkedUserDocId != '' && exists( /databases/$(database)/documents/users/$( linkedUserDocId ) );
+  let actor = linked ? get( /databases/$(database)/documents/users/$( linkedUserDocId ) ).data : accessData;
+  return accessIdentityValid && hasActiveStatus(accessData) && (!hasLink || (linked && hasActiveStatus(actor) && (text(actor, 'uid', 'userUid') == uid ||
+      !actor.keys().hasAny(['uid', 'userUid'])))) ? legacyIdentity(actor) : {'_active': false};
+}
+function isActiveProfile() { return caller()._active == true; }
+function companyOnlyReasons(reasons) { return reasons is list && reasons.hasOnly(['billing_lapse', 'trial_expired', 'cancelled', 'lifecycle_readonly']); }
+function accountNotSuspended() {
+  let accessData = hasAccessProfile() ? get(accessPath()).data : {};
+  return hasAccessProfile() ? ( accessData.get('accessVersion', null) == 2 ? accessData.get('status', '') == 'active'
+      : legacyAccessIdentity(accessData)._active == true ) && companyOnlyReasons(accessData.get('disabledReasons', [])) :
+      hasUidProfile() && hasActiveStatus(get(uidProfilePath()).data) && companyOnlyReasons(get(uidProfilePath()).data.get('disabledReasons', []));
+}
+function isCompanyMemberFor(actor) {
+  return actor._active == true && actor.role in ['admin', 'developer', 'branch_manager', 'supervisor', 'salesman'];
+}
+function isCompanyMember() { return signedIn() && isCompanyMemberFor(caller()); }
+function isAdminProfile() { return isAdminFor(caller()); }
+function isAdminFor(actor) { return actor.get('role', '') in ['admin', 'developer']; }
+function isDashboardRole() { return isDashboardRoleFor(caller()); }
+function isDashboardRoleFor(actor) { return actor.get('role', '') in [ 'admin', 'developer', 'supervisor', 'branch_manager' ]; }
+function isSalesmanProfile() { return isSalesmanFor(caller()); }
+function isSalesmanFor(actor) { return actor.get('role', '') == 'salesman'; }
+function codeInTeam(code, team) { return code != '' && code in team; }
+function routeSalesmanUid(route) { return text(route, 'salesmanUid', 'salesman_uid'); }
+function routeSalesmanCode(route) { return text(route, 'salesmanCode', 'salesman_code'); }
+function routeBranchId(route) { return text(route, 'branchId', 'branch_id'); }
+function nonEmptyText(value, maxLength) { return value is string && value.size() > 0 && value.size() <= maxLength; }
+function changedKeys() { return request.resource.data.diff(resource.data).affectedKeys(); }
+function exactKeys(data, keys) { return data.keys().hasAll(keys) && data.keys().hasOnly(keys); }
+function managesScope(actor, code, branch) {
+  let role = actor.get('role', '');
+  return actor._active == true && ( role in ['admin', 'developer'] || ( role == 'supervisor' && codeInTeam(code,
+      actor.assignedSalesmanCodes) ) || ( role == 'branch_manager' && actor.branchId != '' && branch == actor.branchId ) );
+}
+function changedExactly(keys) {
+  let changed = request.resource.data.diff(resource.data).affectedKeys();
+  return changed.hasAll(keys) && changed.hasOnly(keys);
+}
+
+match /documents {
+  function managedIdentityKeys() {
+    return accountAuthorityKeys().concat([ 'branchId', 'branch_id', 'supervisorId', 'supervisor_id', 'assignedSalesmanCodes', 'employeeCode', 'staffId',
+        'salesmanCode', 'salesman_code' ]);
+  }
+  function isAccountDeletionAdmin() {
+    let actor = caller();
+    return actor._active == true && actor.role == 'admin';
+  }
+  match /privacy_deletion_requests/{uid} {
+    function recentSignIn() { return request.auth.token.get('auth_time', 0) >= request.time.toMillis() / 1000 - 3600; }
+    function canRequestOwnDeletion(uid) { return signedIn() && request.auth.uid == uid && recentSignIn() && accountNotSuspended(); }
+    function validDeletionRequest(data) {
+      return data.keys().hasOnly([ 'requestType', 'status', 'createdAt' ]) && data.keys().size() == 3 && data.requestType == 'account_deletion' &&
+          data.status == 'submitted' && data.createdAt == request.time;
+    }
+    allow get: if signedIn() && (request.auth.uid == uid || isAccountDeletionAdmin());
+    allow list: if isAccountDeletionAdmin();
+    allow create: if canRequestOwnDeletion(uid) && validDeletionRequest(request.resource.data);
+    allow update: if ( canRequestOwnDeletion(uid) && resource.data.status == 'rejected' && changedExactly(['status', 'createdAt']) &&
+        request.resource.data.requestType == 'account_deletion' && request.resource.data.status == 'submitted' &&
+        request.resource.data.createdAt == request.time ) || ( isAccountDeletionAdmin() && changedExactly(['status', 'updatedAt']) &&
+        request.resource.data.updatedAt == request.time && ( ( resource.data.status in ['submitted', 'reviewing'] &&
+        request.resource.data.status in [ 'reviewing', 'completed', 'rejected' ] ) || ( resource.data.status == 'completed' &&
+        !('purgedAt' in resource.data) && request.resource.data.status == 'rejected' ) ) );
+    allow delete: if false;
+  }
+  match /users/{userId} {
+    function isCanonicalUserDocument(userId) {
+      let accessExists = signedIn() && exists(accessPath());
+      let accessData = accessExists ? get(accessPath()).data : {};
+      let declaresUserDocId = accessData.keys().hasAny(['userDocId', 'user_doc_id']);
+      let linkedUserDocId = text(accessData, 'userDocId', 'user_doc_id');
+      return !declaresUserDocId || (linkedUserDocId != '' && userId == linkedUserDocId);
+    }
+    function isCanonicalUserWrite(userId, data) {
+      let profileUid = text(data, 'uid', 'userUid');
+      let profileAccessPath = /databases/$(database)/documents/user_access/$(profileUid);
+      let profileAccessExists = profileUid != '' && exists(profileAccessPath);
+      let profileAccess = profileAccessExists ? get(profileAccessPath).data : {};
+      let indexedDocumentId = text(profileAccess, 'userDocId', 'user_doc_id');
+      let indexedProfileMatches = !profileAccessExists || !profileAccess.keys().hasAny(['userDocId', 'user_doc_id']) ||
+          (indexedDocumentId != '' && indexedDocumentId == userId);
+      let callerIdentity = userId == request.auth.uid || profileUid == request.auth.uid;
+      return indexedProfileMatches && (!callerIdentity || isCanonicalUserDocument(userId));
+    }
+    function isSelfUserProfile(userId, profile) {
+      let actorAccessExists = exists(accessPath());
+      let actorAccess = actorAccessExists ? get(accessPath()).data : {};
+      let declaresProfile = actorAccess.keys().hasAny([ 'userDocId', 'user_doc_id' ]);
+      let actorProfileId = text(actorAccess, 'userDocId', 'user_doc_id');
+      return request.auth.uid == userId || request.auth.uid == text(profile, 'uid', 'userUid') || (declaresProfile && actorProfileId == userId);
+    }
+    function selfProfileLockedKeys() { return managedIdentityKeys().concat([ 'uid', 'userUid', 'userId', 'user_id', 'employee_code', 'staff_id' ]); }
+    function isSelfProfilePrivilegeEscalation(userId, profile) {
+      return isSelfUserProfile(userId, profile) && request.resource.data.diff(profile).affectedKeys().hasAny(selfProfileLockedKeys());
+    }
+    function validUserProvisioningUpdate(userId, previous) {
+      let changed = request.resource.data.diff(previous).affectedKeys();
+      let markers = [ 'provisioningState', 'provisioningByUid' ];
+      let changesMarker = changed.hasAny(markers);
+      let targetUid = text(previous, 'uid', 'userUid');
+      let targetAccess = /databases/$(database)/documents/user_access/$(targetUid);
+      return !changesMarker || ( previous.get('provisioningState', '') == 'pending' && previous.get('provisioningByUid', '') == request.auth.uid &&
+          changed.hasAll(markers) && changed.hasOnly(markers) && !request.resource.data.keys().hasAny(markers) && targetUid != '' &&
+          existsAfter(targetAccess) && getAfter(targetAccess).data.get('uid', '') == targetUid && getAfter(targetAccess).data.get('userDocId', '') == userId );
+    }
+    function userServerOnlyChange() {
+      let changed = changedKeys();
+      return changed.hasAny(accountAuthorityKeys()) || changed.hasAny(employeeCodeKeys());
+    }
+    function userEmployeeCode(data) {
+      let code = text(data, 'employeeCode', 'employee_code');
+      return code != '' ? code : text(data, 'staffId', 'staff_id');
+    }
+    function canReadUserProfile(userId, data) {
+      return ( signedIn() && isCanonicalUserDocument(userId) && ( userId == request.auth.uid || text(data, 'uid', 'userUid') == request.auth.uid ) ) ||
+          canManageUserProfile(data, caller());
+    }
+    function canManageUserProfile(data, actor) {
+      let role = actor.get('role', '');
+      return actor._active == true && ( role in ['admin', 'developer'] || ( role == 'supervisor' &&
+          codeInTeam(userEmployeeCode(data), actor.assignedSalesmanCodes) ) || ( role == 'branch_manager' && actor.branchId != '' &&
+          text(data, 'branchId', 'branch_id') == actor.branchId && isBranchStaffRoleText(text(data, 'role', 'user_group')) ) );
+    }
+    function isBranchStaffRoleText(value) { return canonicalRole(value) in ['salesman', 'supervisor', 'branch_manager']; }
+    allow read: if canReadUserProfile(userId, resource.data);
+    allow create: if false;
+    allow update: if ( isAdminProfile() && !userServerOnlyChange() && !isSelfProfilePrivilegeEscalation(userId, resource.data) &&
+        validUserProvisioningUpdate(userId, resource.data) &&
+        isCanonicalUserWrite(userId, resource.data) && isCanonicalUserWrite(userId, request.resource.data) ) || ( signedIn() &&
+        isActiveProfile() && (userId == request.auth.uid || resource.data.uid == request.auth.uid) && isCanonicalUserDocument(userId) &&
+        !changedKeys().hasAny(selfProfileLockedKeys().concat([ 'provisioningState', 'provisioningByUid' ])) );
+    allow delete: if false;
+  }
+  match /user_access/{uid} {
+    function sameRole(left, right) { return canonicalRole(left) == canonicalRole(right); }
+    function validAccessIndex(uid, data) {
+      let userDocId = text(data, 'userDocId', 'user_doc_id');
+      let linkedProfile = /databases/$(database)/documents/users/$(userDocId);
+      return accessIdentityMatches(uid, data) && text(data, 'uid', 'user_uid') == uid && data.keys().hasAny(['userDocId', 'user_doc_id']) && userDocId != '' &&
+          exists(linkedProfile) && sameRole( text(data, 'role', 'user_group'), text(get(linkedProfile).data, 'role', 'user_group') ) && (
+          !get(linkedProfile).data.keys().hasAny(['uid', 'userUid']) || text(get(linkedProfile).data, 'uid', 'userUid') == uid );
+    }
+    function isSelfPrivilegeEscalation(targetUid) {
+      return request.auth.uid == targetUid && changedKeys().hasAny(managedIdentityKeys().concat([ 'accessVersion', 'supervisorUid', 'orgId',
+          'userDocId', 'user_doc_id' ]));
+    }
+    function accessServerOnlyChange() {
+      let changed = changedKeys();
+      return changed.hasAny(accountAuthorityKeys().concat([ 'accessVersion', 'uid' ])) || changed.hasAny(employeeCodeKeys());
+    }
+    function validAccessWrite(uid, data, previous) {
+      return 'accessVersion' in data ? validV2AccessRecord(uid, data) : !('accessVersion' in previous) &&
+          validAccessIndex(uid, data);
+    }
+    function validSeatClass(role, seatClass) {
+      return role == 'salesman' ? seatClass in ['salesman', 'salesperson'] : role == 'supervisor' ? seatClass in ['supervisor', 'free'] :
+          role in ['admin', 'branch_manager'] ? seatClass in ['manager', 'free'] : seatClass in ['none', 'free'];
+    }
+    function validV2AccessRecord(uid, data) {
+      let role = data.get('role', '');
+      let codes = data.get('assignedSalesmanCodes', []);
+      let profileId = data.get('userDocId', '');
+      let supervisorUid = data.get('supervisorUid', '');
+      return data.keys().hasAll([ 'accessVersion', 'uid', 'role', 'status', 'branchId', 'employeeCode', 'userDocId' ]) && data.accessVersion is int &&
+          data.accessVersion == 2 && data.uid == uid && role in ['admin', 'developer', 'branch_manager', 'supervisor', 'salesman'] &&
+          data.status in ['active', 'suspended'] && data.branchId is string && (data.branchId != '' || role in ['admin', 'developer']) &&
+          data.employeeCode is string && supervisorUid is string && (role == 'salesman' || supervisorUid == '') &&
+          codes is list && codes.size() <= (role == 'supervisor' ? 5 : 0) && data.get('orgId', '') is string &&
+          validSeatClass(role, data.get('seatClass', role == 'salesman' ? 'salesperson' : 'free')) && profileId is string &&
+          profileId != '' && existsAfter(/databases/$(database)/documents/users/$(profileId)) && v2ProfileMirrors(
+          getAfter(/databases/$(database)/documents/users/$(profileId)).data, uid, role, data.status );
+    }
+    function v2ProfileMirrors(profile, uid, role, status) {
+      return canonicalRole(text(profile, 'role', 'user_group')) == role && hasActiveStatus(profile) == (status == 'active') &&
+          (!profile.keys().hasAny(['uid', 'userUid']) || text(profile, 'uid', 'userUid') == uid);
+    }
+    allow read: if signedIn() && (request.auth.uid == uid || isAdminProfile());
+    allow create: if false;
+    allow update: if isAdminProfile() && !accessServerOnlyChange() && !isSelfPrivilegeEscalation(uid) && validAccessWrite(uid, request.resource.data, resource.data);
+    allow delete: if false;
+  }
+}
+
+match /documents {
+  function permissionMatrixPath() { return /databases/$(database)/documents/system_access_config/permission_matrix; }
+  function matrixBaselineAllows(role, action) { return role == 'admin' || (action == 'view' && role in ['branch_manager', 'supervisor']); }
+  function matrixGrantAllows(role, module, action) { return role == 'developer' || storedGrantAllows(role, module, action); }
+  function storedGrantAllows(role, module, action) {
+    let hasDocument = exists(permissionMatrixPath());
+    let roles = hasDocument ? get(permissionMatrixPath()).data.get('roles', {}) : {};
+    let hasRow = roles is map && roles.keys().hasAny([role]);
+    return hasRow ? roles[role] is list && (module + ':' + action) in roles[role] : matrixBaselineAllows(role, action);
+  }
+  function moduleAction(module, action) {
+    let role = caller().get('role', '');
+    return role in ['admin', 'developer'] && matrixGrantAllows(role, module, action);
+  }
+  function retailerPath(retailerId) { return /databases/$(database)/documents/retailers/$(retailerId); }
+  function actorOwnsRetailer(retailer, actor) {
+    let team = actor.get('assignedSalesmanCodes', []).removeAll(['']);
+    let owner = retailer.get('assignedSalesmanId', '');
+    let listed = retailer.get('assignedSalesmanCodes', []);
+    return actor.get('role', '') == 'supervisor' ? ((owner is string && owner != '' && owner in team) || (listed is list && listed.removeAll(['']).hasAny(team)))
+        : actor.get('branchId', '') != '' && text(retailer, 'branchId', 'branch_id') == actor.get('branchId', '');
+  }
+  function moduleActionFor(actor, module, action) {
+    let role = actor.get('role', '');
+    return role in ['admin', 'developer'] && matrixGrantAllows(role, module, action);
+  }
+  function delegatedWrite(actor, module, action, retailerId) { return moduleActionFor(actor, module, action) || scopedModuleActionFor(actor, module, action, retailerId); }
+  function scopedModuleActionFor(actor, module, action, retailerId) {
+    let role = actor.get('role', '');
+    return actor._active == true && role in ['supervisor', 'branch_manager'] && retailerId is string && retailerId != '' &&
+        storedGrantAllows(role, module, 'view') && storedGrantAllows(role, module, action) && actorOwnsRetailer(get(retailerPath(retailerId)).data, actor);
+  }
+  function companyModuleAction(module, action) {
+    let actor = caller();
+    let role = actor.get('role', '');
+    return role in ['admin', 'developer'] ? matrixGrantAllows(role, module, action)
+        : role in ['supervisor', 'branch_manager'] && grantedRowAllows(role, module, action);
+  }
+  function grantedRowAllows(role, module, action) {
+    let roles = exists(permissionMatrixPath()) ? get(permissionMatrixPath()).data.get('roles', {}) : {};
+    let row = roles is map ? roles.get(role, []) : [];
+    return row is list && (module + ':view') in row && (module + ':' + action) in row;
+  }
+  function moduleReadAllowed(module) {
+    let actor = caller();
+    return signedIn() && isCompanyMemberFor(actor) && (!isDashboardRoleFor(actor) || matrixGrantAllows(actor.role, module, 'view'));
+  }
+  match /products/{docId} {
+    function validProductText(data, changed, key, maxLength) {
+      let value = data.get(key, '');
+      return !(key in changed) || (value is string && value.size() <= maxLength);
+    }
+    function validProductNumber(data, changed, key) { return !(key in changed) || validProductNumberValue(data, key); }
+    function validProductInt(data, changed, key) { return !(key in changed) || validProductIntValue(data, key); }
+    function productWritableKeys() {
+      return [ 'productId', 'departmentId', 'categoryId', 'departmentName', 'departmentManagerName', 'mainCategoryName', 'categoryName',
+          'subCategoryName', 'itemName', 'productName', 'productFlavor', 'flavor', 'itemCode', 'productCode', 'sku', 'barcode', 'itemBarcode',
+          'packingSize', 'unitPrice', 'price', 'priceGuide', 'uom', 'uomLabel', 'unitOfMeasure', 'sortOrder', 'brandName', 'isVisible', 'status',
+          'importSource', 'mobileDisplayMode', 'maxOrderQty', 'createdAt', 'updatedAt', 'priceUpdatedAt' ];
+    }
+    function validMaxOrderQty(data) {
+      return !('maxOrderQty' in data) || (data.maxOrderQty is int && data.maxOrderQty >= 1 && data.maxOrderQty <= 999);
+    }
+    function validProductFields(data, changed) {
+      return (data.get('productId', '').matches('^[^𐀀-􏿿]{0,100}$') || validProductText(data, changed, 'productId', 100)) &&
+          (data.get('departmentId', '').matches('^[^𐀀-􏿿]{0,100}$') || validProductText(data, changed, 'departmentId', 100)) &&
+          (data.get('categoryId', '').matches('^[^𐀀-􏿿]{0,200}$') || validProductText(data, changed, 'categoryId', 200)) &&
+          (data.get('departmentName', '').matches('^[^𐀀-􏿿]{0,100}$') || validProductText(data, changed, 'departmentName', 100)) &&
+          (data.get('departmentManagerName', '').matches('^[^𐀀-􏿿]{0,100}$') || validProductText(data, changed, 'departmentManagerName', 100)) &&
+          (data.get('mainCategoryName', '').matches('^[^𐀀-􏿿]{0,100}$') || validProductText(data, changed, 'mainCategoryName', 100)) &&
+          (data.get('categoryName', '').matches('^[^𐀀-􏿿]{0,100}$') || validProductText(data, changed, 'categoryName', 100)) &&
+          (data.get('subCategoryName', '').matches('^[^𐀀-􏿿]{0,100}$') || validProductText(data, changed, 'subCategoryName', 100)) &&
+          (data.get('itemName', '').matches('^[^𐀀-􏿿]{0,200}$') || validProductText(data, changed, 'itemName', 200)) &&
+          (data.get('productName', '').matches('^[^𐀀-􏿿]{0,200}$') || validProductText(data, changed, 'productName', 200)) &&
+          (data.get('productFlavor', '').matches('^[^𐀀-􏿿]{0,200}$') || validProductText(data, changed, 'productFlavor', 200)) &&
+          (data.get('flavor', '').matches('^[^𐀀-􏿿]{0,200}$') || validProductText(data, changed, 'flavor', 200)) &&
+          (data.get('itemCode', '').matches('^[^𐀀-􏿿]{0,100}$') || validProductText(data, changed, 'itemCode', 100)) &&
+          (data.get('productCode', '').matches('^[^𐀀-􏿿]{0,100}$') || validProductText(data, changed, 'productCode', 100)) &&
+          (data.get('sku', '').matches('^[^𐀀-􏿿]{0,100}$') || validProductText(data, changed, 'sku', 100)) &&
+          (data.get('barcode', '').matches('^[^𐀀-􏿿]{0,100}$') || validProductText(data, changed, 'barcode', 100)) &&
+          (data.get('itemBarcode', '').matches('^[^𐀀-􏿿]{0,100}$') || validProductText(data, changed, 'itemBarcode', 100)) &&
+          (data.get('packingSize', '').matches('^[^𐀀-􏿿]{0,100}$') || validProductText(data, changed, 'packingSize', 100)) &&
+          (data.get('uom', '').matches('^[^𐀀-􏿿]{0,32}$') || validProductText(data, changed, 'uom', 32)) &&
+          (data.get('uomLabel', '').matches('^[^𐀀-􏿿]{0,32}$') || validProductText(data, changed, 'uomLabel', 32)) &&
+          (data.get('unitOfMeasure', '').matches('^[^𐀀-􏿿]{0,32}$') || validProductText(data, changed, 'unitOfMeasure', 32)) &&
+          (data.get('brandName', '').matches('^[^𐀀-􏿿]{0,100}$') || validProductText(data, changed, 'brandName', 100)) &&
+          (data.get('mobileDisplayMode', '').matches('^[^𐀀-􏿿]{0,32}$') || validProductText(data, changed, 'mobileDisplayMode', 32));
+    }
+    function validProductWrite(data, changed) {
+      return changed.hasOnly(productWritableKeys()) && !changed.hasAny(['isVisible', 'status', 'visible', 'productStatus']) && validProductFields(data, changed) &&
+          validProductInt(data, changed, 'sortOrder') && validProductNumber(data, changed, 'unitPrice') &&
+          validProductNumber(data, changed, 'price') && validProductNumber(data, changed, 'priceGuide') &&
+          (data.get('createdAt', null) is timestamp || !('createdAt' in changed)) &&
+          (data.get('updatedAt', null) is timestamp || !('updatedAt' in changed)) &&
+          (validMaxOrderQty(data) || !('maxOrderQty' in changed)) &&
+          (!('importSource' in data) || (data.importSource is string && data.importSource.size() <= 128)) &&
+          ('priceUpdatedAt' in changed ? data.get('priceUpdatedAt', null) == request.time : !changed.hasAny(['unitPrice', 'price', 'priceGuide']));
+    }
+    function validProductCreate(data) {
+      return data.get('isVisible', null) == false && data.get('status', null) == 'hidden' && data.keys().hasOnly(productWritableKeys()) &&
+          validProductFields(data, data.keys()) && validProductIntValue(data, 'sortOrder') && validProductNumberValue(data, 'unitPrice') &&
+          validProductNumberValue(data, 'price') && validProductNumberValue(data, 'priceGuide') &&
+          (data.get('importSource', '').matches('^[^𐀀-􏿿]{0,128}$') || validProductText(data, data.keys(), 'importSource', 128)) &&
+          data.get('createdAt', request.time) is timestamp && data.get('updatedAt', request.time) is timestamp &&
+          data.get('priceUpdatedAt', request.time) == request.time && validMaxOrderQty(data);
+    }
+    function validProductNumberValue(data, key) {
+      let value = data.get(key, 0);
+      return value is number && value >= 0 && value <= 1000000;
+    }
+    function validProductIntValue(data, key) {
+      let value = data.get(key, 0);
+      return value is int && value >= 0 && value <= 1000000;
+    }
+    function validProductDocumentId(docId) { return docId is string && docId.size() > 0 && docId.size() <= 100; }
+    allow read: if moduleReadAllowed('products');
+    allow create: if companyModuleAction('products', 'create') ? validProductDocumentId(docId) && validProductCreate(request.resource.data) : false;
+    allow update: if companyModuleAction('products', 'edit') ? validProductWrite( request.resource.data, request.resource.data.diff(resource.data).affectedKeys() )
+        : false;
+    allow delete: if false;
+  }
+  match /departments/{docId} {
+    allow read: if moduleReadAllowed('departments');
+    allow create: if companyModuleAction('departments', 'create');
+    allow update: if companyModuleAction('departments', 'edit');
+    allow delete: if companyModuleAction('departments', 'delete');
+  }
+  match /categories/{docId} {
+    allow read: if moduleReadAllowed('categories');
+    allow create: if companyModuleAction('categories', 'create');
+    allow update: if companyModuleAction('categories', 'edit');
+    allow delete: if companyModuleAction('categories', 'delete');
+  }
+  match /score_sheets/{docId} {
+    allow read: if moduleReadAllowed('retailer_scoresheets');
+    function validScoreSheetTemplate(docId, data) {
+      let ids = data.productIds;
+      return data.keys().hasAll(['kind', 'templateId', 'revision', 'name', 'productIds']) && data.keys().hasOnly([ 'kind', 'templateId', 'revision', 'name',
+          'productIds', 'productCount', 'status', 'sourceRetailerId', 'sourceRetailerName', 'copiedFromTemplateId', 'copiedFromRevision', 'copiedFromName',
+          'previousRevision', 'createdByUid', 'createdAt' ]) && nonEmptyText(data.templateId, 100) &&
+          data.revision is int && data.revision >= 1 && data.revision <= 100000 && docId == data.templateId + '_r' + string(data.revision) &&
+          nonEmptyText(data.name, 200) && ids is list && ids.size() > 0 &&
+          ids.size() <= 2000 && ids.join(',').size() <= 202000 &&
+          ids.toSet().difference(ids.join('').split('').toSet()).size() == 0 &&
+          data.get('productCount', ids.size()) == ids.size() && data.get('status', 'active') == 'active' &&
+          boundedText(data, 'sourceRetailerId', 200) && boundedText(data, 'sourceRetailerName', 200) && boundedText(data, 'copiedFromTemplateId', 100) &&
+          data.get('copiedFromRevision', 0) is int && boundedText(data, 'copiedFromName', 200) && data.get('previousRevision', 0) is int &&
+          data.get('createdByUid', request.auth.uid) == request.auth.uid && data.get('createdAt', request.time) == request.time;
+    }
+    allow create: if moduleAction('retailer_scoresheets', 'create') && (request.resource.data.get('kind', '') != 'template' ||
+        validScoreSheetTemplate(docId, request.resource.data));
+    function validScoreSheetTemplateRetire() {
+      let next = request.resource.data;
+      return resource.data.get('kind', '') == 'template' && resource.data.get('status', 'active') == 'active' &&
+          next.diff(resource.data).affectedKeys().hasOnly([ 'status', 'retiredAt', 'retiredByUid' ]) && next.get('status', '') == 'retired' &&
+          next.get('retiredAt', null) == request.time && next.get('retiredByUid', '') == request.auth.uid;
+    }
+    allow update: if moduleAction('retailer_scoresheets', 'edit')
+      && ((!(resource.data.get('kind', '') in ['template', 'assignment'])
+      && !(request.resource.data.get('kind', '') in ['template', 'assignment'])) || validScoreSheetTemplateRetire());
+    allow delete: if moduleAction('retailer_scoresheets', 'delete')
+      && !(resource.data.get('kind', '') in ['template', 'assignment']);
+  }
+  match /retailer_score_sheet_settings/{docId} {
+    allow read: if moduleReadAllowed('retailer_scoresheets');
+    function settingsWrite(actor, action, keepsPrices) {
+      return moduleActionFor(actor, 'retailer_scoresheets', action) || (scopedModuleActionFor(actor, 'retailer_scoresheets', action, docId) &&
+          (keepsPrices || storedGrantAllows(actor.get('role', ''), 'retailer_scoresheets', 'edit')));
+    }
+    allow create: if request.resource.data.get('retailerId', docId) == docId &&
+        settingsWrite(caller(), 'create', !('productOverrides' in request.resource.data));
+    allow update: if request.resource.data.get('retailerId', docId) == docId &&
+        settingsWrite(caller(), 'edit', request.resource.data.get('productOverrides', null) == resource.data.get('productOverrides', null));
+    allow delete: if settingsWrite(caller(), 'delete', !('productOverrides' in resource.data));
+  }
+  match /retailer_score_sheet_items/{docId} {
+    allow read: if moduleReadAllowed('retailer_scoresheets');
+    allow create: if moduleAction('retailer_scoresheets', 'create');
+    allow update: if moduleAction('retailer_scoresheets', 'edit');
+    allow delete: if moduleAction('retailer_scoresheets', 'delete');
+  }
+  match /department_pic_assignments/{docId} {
+    allow read: if moduleReadAllowed('department_pic');
+    allow create: if delegatedWrite(caller(), 'department_pic', 'create', request.resource.data.get('retailerId', ''));
+    function picUpdateAllowed(actor, retailerId) { return moduleActionFor(actor, 'department_pic', 'edit') ||
+        (scopedModuleActionFor(actor, 'department_pic', 'edit', retailerId) && request.resource.data.get('retailerId', '') == retailerId); }
+    allow update: if picUpdateAllowed(caller(), resource.data.get('retailerId', ''));
+    allow delete: if delegatedWrite(caller(), 'department_pic', 'delete', resource.data.get('retailerId', ''));
+  }
+  match /website_pages/{docId} {
+    allow read: if moduleReadAllowed('website_pages');
+    allow create: if companyModuleAction('website_pages', 'create');
+    allow update: if companyModuleAction('website_pages', 'edit');
+    allow delete: if companyModuleAction('website_pages', 'delete');
+  }
+}
+
+match /documents {
+  function canManageOrderFor(order, actor) {
+    return actor._active == true && ( actor.role in ['admin', 'developer'] || ( actor.role == 'supervisor' &&
+        codeInTeam(scopedSalesmanCode(order), actor.assignedSalesmanCodes) ) );
+  }
+  function orderAuditKeys() {
+    return [ 'action', 'orderDocumentId', 'orderId', 'previousStatus', 'actorUid', 'actorRole', 'retailerId', 'salesmanUid', 'occurredAt' ];
+  }
+  function orderPath(orderDocumentId) { return /databases/$(database)/documents/orders/$(orderDocumentId); }
+  function orderAuditOrderId(orderDocumentId, order) {
+    return 'orderId' in order && order.orderId is string && order.orderId != '' ? order.orderId : orderDocumentId;
+  }
+  function orderAuditPreviousStatus(order) { return 'status' in order && order.status is string ? order.status : ''; }
+  function validOrderAudit(auditId, audit, order, actorRole) {
+    return exactKeys(audit, orderAuditKeys()) && audit.action == 'delete' && audit.orderDocumentId == auditId && audit.orderId == orderAuditOrderId(auditId, order) && audit.previousStatus == orderAuditPreviousStatus(order) && audit.actorUid == request.auth.uid &&
+        audit.actorRole == actorRole && audit.retailerId == text(order, 'retailerId', 'retailer_id') && audit.salesmanUid == text(order, 'salesmanUid', 'salesman_uid') && audit.occurredAt == request.time;
+  }
+  function routeOpenToSalesman(route) {
+    return route.status == 'published' || replacedRouteOpenToStartedRun(route);
+  }
+  function replacedRouteOpenToStartedRun(route) {
+    let planKey = route.get('planId', '');
+    let progressPath = /databases/$(database)/documents/route_plan_progress/$(planKey + '_' + request.auth.uid);
+    return route.status == 'archived' && planKey != '' && route.get('replacedAt', null) is timestamp &&
+        request.time < route.replacedAt + duration.value(24, 'h') && exists(progressPath) && get(progressPath).data.get('status', '') in ['in_progress', 'completed'];
+  }
+  function isOwnPublishedRoute(route, actor) {
+    return actor.get('role', '') == 'salesman' && routeOpenToSalesman(route) && ( routeSalesmanUid(route) == request.auth.uid || (
+        actor.get('salesmanCode', '') != '' && routeSalesmanCode(route) == actor.get('salesmanCode', '') ) );
+  }
+  function canManageRoute(route) { return canManageRouteFor(route, caller()); }
+  function canWriteRouteFor(route, actor) {
+    let role = actor.get('role', '');
+    return actor._active == true && ( role in ['admin', 'developer'] || ( role == 'supervisor' &&
+        supervisorRouteBound(route, actor.assignedSalesmanCodes) ) );
+  }
+  function supervisorRouteBound(route, team) {
+    let uid = routeSalesmanUid(route);
+    let code = routeSalesmanCode(route);
+    return uid == '' ? codeInTeam(code, team) : (codeInTeam(code, team) || codeInTeam(uid, team)) && salesmanCodeOfUid(uid) == code;
+  }
+  function salesmanCodeOfUid(uid) {
+    let accessPath = /databases/$(database)/documents/user_access/$(uid);
+    return exists(accessPath) ? accessRecordCode(get(accessPath).data) : profileCode(uid);
+  }
+  function accessRecordCode(access) {
+    let version = access.get('accessVersion', null);
+    return version == 2 ? access.get('employeeCode', '') : version != null ? '' : access.keys().hasAny(['userDocId', 'user_doc_id'])
+        ? profileCode(text(access, 'userDocId', 'user_doc_id')) : legacyCode(access);
+  }
+  function profileCode(profileId) {
+    return profileId != '' && exists(/databases/$(database)/documents/users/$(profileId))
+        ? legacyCode(get(/databases/$(database)/documents/users/$(profileId)).data) : '';
+  }
+  function legacyCode(record) {
+    let code = text(record, 'employeeCode', 'staffId');
+    return code != '' ? code : text(record, 'salesmanCode', 'salesman_code');
+  }
+  function canManageRouteFor(route, actor) {
+    return actor._active == true && ( actor.role in ['admin', 'developer'] || ( actor.role == 'supervisor' && (
+        codeInTeam(routeSalesmanCode(route), actor.assignedSalesmanCodes) || codeInTeam(routeSalesmanUid(route), actor.assignedSalesmanCodes) ) ) || (
+        actor.role == 'branch_manager' && actor.branchId != '' && routeBranchId(route) == actor.branchId ) );
+  }
+  function validLatLng(lat, lng) { return lat is number && lat >= -90 && lat <= 90 && lng is number && lng >= -180 && lng <= 180 && !(lat == 0 && lng == 0); }
+  function validLocationFix(data, maxAccuracy) {
+    let latitude = data.get('latitude', null);
+    let longitude = data.get('longitude', null);
+    let accuracyMeters = data.get('accuracyMeters', null);
+    let capturedAt = data.get('deviceCapturedAt', null);
+    let mocked = data.get('isMocked', null);
+    return validLatLng(latitude, longitude) && accuracyMeters is number && accuracyMeters >= 0 && accuracyMeters <= maxAccuracy && capturedAt is timestamp &&
+        capturedAt <= request.time + duration.value(5, 'm') && mocked is bool;
+  }
+  function recentFix(data) { return data.deviceCapturedAt >= request.time - duration.value(7, 'd'); }
+  function validCapturedLocation(data) {
+    return validLocationFix(data, 100) && data.gpsLatitude == data.latitude && data.gpsLongitude == data.longitude && data.location is latlng &&
+        data.accuracy is number && data.accuracy == data.accuracyMeters && data.isMocked == false &&
+        data.locationVerification in ['device_captured', 'location_verified'];
+  }
+  function validTrackingLocation(data) {
+    return validCapturedLocation(data) && data.keys().hasAll(['timestamp', 'updatedAt']) && data.timestamp == request.time && data.updatedAt == request.time;
+  }
+  function isOwnSalesmanRecord(data) {
+    return signedIn() && ( text(data, 'salesmanUid', 'salesman_uid') == request.auth.uid || text(data, 'uid', 'userUid') == request.auth.uid ||
+        text(data, 'submittedByUid', 'createdByUid') == request.auth.uid );
+  }
+  function activityIdentityKeys() {
+    return [ 'salesmanUid', 'salesman_uid', 'uid', 'userUid', 'submittedByUid', 'createdByUid', 'salesmanCode', 'salesman_code', 'salesmanId',
+        'salesman_id', 'staffId', 'employeeCode', 'branchId', 'branch_id' ];
+  }
+  function isOwnActivityRecord(data, actor) {
+    let uid = request.auth.uid;
+    let code = actor.get('salesmanCode', '');
+    let branch = actor.get('branchId', '');
+    return isSalesmanFor(actor) && data.keys().hasAny([ 'salesmanUid', 'salesman_uid', 'uid', 'userUid', 'submittedByUid', 'createdByUid' ]) &&
+        data.get('salesmanUid', uid) == uid && data.get('salesman_uid', uid) == uid && data.get('uid', uid) == uid && data.get('userUid', uid) == uid &&
+        data.get('submittedByUid', uid) == uid && data.get('createdByUid', uid) == uid && data.get('salesmanCode', code) == code &&
+        data.get('salesman_code', code) == code && data.get('salesmanId', code) == code && data.get('salesman_id', code) == code &&
+        data.get('staffId', code) == code && data.get('employeeCode', code) == code && data.get('branchId', branch) == branch &&
+        data.get('branch_id', branch) == branch;
+  }
+  function canCreateActivityRecord(data, actor) {
+    return isAdminFor(actor) || (isDashboardRoleFor(actor) && !data.keys().hasAny(activityIdentityKeys())) || isOwnActivityRecord(data, actor);
+  }
+  function canReadPreciseLocation(data) {
+    let actor = caller();
+    return managesScope(actor, routeSalesmanCode(data), routeBranchId(data)) || ( actor._active == true &&
+        actor.role == 'salesman' && isOwnSalesmanRecord(data) );
+  }
+  function scopedSalesmanCode(data) {
+    let code = text(data, 'salesmanCode', 'salesman_code');
+    return code != '' ? code : scopedSalesmanIdOrStaff(data);
+  }
+  function scopedSalesmanIdOrStaff(data) {
+    let id = text(data, 'salesmanId', 'salesman_id');
+    return id != '' ? id : text(data, 'staffId', 'employeeCode');
+  }
+  function canReadScopedSalesmanRecord(data) {
+    let actor = caller();
+    return managesScope(actor, scopedSalesmanCode(data), routeBranchId(data)) || ( actor._active == true &&
+        actor.role == 'salesman' && isOwnSalesmanRecord(data) );
+  }
+  function canReadOwnOrManagedRecord(data) { return (isOwnSalesmanRecord(data) && accountNotSuspended()) || ownCodeOrManagedRecord(data, caller()); }
+  function ownCodeOrManagedRecord(data, actor) {
+    return ( actor._active == true && actor.role == 'salesman' && ownerlessCodeMatch(data, actor) ) || canManageRouteFor(data, actor);
+  }
+  function hasNoOwnerUid(data) {
+    return data.get('salesmanUid', '') == '' && data.get('salesman_uid', '') == '' && data.get('uid', '') == '' && data.get('userUid', '') == '' &&
+        data.get('submittedByUid', '') == '';
+  }
+  function ownerlessCodeMatch(data, actor) {
+    return actor.get('salesmanCode', '') != '' && text(data, 'salesmanCode', 'salesman_code') == actor.get('salesmanCode', '') && hasNoOwnerUid(data) &&
+        (request.method == 'get' || data.get('salesmanUid', null) == '');
+  }
+  function validOwnSalesmanTracking(data) {
+    let actor = caller();
+    let code = actor.get('salesmanCode', '');
+    let branch = actor.get('branchId', '');
+    let u = request.auth.uid;
+    let owner = data.diff({'salesmanUid': u, 'salesman_uid': u, 'uid': u, 'userUid': u, 'submittedByUid': u, 'createdByUid': u});
+    return actor._active == true && actor.role == 'salesman' && owner.changedKeys().size() == 0 && owner.unchangedKeys().size() > 0 && ( code == '' ||
+        text(data, 'salesmanCode', 'salesman_code') == code ) && ( branch == '' || text(data, 'branchId', 'branch_id') == branch );
+  }
+  function boundedTrackingIdentity(data) {
+    return (data.get('salesmanId', '') + data.get('salesmanName', '') + data.get('salesmanEmail', '') + data.get('submittedByEmail', '') +
+        data.get('submittedByName', '') + data.get('staffId', '') + data.get('employeeCode', '') + data.get('salesman_code', '')).size() <= 2000;
+  }
+  function dataRoutePath(data) { return /databases/$(database)/documents/route_plans/$(data.planId); }
+  function dataRetailerPath(data) { return /databases/$(database)/documents/retailers/$(data.retailerId); }
+  function trackingModeAllowed(mode) { return mode in ['live', 'standard', 'battery_saver']; }
+  function validWorkSessionId(data) { return data.activeSessionId is string && data.activeSessionId.matches('^[0-9a-f]{32}$'); }
+  match /orders/{orderId} {
+    function orderAuditPath(orderDocumentId) { return /databases/$(database)/documents/order_audit_logs/$(orderDocumentId); }
+    function validAtomicOrderDelete(orderId, order, actor) {
+      let audit = orderAuditPath(orderId);
+      return isAdminFor(actor) && (actor.get('role', '') == 'developer' || orderAuditPreviousStatus(order) == 'draft') && !exists(audit) &&
+          existsAfter(audit) && validOrderAudit(orderId, getAfter(audit).data, order, actor.get('role', ''));
+    }
+    function validOptionalEvidenceFix(evidence) {
+      let hasFix = evidence.keys().hasAny([ 'latitude', 'longitude', 'accuracyMeters', 'deviceCapturedAt', 'isMocked' ]);
+      return !hasFix || ( validLocationFix(evidence, 10000) );
+    }
+    function validOrderLocation(data) {
+      let names = data.keys();
+      let hasCoordinates = names.hasAny([ 'latitude', 'longitude', 'gpsLatitude', 'gpsLongitude', 'location' ]);
+      let hasEvidence = names.hasAny(['locationEvidence']);
+      return !hasCoordinates ? ( !hasEvidence || data.locationEvidence is map && data.locationEvidence.mode == 'not_verified' &&
+          validOptionalEvidenceFix(data.locationEvidence) ) : ( names.hasAll([ 'latitude', 'longitude', 'gpsLatitude', 'gpsLongitude',
+          'location', 'accuracy', 'accuracyMeters', 'deviceCapturedAt', 'isMocked', 'locationVerification', 'locationEvidence' ]) &&
+          validCapturedLocation(data) && data.locationCapturedAt == request.time && data.locationEvidence is map &&
+          data.locationEvidence.mode == data.locationVerification && data.locationEvidence.latitude == data.latitude &&
+          data.locationEvidence.longitude == data.longitude && data.locationEvidence.accuracyMeters == data.accuracyMeters &&
+          data.locationEvidence.deviceCapturedAt == data.deviceCapturedAt && data.locationEvidence.isMocked == data.isMocked );
+    }
+    function canReadOrder(data) { return (isOwnSalesmanRecord(data) && accountNotSuspended()) || canReadOrderAs(data, caller()); }
+    function canReadOrderAs(data, actor) {
+      return managesScope(actor, scopedSalesmanCode(data), routeBranchId(data)) || ( actor._active == true &&
+          actor.role == 'salesman' && actor.salesmanCode != '' && routeSalesmanCode(data) == actor.salesmanCode );
+    }
+    function validCommercialOrderLines(data) {
+      let joined = data.commercialLines.join(',');
+      return data.commercialSchemaVersion == 1 && data.commercialLines is list && data.commercialLines.size() >= 1 && data.commercialLines.size() <= 25 &&
+          joined.size() <= 25500 && joined.matches(
+          '^([A-Za-z0-9_-]{1,200}~[A-Za-z0-9_-]{1,800}~[1-9][0-9]{0,2}~[1-9][0-9]{0,8},){0,24}[A-Za-z0-9_-]{1,200}~[A-Za-z0-9_-]{1,800}~[1-9][0-9]{0,2}~[1-9][0-9]{0,8}$' );
+    }
+    function validSubmittedOrder(orderId) {
+      let data = request.resource.data;
+      return data.orderId == orderId && data.visitSource in ['assigned_route', 'personal_planner'] && data.retailerId is string &&
+          data.retailerId.trim() != '' && data.retailerId.size() <= 200 && data.items is list && data.items.size() >= 1 && data.items.size() <= 25 &&
+          validCommercialOrderLines(data) && data.commercialLines.size() == data.items.size() && data.totalProducts == data.commercialLines.size() &&
+          data.totalBoxes is int && data.totalBoxes >= 1 && data.totalBoxes <= 24975 && data.totalPrice is number && data.totalPrice > 0 &&
+          data.totalPrice <= 10000000 && [ data.submittedAt, data.createdAt, data.updatedAt ] == [ request.time, request.time, request.time ] &&
+          data.status == 'submitted' && !('serverPriceCheck' in data);
+    }
+    function validOrderForApproval() {
+      let data = resource.data;
+      return data.keys().hasAll([ 'retailerId', 'items', 'totalBoxes', 'totalPrice' ]) && data.retailerId is string && data.retailerId.trim() != '' &&
+          data.items is list && data.items.size() >= 1 && data.items.size() <= 25 && data.totalBoxes is int && data.totalBoxes >= 1 &&
+          data.totalPrice is number && data.totalPrice > 0 && (data.get('commercialSchemaVersion', 0) != 1 || ( validCommercialOrderLines(data) &&
+          data.commercialLines.size() == data.items.size() && data.get('totalProducts', data.commercialLines.size()) == data.commercialLines.size() ));
+    }
+    function hasAssignedVisitOrderIdentity(data) {
+      return data.keys().hasAny(['routePlanId', 'routeStopId']) || text(data, 'visitSource', 'visit_source') == 'assigned_route';
+    }
+    function isCanonicalAssignedVisitOrder(orderId, actor) {
+      let data = request.resource.data;
+      let routePath = /databases/$(database)/documents/route_plans/$(data.routePlanId);
+      let suffix = data.salesmanUid + '.' + data.routePlanId + '.' + data.routeStopId;
+      return data.visitSource == 'assigned_route' && suffix.matches('^[A-Za-z0-9_-]{1,128}[.][A-Za-z0-9_-]{1,100}[.][A-Za-z0-9_-]{1,300}$') &&
+          exists(routePath) && assignedRouteMatchesOrder(get(routePath).data, data, actor) && orderId == 'ORD-V2-' + suffix;
+    }
+    function validOrderCreateShape(data) {
+      let names = data.keys();
+      let keys = names.join(',');
+      return (keys + ',').matches('^(?:(?:orderId|visitId|visitSource|routePlanId|routeStopId|retailerId|retailerName|outlet|uid|userUid|salesmanUid|salesmanEmail|salesmanId|salesmanCode|salesmanName|submittedByUid|createdByUid|branchId|supervisorId|totalProducts|totalBoxes|totalPrice|submittedAt|createdAt|updatedAt|status|items|commercialSchemaVersion|commercialLines|signatureTimestamps|locationEvidence|latitude|longitude|gpsLatitude|gpsLongitude|location|locationCapturedAt|accuracy|accuracyMeters|deviceCapturedAt|isMocked|locationVerification),)+$') &&
+          names.size() == keys.split(',').size() && (data.get('retailerName', '') + data.get('outlet', '') + data.get('salesmanName', '') +
+          data.get('salesmanEmail', '') + data.get('supervisorId', '') + data.get('visitId', '')).size() <= 2000 && data.get('salesmanId', '').size() <= 100 &&
+          validSignatureTimestamps(data.get('signatureTimestamps', {})) && data.get('locationEvidence', {}).get('failureCode', '').matches('^[a-z_]{0,40}$');
+    }
+    function validSignatureTimestamps(stamps) {
+      return stamps.size() <= 30 && stamps.values().join('|').matches('^[0-9 /:.TZ|-]{0,1000}$');
+    }
+    function assignedRouteMatchesOrder(route, data, actor) {
+      return isOwnPublishedRoute(route, actor) && ( !('stopRetailerIds' in route) ||
+          route.stopRetailerIds.get(data.routeStopId, '') == data.retailerId );
+    }
+    function isOwnOrderCreate(orderId) {
+      let actor = caller();
+      let data = request.resource.data;
+      let uid = request.auth.uid;
+      return actor._active == true && actor.role == 'salesman' && validOrderCreateShape(data) && validSubmittedOrder(orderId) &&
+          scopedSalesmanCode(data) == actor.salesmanCode && routeBranchId(data) == actor.branchId &&
+          [ data.salesmanUid, data.submittedByUid, data.createdByUid, data.uid, data.userUid ] == [ uid, uid, uid, uid, uid ] && ( hasAssignedVisitOrderIdentity(data)
+          ? isCanonicalAssignedVisitOrder(orderId, actor) : !orderId.matches('^ORD-V2-.*') ) && validOrderLocation(data);
+    }
+    function isOrderDecisionUpdate(actorRole) {
+      let next = request.resource.data;
+      let changed = next.diff(resource.data).affectedKeys();
+      return resource.data.status in ['submitted', 'held_for_review'] && next.status in ['approved', 'rejected'] && ( next.status == 'approved' ? (
+          validOrderForApproval() && changed.hasOnly(['status', 'approvedAt', 'approvedByUid', 'approvedByName', 'approvedByRole', 'updatedAt']) &&
+          changed.hasAll(['approvedAt', 'approvedByUid', 'approvedByRole', 'updatedAt']) && next.approvedAt == request.time && next.updatedAt == request.time &&
+          next.approvedByUid == request.auth.uid && next.approvedByRole == actorRole &&
+          !next.keys().hasAny([ 'rejectedAt', 'rejectedByUid', 'rejectedByName', 'rejectedByRole' ]) ) : (
+          changed.hasOnly(['status', 'rejectedAt', 'rejectedByUid', 'rejectedByName', 'rejectedByRole', 'rejectionRemark', 'updatedAt']) &&
+          changed.hasAll(['rejectedAt', 'rejectedByUid', 'rejectedByRole', 'updatedAt']) && next.rejectedAt == request.time && next.updatedAt == request.time &&
+          next.rejectedByUid == request.auth.uid && next.rejectedByRole == actorRole && ( !('rejectionRemark' in changed) || (
+          nonEmptyText(next.rejectionRemark, 500) ) ) &&
+          !next.keys().hasAny([ 'approvedAt', 'approvedByUid', 'approvedByName', 'approvedByRole' ]) ) );
+    }
+    allow read: if canReadOrder(resource.data);
+    allow create: if isOwnOrderCreate(orderId);
+    allow update: if canDecideOrder(caller());
+    allow delete: if validAtomicOrderDelete( orderId, resource.data, caller() );
+    function canDecideOrder(actor) { return canManageOrderFor(resource.data, actor) && isOrderDecisionUpdate(actor.get('role', '')); }
+  }
+  match /visits/{visitId} {
+    function canReadVisit(data) {
+      let actor = caller();
+      return (isSalesmanFor(actor) && data.ownerUid == request.auth.uid) || managesScope(actor, routeSalesmanCode(data), routeBranchId(data));
+    }
+    allow read: if canReadVisit(resource.data);
+    function visitTeamKeys() { return ['salesmanCode', 'salesman_code', 'branchId', 'branch_id']; }
+    function visitValueMatches(stated, known) { return stated == '' || known == '' || stated == known; }
+    function visitTeamIsCaller(data) {
+      let actor = caller();
+      let code = actor.get('salesmanCode', '');
+      let branch = actor.get('branchId', '');
+      return visitValueMatches(data.get('salesmanCode', ''), code) && visitValueMatches(data.get('salesman_code', ''), code) &&
+          visitValueMatches(data.get('branchId', ''), branch) && visitValueMatches(data.get('branch_id', ''), branch);
+    }
+    function validVisitWrite(next, createdAt) {
+      return isSalesmanProfile() && next.ownerUid == request.auth.uid && next.createdAt == createdAt && next.updatedAt == request.time && next.keys().size() <= 60;
+    }
+    allow create: if validVisitWrite(request.resource.data, request.time) && visitTeamIsCaller(request.resource.data);
+    allow update: if resource.data.ownerUid == request.auth.uid && validVisitWrite(request.resource.data, resource.data.createdAt) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(visitTeamKeys()) || visitTeamIsCaller(request.resource.data));
+    allow delete: if isSalesmanProfile() && resource.data.ownerUid == request.auth.uid;
+  }
+  match /gps_tracking/{docId} {
+    function validSessionBreadcrumb(data, docId) {
+      let livePath = /databases/$(database)/documents/live_tracking/$(request.auth.uid);
+      let live = getAfter(livePath).data;
+      return data.keys().hasAll([ 'salesmanUid', 'activeSessionId', 'activeSessionGeneration', 'fixSequence', 'eventId', 'deviceCapturedAt', 'latitude', 'longitude' ]) &&
+          validWorkSessionId({ 'activeSessionId': data.activeSessionId }) && data.activeSessionGeneration is int &&
+          data.fixSequence is int && data.fixSequence > 0 && data.eventId is string && data.eventId.size() <= 160 && docId == data.eventId &&
+          recentFix(data) && existsAfter(livePath) && live.workSessionStatus == 'active' && live.activeSessionId == data.activeSessionId &&
+          live.activeSessionGeneration == data.activeSessionGeneration && live.lastFixSequence == data.fixSequence &&
+          live.latitude == data.latitude && live.longitude == data.longitude && live.deviceCapturedAt == data.deviceCapturedAt;
+    }
+    function validOrderTrackingHistory(data, docId) {
+      let orderId = data.get('lastOrderId', data.get('orderId', ''));
+      let orderPath = /databases/$(database)/documents/orders/$(orderId);
+      return 'salesmanUid' in data && data.keys().hasAny(['lastOrderId', 'orderId']) && orderId is string && orderId.size() > 0 && docId == 'order_' + orderId &&
+          existsAfter(orderPath) && isOwnSalesmanRecord(getAfter(orderPath).data);
+    }
+    allow read: if canReadPreciseLocation(resource.data);
+    function backlogKeys() {
+      return [ 'uid', 'userUid', 'salesmanUid', 'salesmanId', 'salesmanName', 'salesmanEmail', 'submittedByUid', 'submittedByEmail', 'submittedByName',
+          'staffId', 'employeeCode', 'salesmanCode', 'salesman_code', 'branchId', 'eventId', 'backlog', 'activeSessionId', 'activeSessionGeneration',
+          'fixSequence', 'latitude', 'longitude', 'gpsLatitude', 'gpsLongitude', 'location', 'accuracy', 'accuracyMeters', 'deviceCapturedAt', 'isMocked',
+          'locationSource', 'locationVerification', 'timestamp', 'updatedAt' ];
+    }
+    function validBacklogAgainstLive(data, live) {
+      return live.workSessionStatus in ['active', 'ended'] && live.activeSessionId == data.activeSessionId &&
+          live.activeSessionGeneration == data.activeSessionGeneration && data.fixSequence < live.lastFixSequence &&
+          data.fixSequence >= live.lastFixSequence - 500 && data.deviceCapturedAt < live.deviceCapturedAt &&
+          data.deviceCapturedAt >= live.workSessionStartedAt - duration.value(10, 'm') && (live.workSessionStatus == 'active' ||
+          (data.deviceCapturedAt <= live.workSessionEndedAt + duration.value(5, 'm') && request.time <= live.workSessionEndedAt + duration.value(24, 'h')));
+    }
+    function validBacklogBreadcrumb(data, docId) {
+      let livePath = /databases/$(database)/documents/live_tracking/$(request.auth.uid);
+      return data.keys().hasOnly(backlogKeys()) && data.keys().hasAll([ 'salesmanUid', 'backlog', 'activeSessionId', 'activeSessionGeneration', 'fixSequence', 'eventId',
+          'deviceCapturedAt', 'latitude', 'longitude' ]) && data.backlog == true && data.locationVerification == 'device_captured' &&
+          validWorkSessionId({ 'activeSessionId': data.activeSessionId }) && data.activeSessionGeneration is int && data.fixSequence is int &&
+          data.fixSequence > 0 && data.eventId is string && docId == data.eventId &&
+          docId == 'session_' + request.auth.uid + '_' + data.activeSessionId + '_' + string(data.fixSequence) && recentFix(data) && existsAfter(livePath) &&
+          validBacklogAgainstLive(data, getAfter(livePath).data);
+    }
+    allow create: if validOwnSalesmanTracking(request.resource.data) && boundedTrackingIdentity(request.resource.data) && validTrackingLocation(request.resource.data) && (
+        request.resource.data.get('backlog', false) == true ? validBacklogBreadcrumb(request.resource.data, docId) :
+        validSessionBreadcrumb(request.resource.data, docId) || validOrderTrackingHistory(request.resource.data, docId) );
+    allow update, delete: if false;
+  }
+  match /tracking_controls/{salesmanUid} {
+    function accessRecordIdentity(uid, accessData) {
+      let version = accessData.get('accessVersion', null);
+      return version == 2 ? strictAccessIdentity(uid, accessData) : version == null ? null : {'_active': false};
+    }
+    function trackingControlTargetSnapshot(salesmanUid) {
+      let accessPath = /databases/$(database)/documents/user_access/$(salesmanUid);
+      let accessExists = exists(accessPath);
+      let accessData = accessExists ? get(accessPath).data : {};
+      let strictTarget = accessRecordIdentity(salesmanUid, accessData);
+      return strictTarget != null ? strictTarget : legacyTrackingControlTarget(salesmanUid, accessExists, accessData);
+    }
+    function legacyTrackingControlTarget(salesmanUid, accessExists, accessData) {
+      let hasLink = accessExists && accessData.keys().hasAny(['userDocId', 'user_doc_id']);
+      let profileId = hasLink ? text(accessData, 'userDocId', 'user_doc_id') : salesmanUid;
+      let profilePath = /databases/$(database)/documents/users/$(profileId);
+      let profileExists = profileId != '' && exists(profilePath);
+      let profileData = profileExists ? get(profilePath).data : {};
+      let targetData = accessExists && !hasLink ? accessData : profileExists ? profileData : {};
+      let accessIsActive = !accessExists || (accessIdentityMatches(salesmanUid, accessData) && hasActiveStatus(accessData));
+      let profileIsActive = profileExists ? hasActiveStatus(profileData) && (!profileData.keys().hasAny(['uid', 'userUid']) ||
+          text(profileData, 'uid', 'userUid') == salesmanUid) : !hasLink && accessExists && hasActiveStatus(accessData);
+      return { '_active': accessIsActive && profileIsActive && (!targetData.keys().hasAny(['uid', 'userUid']) ||
+            text(targetData, 'uid', 'userUid') == salesmanUid), 'role': canonicalRole(text(targetData, 'role', 'user_group')),
+            'branchId': text(targetData, 'branchId', 'branch_id'), 'salesmanCode': legacyCode(targetData) };
+    }
+    function canReadTrackingControl(salesmanUid, actor) {
+      let role = actor.get('role', '');
+      return ( request.auth.uid == salesmanUid && actor._active == true && role == 'salesman' ) || ( actor._active == true &&
+          managesTrackingTarget(trackingControlTargetSnapshot(salesmanUid), actor, role) );
+    }
+    function managesTrackingTarget(target, actor, role) {
+      let targetCode = target.get('salesmanCode', '');
+      let targetBranch = target.get('branchId', '');
+      return target._active == true && target.get('role', '') == 'salesman' && ( role in ['admin', 'developer'] || ( role == 'supervisor' &&
+          targetCode != '' && targetCode in actor.get('assignedSalesmanCodes', []) ) || ( role == 'branch_manager' && targetBranch != '' &&
+          targetBranch == actor.get('branchId', '') ) );
+    }
+    function canWriteTrackingControl(salesmanUid) {
+      let actor = caller();
+      return actor.get('role', '') != 'branch_manager' && canReadTrackingControl(salesmanUid, actor);
+    }
+    function validTrackingControlShape(data) {
+      return data.keys().hasAll([ 'mode', 'revision', 'updatedByUid', 'updatedAt' ]) && data.keys().hasOnly([ 'mode', 'revision', 'updatedByUid', 'updatedAt'
+          ]) && trackingModeAllowed(data.mode) && data.revision is int && data.revision > 0 && data.updatedByUid == request.auth.uid &&
+          data.updatedAt == request.time;
+    }
+    function validNewTrackingControl() { return validTrackingControlShape(request.resource.data) && request.resource.data.revision == 1; }
+    function validTrackingControlUpdate() {
+      let old = resource.data;
+      let incoming = request.resource.data;
+      return validTrackingControlShape(incoming) && old.keys().hasOnly([ 'mode', 'revision', 'updatedByUid', 'updatedAt' ]) && old.revision is int &&
+          old.revision > 0 && incoming.revision == old.revision + 1;
+    }
+    allow get: if canReadTrackingControl(salesmanUid, caller());
+    allow list: if false;
+    allow create: if canWriteTrackingControl(salesmanUid) && request.auth.uid != salesmanUid && validNewTrackingControl();
+    allow update: if canWriteTrackingControl(salesmanUid) && request.auth.uid != salesmanUid && validTrackingControlUpdate();
+    allow delete: if false;
+  }
+  match /live_tracking/{uid} {
+    function validTrackingControlState(salesmanUid, data) {
+      let controlPath = /databases/$(database)/documents/tracking_controls/$(salesmanUid);
+      let controlExists = exists(controlPath);
+      let control = controlExists ? get(controlPath).data : {};
+      return controlExists ? control.keys().hasOnly([ 'mode', 'revision', 'updatedByUid', 'updatedAt' ]) && trackingModeAllowed(control.get('mode', '')) &&
+          control.get('revision', null) is int && data.trackingMode == control.mode && data.appliedControlRevision == control.revision
+          : data.trackingMode == 'battery_saver' && data.appliedControlRevision == 0;
+    }
+    function validWorkSessionStartCreate(data) {
+      return data.keys().hasOnly([ 'uid', 'userUid', 'salesmanUid', 'salesmanId', 'salesmanName', 'salesmanEmail', 'submittedByUid', 'submittedByEmail',
+          'submittedByName', 'staffId', 'employeeCode', 'salesmanCode', 'salesman_code', 'branchId', 'activeSessionId',
+          'activeSessionGeneration', 'lastFixSequence', 'workSessionStatus', 'status', 'workSessionStartedAt', 'trackingMode', 'appliedControlRevision' ]) &&
+          validWorkSessionId(data) && data.activeSessionGeneration is int && data.activeSessionGeneration == 1 &&
+          data.lastFixSequence is int && data.lastFixSequence == 0 && data.workSessionStatus == 'active' && data.status == 'starting' &&
+          data.workSessionStartedAt == request.time && trackingModeAllowed(data.trackingMode) && data.appliedControlRevision is int &&
+          validTrackingControlState(request.auth.uid, data);
+    }
+    function validWorkSessionStartUpdate() {
+      let old = resource.data;
+      let incoming = request.resource.data;
+      let oldGeneration = old.get('activeSessionGeneration', 0);
+      let delta = incoming.diff(old);
+      return oldGeneration is int && oldGeneration >= 0 && validWorkSessionId(incoming) && incoming.activeSessionGeneration == oldGeneration + 1 &&
+          delta.affectedKeys().hasOnly([ 'activeSessionId', 'activeSessionGeneration', 'lastFixSequence',
+          'workSessionStatus', 'status', 'workSessionStartedAt', 'workSessionEndedAt', 'lastBreadcrumbCapturedAt', 'endedReason', 'trackingMode',
+          'appliedControlRevision' ]) &&
+          incoming.lastFixSequence is int && incoming.lastFixSequence == 0 && incoming.workSessionStatus == 'active' && incoming.status == 'starting' &&
+          incoming.workSessionStartedAt == request.time && trackingModeAllowed(incoming.trackingMode) && incoming.appliedControlRevision is int &&
+          validTrackingControlState(request.auth.uid, incoming) && !('lastBreadcrumbCapturedAt' in incoming) &&
+          !('endedReason' in delta.addedKeys().union(delta.changedKeys()));
+    }
+    function validWorkSessionEndUpdate() {
+      let old = resource.data;
+      let incoming = request.resource.data;
+      return old.workSessionStatus == 'active' && incoming.workSessionStatus == 'ended' && incoming.status == 'inactive' &&
+          incoming.activeSessionId == old.activeSessionId && incoming.activeSessionGeneration == old.activeSessionGeneration &&
+          incoming.lastFixSequence == old.lastFixSequence && incoming.workSessionEndedAt == request.time && incoming.diff(old).affectedKeys().hasOnly([
+          'workSessionStatus', 'status', 'workSessionEndedAt' ]);
+    }
+    function validWorkSessionFixUpdate() {
+      let old = resource.data;
+      let incoming = request.resource.data;
+      return old.workSessionStatus == 'active' && incoming.workSessionStatus == 'active' && incoming.activeSessionId == old.activeSessionId &&
+          incoming.activeSessionGeneration == old.activeSessionGeneration && incoming.lastFixSequence is int &&
+          incoming.lastFixSequence > old.lastFixSequence && (old.lastFixSequence == 0 ? incoming.deviceCapturedAt >= request.time - duration.value(10, 'm') : (old.get('deviceCapturedAt', null) == null || incoming.deviceCapturedAt > old.deviceCapturedAt)) && recentFix(incoming) && incoming.status == 'active' && incoming.trackingMode == old.trackingMode &&
+          incoming.appliedControlRevision == old.appliedControlRevision && validTrackingLocation(incoming) && incoming.diff(old).affectedKeys().hasOnly([
+          'activeSessionId', 'activeSessionGeneration', 'lastFixSequence', 'workSessionStatus', 'trackingMode', 'appliedControlRevision',
+          'latitude', 'longitude', 'gpsLatitude', 'gpsLongitude', 'location', 'accuracy', 'accuracyMeters', 'deviceCapturedAt', 'isMocked',
+          'locationSource', 'locationVerification', 'timestamp', 'updatedAt', 'lastSeen', 'lastSyncedAt', 'serverReceivedAt',
+          'lastBreadcrumbCapturedAt', 'status' ]);
+    }
+    function validWorkSessionControlAckUpdate() {
+      let old = resource.data;
+      let incoming = request.resource.data;
+      return old.workSessionStatus == 'active' && incoming.workSessionStatus == 'active' && incoming.activeSessionId == old.activeSessionId &&
+          incoming.activeSessionGeneration == old.activeSessionGeneration && incoming.lastFixSequence == old.lastFixSequence &&
+          trackingModeAllowed(incoming.trackingMode) && incoming.appliedControlRevision is int &&
+          incoming.appliedControlRevision >= old.appliedControlRevision && validTrackingControlState(request.auth.uid, incoming) && incoming.diff(old).affectedKeys().hasOnly([
+          'trackingMode', 'appliedControlRevision' ]);
+    }
+    function isFixShapedUpdate() {
+      return request.resource.data.get('lastFixSequence', 0) != resource.data.get('lastFixSequence', 0) &&
+          request.resource.data.get('activeSessionId', '') == resource.data.get('activeSessionId', '');
+    }
+    allow read: if (signedIn() && request.auth.uid == uid && accountNotSuspended()) || canReadPreciseLocation(resource.data);
+    allow create: if validOwnSalesmanTracking(request.resource.data) && boundedTrackingIdentity(request.resource.data) && request.auth.uid == uid &&
+        validWorkSessionStartCreate(request.resource.data);
+    allow update: if validOwnSalesmanTracking(request.resource.data) && request.auth.uid == uid && ( isFixShapedUpdate()
+        ? validWorkSessionFixUpdate() || validWorkSessionStartUpdate() || validWorkSessionEndUpdate() || validWorkSessionControlAckUpdate()
+        : validWorkSessionStartUpdate() || validWorkSessionEndUpdate() || validWorkSessionControlAckUpdate() || validWorkSessionFixUpdate() );
+    allow delete: if isAdminProfile();
+  }
+  match /visit_logs/{visitId} {
+    allow read: if canReadScopedSalesmanRecord(resource.data);
+    allow create: if isOwnActivityRecord(request.resource.data, caller());
+    allow update: if isOwnSalesmanRecord(resource.data) && isOwnActivityRecord(request.resource.data, caller());
+    allow delete: if isAdminProfile();
+  }
+  function activityDocKeys() {
+    return [ 'title', 'message', 'body', 'type', 'orderId', 'notification_type', 'reference_collection', 'reference_id', 'recipient_user_id', 'is_read',
+        'createdAt', 'updatedAt' ].concat(activityIdentityKeys());
+  }
+  function validActivityShape(data) {
+    return data.keys().hasOnly(activityDocKeys()) && data.keys().size() <= 30 && boundedText(data, 'notification_type', 200) &&
+        boundedText(data, 'reference_collection', 200) && boundedText(data, 'reference_id', 200) && boundedText(data, 'recipient_user_id', 200) && boundedText(data, 'title', 300) && boundedText(data, 'message', 1000) && boundedText(data, 'body', 1000) &&
+        boundedText(data, 'type', 100) && boundedText(data, 'orderId', 200);
+  }
+  match /notification_logs/{docId} {
+    allow read: if canReadScopedSalesmanRecord(resource.data);
+    allow create: if validActivityShape(request.resource.data) && canCreateActivityRecord( request.resource.data, caller() );
+    allow update: if false;
+    allow delete: if isAdminProfile();
+  }
+  match /notifications/{docId} {
+    allow read: if canReadScopedSalesmanRecord(resource.data);
+    allow create: if validActivityShape(request.resource.data) && canCreateActivityRecord( request.resource.data, caller() );
+    allow update: if false;
+    allow delete: if isAdminProfile();
+  }
+  match /purchase_orders/{poId} {
+    function canReadPurchaseOrder(data) { return managesScope(caller(), routeSalesmanCode(data), routeBranchId(data)); }
+    function purchaseOrderKeys() {
+      return [ 'poNumber', 'orderId', 'retailerId', 'retailerName', 'salesmanCode', 'salesmanUid', 'branchId', 'totalPrice', 'lines', 'status', 'issuedAt',
+          'issuedByUid', 'issuedByRole' ];
+    }
+    function validPurchaseOrderCreate(poId, po) {
+      let actor = caller();
+      let role = actor.get('role', '');
+      let order = getAfter(orderPath(poId)).data;
+      return role in ['admin', 'developer', 'supervisor'] && order.status == 'approved' && canManageOrderFor(order, actor) &&
+          exactKeys(po, purchaseOrderKeys()) && po.orderId == poId && po.poNumber is string &&
+          po.poNumber.matches('^PO-[0-9]{8}-[A-Za-z0-9_.-]{1,60}$') && po.status == 'issued' && po.issuedAt == request.time &&
+          po.issuedByUid == request.auth.uid && po.issuedByRole == role && po.salesmanCode == scopedSalesmanCode(order) &&
+          po.salesmanUid == text(order, 'salesmanUid', 'salesman_uid') && po.branchId == routeBranchId(order) &&
+          po.retailerId == text(order, 'retailerId', 'retailer_id') && po.retailerName == text(order, 'retailerName', 'retailer_name') &&
+          po.totalPrice == order.get('totalPrice', 0) && po.lines == order.get('items', []);
+    }
+    function validPurchaseOrderStatusChange() {
+      let next = request.resource.data;
+      let actor = caller();
+      return actor._active == true && actor.role in ['admin', 'developer'] && resource.data.status == 'issued' &&
+          next.status in ['fulfilled', 'cancelled'] && changedExactly(['status', 'statusChangedAt', 'statusChangedByUid']) &&
+          next.statusChangedAt == request.time &&
+          next.statusChangedByUid == request.auth.uid;
+    }
+    allow read: if canReadPurchaseOrder(resource.data);
+    allow create: if validPurchaseOrderCreate(poId, request.resource.data);
+    allow update: if validPurchaseOrderStatusChange();
+    allow delete: if false;
+  }
+  match /order_audit_logs/{auditId} {
+    function validAtomicOrderAuditCreate(auditId, actor) {
+      let sourceOrder = orderPath(auditId);
+      return isAdminFor(actor) && exists(sourceOrder) && !existsAfter(sourceOrder) && validOrderAudit( auditId, request.resource.data, get(sourceOrder).data,
+          actor.get('role', '') );
+    }
+    allow read: if isAdminProfile();
+    allow create: if validAtomicOrderAuditCreate(auditId, caller());
+    allow update, delete: if false;
+  }
+  match /ai_insights/{docId} {
+    allow read: if canManageRoute(resource.data);
+    allow write: if false;
+  }
+  match /retailer_item_patterns/{docId} {
+    allow read: if canManageRoute(resource.data);
+    allow write: if false;
+  }
+  match /retailer_segments/{docId} {
+    allow read: if canManageRoute(resource.data);
+    allow write: if false;
+  }
+  match /retailer_memory/{docId} {
+    allow read: if canManageRoute(resource.data);
+    allow write: if false;
+  }
+  match /visit_briefs/{docId} {
+    allow read: if signedIn() && canReadOwnOrManagedRecord(resource.data);
+    allow write: if false;
+  }
+  match /retailer_priority_rankings/{docId} {
+    allow read: if canManageRoute(resource.data);
+    allow write: if false;
+  }
+  match /conversation_outcomes/{outcomeId} {
+    function outcomeReplacementProductPath(data) { return /databases/$(database)/documents/products/$(data.replacementProductId); }
+    function outcomeRecordIdMatches(record, camel, snake, expected) { return text(record, camel, snake) == expected || !record.keys().hasAny([camel, snake]); }
+    function validOutcomeProvenance(actor) {
+      let data = request.resource.data;
+      let route = get(/databases/$(database)/documents/route_plans/$(data.planId)).data;
+      let brief = get(/databases/$(database)/documents/visit_briefs/$(data.sourceBriefId)).data;
+      let retailer = get(/databases/$(database)/documents/retailers/$(data.retailerId)).data;
+      let product = get(/databases/$(database)/documents/products/$(data.productId)).data;
+      let insight = get(/databases/$(database)/documents/ai_insights/$(data.issueId)).data;
+      let routeBranch = text(route, 'branchId', 'branch_id');
+      let routeStopIds = route.get('stopIds', []);
+      let routeStopRetailerIds = route.get('stopRetailerIds', {});
+      let salesmanCode = actor.get('salesmanCode', '');
+      let insights = brief.get('topInsights', []);
+      return actor.get('role', '') == 'salesman' && data.issueKey == data.issueType + '::' + data.retailerId + '::' + data.productId &&
+          data.salesmanCode == salesmanCode && salesmanCode != '' && actor.get('branchId', '') != '' && routeOpenToSalesman(route) &&
+          route.get('planId', data.planId) == data.planId && ( text(route, 'salesmanUid', 'salesman_uid') == request.auth.uid ||
+          text(route, 'salesmanCode', 'salesman_code') == salesmanCode ) && routeBranch == actor.get('branchId', '') && data.branchId == routeBranch && routeStopIds is list &&
+          data.stopId in routeStopIds && routeStopRetailerIds is map && routeStopRetailerIds.get(data.stopId, '') == data.retailerId &&
+          brief.get('briefId', data.sourceBriefId) == data.sourceBriefId && [ brief.status, brief.get('isDemo', false), brief.salesmanUid,
+          brief.salesmanCode, brief.branchId, brief.retailerId, brief.retailerName ] == [ 'active', data.isDemo, request.auth.uid, salesmanCode,
+          data.branchId, data.retailerId, data.retailerName ] && insights is list && ( (insights.size() > 0 && insights[0] is map && insights[0].get('issueId', '') == data.issueId) ||
+          (insights.size() > 1 && insights[1] is map && insights[1].get('issueId', '') == data.issueId) || (insights.size() > 2 && insights[2] is map &&
+          insights[2].get('issueId', '') == data.issueId) ) && outcomeRecordIdMatches( retailer, 'retailerId', 'retailer_id', data.retailerId ) &&
+          text(retailer, 'branchId', 'branch_id') == data.branchId && outcomeRecordIdMatches( product, 'productId', 'product_id', data.productId ) &&
+          [ insight.issueId, insight.issueKey, insight.type, insight.retailerId, insight.productId, insight.retailerName, insight.productName,
+          insight.salesmanUid, insight.salesmanCode, insight.branchId ] == [ data.issueId, data.issueKey, data.issueType, data.retailerId, data.productId,
+          data.retailerName, data.productName, request.auth.uid, salesmanCode, data.branchId ] && ( data.reasonCode != 'switched_to_alternative' ||
+          exists(outcomeReplacementProductPath(data)) );
+    }
+    function validOutcomeReason(code) { return code.matches('^(low_sell_through|price_too_high|switched_to_alternative|supplier_issue|out_of_stock|shelf_space_limited|cash_flow_issue|seasonal_change|not_decision_maker|not_asked_today|retailer_busy|decision_maker_unavailable|competitor_promotion|packaging_change|quality_complaint|other)$'); }
+    function validFollowUpCalendarDate(date) {
+      return !date.matches('^0000-.*$') && ( date.matches(
+          '^[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))$' ) ||
+          date.matches( '^(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29$' ) );
+    }
+    function validFollowUpFields(data, hasTime) {
+      return data.followUpDate is string && validFollowUpCalendarDate(data.followUpDate) && data.followUpStatus in ['open', 'completed', 'cancelled'] && (
+          !hasTime || ( data.followUpTime is string && data.followUpTime.matches( '^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$' ) ) );
+    }
+    function validNoOrderPayload(outcomeId) {
+      let data = request.resource.data;
+      return data.keys().size() == 15 && data.outcomeId == outcomeId && data.outcomeKind == 'no_order' &&
+          data.salesmanUid == request.auth.uid && data.retailerId.matches('^.{1,200}$') && data.retailerName is string && data.retailerName.size() <= 200 &&
+          data.salesmanCode is string && data.salesmanCode.size() <= 100 && data.branchId is string && data.branchId.size() <= 100 &&
+          data.planId.matches('^.{1,200}$') && data.stopId.matches('^.{1,200}$') && data.reasonCode != 'switched_to_alternative' && validOutcomeReason(data.reasonCode) &&
+          data.note is string && data.note.size() <= 500 && ( data.reasonCode != 'other' || data.note.size() >= 8 ) &&
+          data.source == 'mobile_assigned_route_no_order' && data.isDemo is bool && data.clientCreatedAt is timestamp && data.submittedAt == request.time;
+    }
+    function validNoOrderProvenance(actor) {
+      let data = request.resource.data;
+      let route = get(dataRoutePath(data)).data;
+      let retailer = get(dataRetailerPath(data)).data;
+      let salesmanCode = actor.get('salesmanCode', '');
+      let routeStopIds = route.get('stopIds', []);
+      let routeBranch = routeBranchId(route);
+      let stopRetailerIds = route.get('stopRetailerIds', {});
+      let actorBranch = actor.get('branchId', '');
+      return actor.get('role', '') == 'salesman' && data.salesmanCode == salesmanCode && salesmanCode != '' && actorBranch != '' &&
+          data.isDemo == route.get('isDemo', false) && routeOpenToSalesman(route) && route.get('planId', data.planId) == data.planId && (
+          routeSalesmanUid(route) == request.auth.uid || routeSalesmanCode(route) == salesmanCode ) && routeBranch == actorBranch && data.branchId == routeBranch &&
+          routeStopIds is list && data.stopId in routeStopIds && stopRetailerIds is map &&
+          stopRetailerIds.get(data.stopId, '') == data.retailerId && outcomeRecordIdMatches( retailer, 'retailerId', 'retailer_id',
+          data.retailerId ) && text(retailer, 'branchId', 'branch_id') == data.branchId;
+    }
+    function validOutcomePayload(outcomeId) {
+      let data = request.resource.data;
+      return data.keys().size() == 21 && data.outcomeId == outcomeId && data.salesmanUid == request.auth.uid &&
+          (data.issueId + data.issueKey + data.retailerId + data.productId + data.productName + data.issueType + data.retailerName + data.salesmanCode +
+          data.branchId + data.planId + data.stopId + data.sourceBriefId).size() <= 2000 && validOutcomeReason(data.reasonCode) &&
+          data.note.matches('(?s)^.{0,500}$') && data.replacementProductId.matches('(?s)^.{0,100}$') && (
+          data.reasonCode != 'other' || data.note.size() >= 8 ) && ( data.reasonCode != 'switched_to_alternative' || data.replacementProductId.size() > 0 ) &&
+          data.source == 'mobile_assigned_route_copilot' && data.isDemo is bool && data.clientCreatedAt is timestamp && data.submittedAt == request.time;
+    }
+    allow read: if signedIn() && canReadOwnOrManagedRecord(resource.data);
+    allow create, update: if resource == null ? ( ( validOutcomePayload(outcomeId) && validOutcomeProvenance(caller()) ) ||
+        ( validNoOrderPayload(outcomeId) && validNoOrderProvenance(caller()) ) ) : isSalesmanProfile() &&
+        resource.data.salesmanUid == request.auth.uid && request.resource.data.salesmanUid == resource.data.salesmanUid &&
+        request.resource.data.outcomeId == resource.data.outcomeId && ( ( changedKeys().hasOnly([ 'submittedAt' ]) &&
+        request.resource.data.submittedAt == request.time ) || ( changedKeys().hasOnly([ 'followUpDate', 'followUpTime', 'followUpStatus' ]) &&
+        validFollowUpFields( request.resource.data, 'followUpTime' in request.resource.data ) ) );
+    allow delete: if false;
+  }
+  match /retailer_coordinate_proposals/{proposalId} {
+    function canReadCoordinateProposal(data) {
+      let actor = caller();
+      let role = actor.get('role', '');
+      return actor._active == true && ( role in ['admin', 'developer'] || (role == 'salesman' && data.salesmanUid == request.auth.uid) || (
+          role == 'supervisor' && data.salesmanCode != '' && data.salesmanCode in actor.assignedSalesmanCodes ) || ( role == 'branch_manager' &&
+          actor.branchId != '' && data.branchId == actor.branchId ) );
+    }
+    function validCoordinateProposalCreate(proposalId) {
+      let data = request.resource.data;
+      let actor = caller();
+      let routeExists = exists(dataRoutePath(data));
+      let route = routeExists ? get(dataRoutePath(data)).data : {};
+      let stopRetailers = route.get('stopRetailerIds', {});
+      return data.keys().toSet() == [ 'proposalId', 'planId', 'stopId', 'retailerId', 'candidateLatitude',
+          'candidateLongitude', 'salesmanUid', 'salesmanCode', 'branchId', 'createdAt', 'status', 'source' ].toSet() &&
+          data.proposalId == proposalId && data.planId is string && data.planId.size() > 0 && data.stopId is string && data.stopId.size() > 0 &&
+          data.retailerId is string && data.retailerId.size() > 0 &&
+          validLatLng(data.candidateLatitude, data.candidateLongitude) && data.salesmanUid == request.auth.uid &&
+          actor._active == true && actor.role == 'salesman' && actor.salesmanCode != '' &&
+          data.salesmanCode == actor.salesmanCode && actor.branchId != '' && data.branchId == actor.branchId &&
+          data.createdAt == request.time && data.status == 'pending' && data.source == 'mobile_assigned_route' && routeExists && routeOpenToSalesman(route) &&
+          routeBranchId(route) == data.branchId && ( routeSalesmanUid(route) == request.auth.uid || routeSalesmanCode(route) == data.salesmanCode ) &&
+          route.get('stopIds', []) is list && data.stopId in route.stopIds && stopRetailers is map && stopRetailers.get(data.stopId, '') == data.retailerId &&
+          exists(dataRetailerPath(data));
+    }
+    function validCoordinateProposalReview(proposalId) {
+      let old = resource.data;
+      let next = request.resource.data;
+      let changed = next.diff(old).affectedKeys();
+      let retailerPath = dataRetailerPath(old);
+      let retailer = existsAfter(retailerPath) ? getAfter(retailerPath).data : {};
+      return isAdminProfile() && old.proposalId == proposalId && old.status == 'pending' && next.proposalId == old.proposalId &&
+          changed.hasOnly([ 'status', 'reviewedByUid', 'reviewedAt' ]) && next.status in ['approved', 'rejected'] &&
+          next.reviewedByUid == request.auth.uid && next.reviewedAt == request.time && ( next.status == 'rejected' || ( existsAfter(retailerPath) &&
+          retailer.get('latitude', null) == old.candidateLatitude && retailer.get('longitude', null) == old.candidateLongitude &&
+          retailer.get('coordinateStatus', '') == 'verified' && retailer.get('coordinateSource', '') == 'admin_review' &&
+          retailer.get('coordinateReviewStatus', '') == 'reviewed' && retailer.get('coordinateReviewedByUid', '') == request.auth.uid &&
+          retailer.get('coordinateReviewedAt', null) == request.time ) );
+    }
+    allow read: if canReadCoordinateProposal(resource.data);
+    allow create: if signedIn() && validCoordinateProposalCreate(proposalId);
+    allow update: if signedIn() && validCoordinateProposalReview(proposalId);
+    allow delete: if false;
+  }
+  match /route_plans/{planId} {
+    function canReadRoutePlan(route, actor) { return canManageRouteFor(route, actor) || isOwnPublishedRoute(route, actor); }
+    function routePlanIdMatchesDocument() { return request.resource.data.get('planId', planId) == planId; }
+    function routeIdentityUnchanged() {
+      let next = request.resource.data;
+      let old = resource.data;
+      return routePlanIdMatchesDocument() && next.createdByUid == old.createdByUid && routeSalesmanUid(next) == routeSalesmanUid(old) &&
+          routeSalesmanCode(next) == routeSalesmanCode(old) &&
+          routeBranchId(next) == routeBranchId(old) && next.weekStart == old.weekStart;
+    }
+    function validRouteStatusTransition() {
+      let next = request.resource.data;
+      let old = resource.data;
+      return old.status is string && next.status in { 'draft': ['draft', 'approved'], 'approved': ['draft', 'approved', 'published'], 'published': [ 'published', 'archived',
+          'draft' ], 'archived': ['archived'] }.get(old.status, []);
+    }
+    function validPublishedRouteStopIndex() {
+      let next = request.resource.data;
+      return next.stopIds is list && next.stopIds.size() > 0 && next.stopIds.size() <= 100 &&
+          next.stopIds.toSet().size() == next.stopIds.size() && next.totalStops is int &&
+          next.totalStops == next.stopIds.size() && next.stopRetailerIds is map &&
+          next.stopRetailerIds.keys().size() == next.stopIds.size();
+    }
+    function publicationKeyPath(keyId) { return /databases/$(database)/documents/route_plan_publication_keys/$(keyId); }
+    allow read: if canReadRoutePlan(resource.data, caller());
+    allow create: if signedIn() && canWriteRouteFor(request.resource.data, caller()) && request.resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.status == 'draft' && !('replacedAt' in request.resource.data) && routePlanIdMatchesDocument();
+    allow update: if canUpdateRoutePlan();
+    function canUpdateRoutePlan() {
+      let next = request.resource.data;
+      let old = resource.data;
+      let changed = next.diff(old).affectedKeys();
+      let actor = caller();
+      return signedIn() && canWriteRouteFor(next, actor) && routeIdentityUnchanged() &&
+          validRouteStatusTransition() && ( old.status != 'archived' || changed.hasOnly(['updatedAt']) ) && ( old.status != 'approved' || next.status != 'published' ||
+          (validPublishedRouteStopIndex() && validPublicationKeyLink()) ) && ( old.status != 'published' ||
+          changed.hasOnly([ 'status', 'updatedAt', 'replacedAt' ]) || ( next.status == 'draft' &&
+          changed.hasOnly([ 'status', 'updatedAt', 'approvedAt', 'publishedAt' ]) &&
+          !next.keys().hasAny([ 'approvedAt', 'publishedAt' ]) ) ) && validReplacedMark() && ( old.status != 'published' ||
+          next.status != 'draft' || routeNotAccepted(old) );
+    }
+    function validReplacedMark() {
+      let next = request.resource.data.get('replacedAt', null);
+      return next == resource.data.get('replacedAt', null) || (resource.data.status == 'published' && request.resource.data.status == 'archived' &&
+          next == request.time);
+    }
+    function routeNotAccepted(route) {
+      let uid = routeSalesmanUid(route);
+      return uid != '' && !exists(/databases/$(database)/documents/route_plan_progress/$(planId + '_' + uid));
+    }
+    allow delete: if signedIn() && isAdminProfile();
+    function validPublicationKeyLink() {
+      let keyId = request.resource.data.get('publicationKeyId', '');
+      let key = keyId is string && keyId != '' && existsAfter(publicationKeyPath(keyId)) ? getAfter(publicationKeyPath(keyId)).data : {};
+      return key.get('planId', '') == planId && key.get('active', true) == true;
+    }
+  }
+  match /route_plan_progress/{progressId} {
+    function canReadRouteProgress(progress) {
+      let actor = caller();
+      return actor._active == true && ( actor.role in ['admin', 'developer'] || routeSalesmanUid(progress) == request.auth.uid || (
+          actor.role == 'supervisor' && ( routeSalesmanCode(progress) in actor.assignedSalesmanCodes ||
+          routeSalesmanUid(progress) in actor.assignedSalesmanCodes ) ) || ( actor.role == 'branch_manager' &&
+          actor.branchId != '' && routeBranchId(progress) == actor.branchId ) );
+    }
+    function validOwnRouteProgressIdentity(progressId, route, actor) {
+      let data = request.resource.data;
+      let stopIds = route.stopIds;
+      let salesmanCode = actor.get('salesmanCode', '');
+      return actor._active == true && data.planId is string && isOwnPublishedRoute(route, actor) && data.progressId == progressId && data.salesmanUid == request.auth.uid && progressId == data.planId + '_' + request.auth.uid && stopIds is list &&
+          stopIds.size() > 0 && stopIds.size() <= 100 && stopIds.toSet().size() == stopIds.size() && routeBranchId(data) == routeBranchId(route) && (
+          salesmanCode == '' || routeSalesmanCode(data) == salesmanCode ) && data.status in ['assigned', 'accepted', 'in_progress', 'completed'] && (
+          data.status in ['assigned', 'accepted'] || routeWeekStarted(route) ) && ( !('stopProgress' in data) || ( data.stopProgress is map && data.stopProgress.size() <= 100 ) ) && data.updatedAt == request.time &&
+          data.lastSyncedAt == request.time;
+    }
+    function routeWeekStarted(route) { return !('weekStart' in route) || ( route.weekStart is timestamp && request.time >= route.weekStart ); }
+    function canUpdateOwnRouteProgress(progressId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let route = get( /databases/$(database)/documents/route_plans/$(data.planId) ).data;
+      let actor = caller();
+      let changed = data.diff(oldData).affectedKeys();
+      let changesStop = changed.hasAny([ 'lastStopId', 'lastStopStatus', 'handledStopIds', 'lastStopWriteEventId', 'lastSummaryWorkSessionGeneration',
+          'lastSummaryEventSequence' ]);
+      return ( changesStop ? validOwnRouteProgressLifecycleIdentity( progressId, route, actor, data, oldData ) &&
+          validStopProgressUpdate(route, changed, data, oldData) : 'lastHeartbeatAt' in changed ? validOwnRouteHeartbeat(progressId, route, actor, changed)
+          : 'routeSessionState' in changed && !('status' in changed) ? validOwnRouteSessionStateUpdate( progressId, route, actor, changed )
+          : changed.hasAny(['selectedStopId', 'selectionRevision']) ? validRouteStopSelectionUpdate(route, changed) && validOwnRouteStopSelectionIdentity(
+          progressId, route, actor ) : validOwnRouteProgressIdentity(progressId, route, actor) && validProgressUpdate(route, changed, data, oldData) ) &&
+          (data.status == oldData.status ? true : validProgressStatusTransition(oldData, data));
+    }
+    function validOwnRouteHeartbeat(progressId, route, actor, changed) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let salesmanCode = actor.get('salesmanCode', '');
+      return changed.hasOnly(['lastHeartbeatAt']) && actor._active == true &&
+          actor.role == 'salesman' && salesmanCode != '' && oldData.progressId == progressId && oldData.planId is string &&
+          oldData.salesmanUid == request.auth.uid && progressId == oldData.planId + '_' + request.auth.uid && routeBranchId(data) == routeBranchId(route) &&
+          routeSalesmanCode(data) == salesmanCode && isOwnPublishedRoute(route, actor) && oldData.status == 'in_progress' &&
+          oldData.get('routeSessionState', '') == 'active' && data.lastHeartbeatAt == request.time &&
+          ( oldData.get('lastHeartbeatAt', null) == null || request.time >= oldData.lastHeartbeatAt + duration.value(4, 'm') ) && routeWeekStarted(route);
+    }
+    function validOwnRouteSessionStateUpdate(progressId, route, actor, changed) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let oldSession = oldData.get('routeSessionState', 'untracked');
+      let nextSession = data.get('routeSessionState', '');
+      return validOwnRouteProgressIdentity(progressId, route, actor) && changed.hasAll([ 'routeSessionState', 'updatedAt', 'lastSyncedAt' ]) &&
+          changed.hasOnly([ 'routeSessionState', 'updatedAt', 'lastSyncedAt' ]) && oldData.status == 'in_progress' && data.status == 'in_progress' &&
+          nextSession in ['active', 'paused'] && ( (oldSession == 'active' && nextSession == 'paused') ||
+          (oldSession in ['paused', 'untracked'] && nextSession == 'active') );
+    }
+    function validOwnRouteStopSelectionIdentity(progressId, route, actor) {
+      let data = request.resource.data;
+      let salesmanCode = actor.get('salesmanCode', '');
+      return actor._active == true && isOwnPublishedRoute(route, actor) && data.planId == resource.data.planId && data.progressId == progressId && data.salesmanUid == request.auth.uid &&
+          progressId == data.planId + '_' + request.auth.uid && routeBranchId(data) == routeBranchId(route) && ( salesmanCode == '' ||
+          routeSalesmanCode(data) == salesmanCode ) && data.status in ['assigned', 'accepted', 'in_progress'] && ( data.status in ['assigned', 'accepted'] ||
+          routeWeekStarted(route) ) && data.updatedAt == request.time &&
+          data.lastSyncedAt == request.time;
+    }
+    function validOwnRouteProgressLifecycleIdentity(progressId, route, actor, data, oldData) {
+      let uid = request.auth.uid;
+      let salesmanCode = actor.get('salesmanCode', '');
+      return actor._active == true && actor.role == 'salesman' && salesmanCode != '' && oldData.progressId == progressId &&
+          oldData.salesmanUid == uid && progressId == oldData.planId + '_' + uid && routeOpenToSalesman(route) && ( routeSalesmanUid(route) == uid ||
+          routeSalesmanCode(route) == salesmanCode ) && route.get('stopIds', []) is list && routeBranchId(data) == routeBranchId(route) &&
+          routeSalesmanCode(data) == salesmanCode && ( !('weekStart' in route) || ( route.weekStart is timestamp && request.time >= route.weekStart ) ) &&
+          data.updatedAt == request.time && data.lastSyncedAt == request.time;
+    }
+    function canCreateOwnRouteProgress(progressId) {
+      let data = request.resource.data;
+      let route = get( /databases/$(database)/documents/route_plans/$(data.planId) ).data;
+      let acceptedShape = data.status == 'accepted' && data.acceptedAt == request.time && data.handledStopIds is list && data.handledStopIds.size() == 0 &&
+          !data.keys().hasAny([ 'selectedStopId', 'selectionRevision', 'startedAt', 'completedAt' ]) && ( !('stopProgress' in data) || (
+          data.stopProgress is map && data.stopProgress.size() == 0 ) );
+      return validOwnRouteProgressIdentity(progressId, route, caller()) && ( acceptedShape || ( validInitialRouteStopSelection(data) &&
+          validSelectedRouteStop(route, data, data.selectedStopId) ) );
+    }
+    function validInitialRouteStopSelection(data) {
+      return data.status == 'assigned' && data.selectedStopId is string && data.selectedStopId.size() > 0 && data.selectionRevision is int &&
+          data.selectionRevision == 1 && data.stopProgress is map && data.stopProgress.size() == 0 && data.handledStopIds is list &&
+          data.handledStopIds.size() == 0 && !data.keys().hasAny(['acceptedAt', 'startedAt', 'completedAt']) && data.updatedAt == request.time &&
+          data.lastSyncedAt == request.time;
+    }
+    function validSelectedRouteStop(route, progress, stopId) {
+      let routeStopIds = route.get('stopIds', []);
+      let handledStopIds = progress.get('handledStopIds', []);
+      let stopProgress = progress.get('stopProgress', {});
+      let stopEntry = stopProgress is map ? stopProgress.get(stopId, {}) : {};
+      let stopStatus = stopEntry is map ? stopEntry.get('status', '') : '';
+      let lastStopId = progress.get('lastStopId', '');
+      let lastStopStatus = progress.get('lastStopStatus', '');
+      let canonicalStopId = canonicalStopDocId(progress.planId, stopId);
+      let canonicalStopPath = /databases/$(database)/documents/route_stop_progress/$(canonicalStopId);
+      return routeStopIds is list && stopId is string && stopId.size() > 0 && stopId in routeStopIds && (!('handledStopIds' in progress) ||
+          handledStopIds is list && !(stopId in handledStopIds)) && (!('stopProgress' in progress) || stopProgress is map) &&
+          !(stopStatus in ['completed', 'skipped']) && !(lastStopId == stopId && lastStopStatus in ['completed', 'skipped']) && (!exists(canonicalStopPath) ||
+          !(get(canonicalStopPath).data.get('status', '') in ['completed', 'skipped']));
+    }
+    function validRouteStopSelectionUpdate(route, changed) {
+      let oldData = resource.data;
+      let newData = request.resource.data;
+      let oldRevision = oldData.get('selectionRevision', 0);
+      let oldSelection = oldData.get('selectedStopId', '');
+      let clearsSelection = !('selectedStopId' in newData);
+      let newSelection = newData.get('selectedStopId', null);
+      return changed.hasAll(['selectedStopId', 'selectionRevision']) && changed.hasOnly([ 'selectedStopId', 'selectionRevision', 'updatedAt', 'lastSyncedAt'
+          ]) && oldRevision is int && oldRevision >= 0 && newData.selectionRevision is int && newData.selectionRevision == oldRevision + 1 && ( clearsSelection
+          ? oldSelection is string && oldSelection.size() > 0 : newSelection is string && newSelection != oldSelection &&
+          newData.status in ['assigned', 'accepted', 'in_progress'] && validSelectedRouteStop(route, oldData, newSelection) );
+    }
+    function validProgressStatusTransition(oldData, data) {
+      let oldStatus = oldData.status;
+      let status = data.status;
+      return oldStatus == 'in_progress' ? status == 'completed' && data.get('routeSessionState', 'untracked') in ['completed', 'untracked']
+          : oldStatus == 'accepted' ? status == 'in_progress' && data.get('routeSessionState', 'untracked') in ['active', 'untracked']
+          : oldStatus == 'assigned' && status == 'accepted' && !('routeSessionState' in data);
+    }
+    function isExactStopParentReplay(old, data) {
+      return old.get('lastStopWriteStatus', '') == data.get('lastStopWriteStatus', '') && old.get('lastStopWriteEventId', '') ==
+          data.get('lastStopWriteEventId', '') && old.get('lastStopWriteWorkSessionGeneration', 0) == data.get('lastStopWriteWorkSessionGeneration', 0) &&
+          old.get('lastStopWriteSequence', 0) == data.get('lastStopWriteSequence', 0);
+    }
+    function validLastStopSummary(data, old, stopId) {
+      let generation = data.get('lastSummaryWorkSessionGeneration', 0);
+      let oldGeneration = old.get('lastSummaryWorkSessionGeneration', 0);
+      let sequence = data.get('lastSummaryEventSequence', 0);
+      let oldSequence = old.get('lastSummaryEventSequence', 0);
+      return generation > oldGeneration || (generation == oldGeneration && sequence > oldSequence) ? data.lastStopId == stopId &&
+          data.lastStopStatus == data.lastStopWriteStatus && data.lastStopEventId == data.lastStopWriteEventId &&
+          generation == data.lastStopWriteWorkSessionGeneration && sequence == data.lastStopWriteSequence
+          : data.get('lastStopId', '') == old.get('lastStopId', '') && data.get('lastStopStatus', '') == old.get('lastStopStatus', '') &&
+          data.get('lastStopEventId', '') == old.get('lastStopEventId', '') && generation == oldGeneration && sequence == oldSequence;
+    }
+    function validCanonicalStopHandledProjection(
+        route, changed, data, old, stop, stopExists, stopId ) { let handledStopIds = data.get('handledStopIds', []);
+      let oldHandledStopIds = old.get('handledStopIds', []);
+      let routeStopIds = route.stopIds;
+      let terminalStatus = data.lastStopWriteStatus;
+      let exactStopReplay = stopExists && isExactStopParentReplay(old, data);
+      return route.stopRetailerIds.get(stopId, '') == stop.retailerId && stop.updatedAt == request.time && (exactStopReplay ? stopId in routeStopIds &&
+          handledStopIds == oldHandledStopIds : oldHandledStopIds is list && oldHandledStopIds.toSet().size() == oldHandledStopIds.size() &&
+          handledStopIds.size() == oldHandledStopIds.size() + 1 && handledStopIds.hasAll(oldHandledStopIds) && routeStopIds.hasAll(handledStopIds) &&
+          stopId in handledStopIds && !(stopId in oldHandledStopIds)) && ( data.status == 'completed' ? handledStopIds.size() == routeStopIds.size() &&
+          handledStopIds.hasAll(routeStopIds) : data.status == 'in_progress' && handledStopIds.size() < routeStopIds.size() && (exactStopReplay
+          ? oldHandledStopIds is list && oldHandledStopIds.toSet().size() == oldHandledStopIds.size() : true) ) && validLastStopSummary(data, old, stopId) && (
+          changed.hasAny(['selectionRevision', 'selectedStopId']) ? terminalStatus in ['completed', 'skipped'] && old.get('selectedStopId', '') == stopId &&
+          !('selectedStopId' in data) && old.get('selectionRevision', 0) is int && data.selectionRevision == old.get('selectionRevision', 0) + 1
+          : true );
+    }
+    function validCanonicalArrivalParentProjection(
+        route, data, old, stop, stopExists, stopId ) { let routeStopIds = route.get('stopIds', []);
+      let retailerIds = route.get('stopRetailerIds', {});
+      let handledStopIds = data.get('handledStopIds', []);
+      let oldHandledStopIds = old.get('handledStopIds', []);
+      return stopId in routeStopIds && retailerIds is map && retailerIds.get(stopId, '') == stop.get('retailerId', '') && stop.get('status', '') == 'arrived' &&
+          stop.get('updatedAt', null) == request.time && (!stopExists || isExactStopParentReplay(old, data)) && data.get('status', '') == 'in_progress' &&
+          handledStopIds == oldHandledStopIds && data.lastStopWriteStopId == stopId && validLastStopSummary(data, old, stopId) &&
+          data.get('selectedStopId', '') == old.get('selectedStopId', '') && data.get('selectionRevision', 0) == old.get('selectionRevision', 0);
+    }
+    function validStopProgressUpdate(route, changed, data, oldData) {
+      let stopId = data.lastStopWriteStopId;
+      let stopPath = /databases/$(database)/documents/route_stop_progress/$(canonicalStopDocId(data.planId, stopId));
+      let stop = getAfter(stopPath).data;
+      let stopExists = exists(stopPath);
+      return changed.hasOnly([ 'status', 'handledStopIds', 'lastStopId', 'lastStopStatus', 'lastStopEventId', 'lastSummaryWorkSessionGeneration',
+          'lastSummaryEventSequence', 'lastStopWriteStopId', 'lastStopWriteStatus', 'lastStopWriteEventId',
+          'lastStopWriteWorkSessionGeneration', 'lastStopWriteSequence', 'selectedStopId', 'selectionRevision', 'routeSessionState', 'updatedAt', 'lastSyncedAt'
+          ]) &&
+          ( !('routeSessionState' in changed) || ( data.status == 'completed' && data.routeSessionState == 'completed' &&
+          oldData.routeSessionState in ['active', 'paused'] ) ) && stopId.size() > 0 && ( data.lastStopWriteStatus == 'arrived'
+          ? validCanonicalArrivalParentProjection( route, data, oldData, stop, stopExists, stopId ) : validCanonicalStopHandledProjection(
+          route, changed, data, oldData, stop, stopExists, stopId ) );
+    }
+    function validProgressUpdate(route, changed, data, oldData) {
+      return changed.hasOnly([ 'status', 'acceptedAt', 'startedAt', 'completedAt', 'routeSessionState', 'updatedAt', 'lastSyncedAt' ]) && (
+          data.get('acceptedAt', null) == oldData.get('acceptedAt', null) || data.get('acceptedAt', null) == request.time ) && (
+          data.get('startedAt', null) == oldData.get('startedAt', null) || data.get('startedAt', null) == request.time ) && (
+          data.get('completedAt', null) == oldData.get('completedAt', null) || data.get('completedAt', null) == request.time ) && (data.status == 'completed'
+          ? validRouteCompletion(route) : true);
+    }
+    function validRouteCompletion(route) {
+      return request.resource.data.handledStopIds is list && request.resource.data.handledStopIds.toSet() == route.stopIds.toSet();
+    }
+    allow read: if signedIn() && canReadRouteProgress(resource.data);
+    allow create, update: if signedIn() && ( resource == null ? canCreateOwnRouteProgress(progressId) && request.resource.data.keys().hasOnly([
+        'progressId', 'planId', 'salesmanUid', 'salesmanCode', 'branchId', 'isOfflineCreated', 'status', 'stopProgress', 'handledStopIds',
+        'selectedStopId', 'selectionRevision', 'acceptedAt', 'updatedAt', 'lastSyncedAt' ]) : canUpdateOwnRouteProgress(progressId) );
+    allow delete: if false;
+  }
+  match /route_plan_publication_keys/{keyId} {
+    function publicationIdentity(route) {
+      let uid = routeSalesmanUid(route);
+      return uid != '' ? uid : routeSalesmanCode(route);
+    }
+    function publicationWeekKey(weekStart) {
+      let local = weekStart + duration.value(8, 'h');
+      return string(local.year()) + (local.month() < 10 ? '0' : '') + string(local.month()) + (local.day() < 10 ? '0' : '') + string(local.day());
+    }
+    function publicationKeyIdFor(route) { return publicationIdentity(route).replace('[^A-Za-z0-9_-]', '_') + '_' + publicationWeekKey(route.weekStart); }
+    allow read: if canReadPublicationKey(caller());
+    function canReadPublicationKey(actor) {
+      return isDashboardRoleFor(actor) && ( resource == null || ( resource.data.planId is string && exists(
+          /databases/$(database)/documents/route_plans/$(resource.data.planId) ) && canManageRouteFor( get(
+          /databases/$(database)/documents/route_plans/$(resource.data.planId) ).data, actor ) ) );
+    }
+    allow create: if canCreatePublicationKey(keyId);
+    function canCreatePublicationKey(keyId) {
+      let next = request.resource.data;
+      let actor = caller();
+      let planPath = /databases/$(database)/documents/route_plans/$(next.planId);
+      return isDashboardRoleFor(actor) && next.keyId == keyId && next.updatedByUid == request.auth.uid &&
+          next.planId is string && exists(planPath) && publicationKeyMatchesPlan(get(planPath).data, actor, keyId) &&
+          next.salesmanIdentity is string && next.weekKey is string;
+    }
+    function publicationKeyMatchesPlan(plan, actor, keyId) { return canWriteRouteFor(plan, actor) && keyId == publicationKeyIdFor(plan); }
+    allow update: if canUpdatePublicationKey(keyId);
+    function canUpdatePublicationKey(keyId) {
+      let next = request.resource.data;
+      let old = resource.data;
+      let actor = caller();
+      let oldPath = /databases/$(database)/documents/route_plans/$(old.planId);
+      return old.planId is string && exists(oldPath) && next.keyId == keyId && next.updatedByUid == request.auth.uid &&
+          canWriteRouteFor(get(oldPath).data, actor) && ( next.planId == old.planId
+          ? next.diff(old).affectedKeys().hasOnly([ 'updatedByUid', 'updatedAt', 'active' ])
+          : get(oldPath).data.status != 'published' && canTakeOverPublicationKey(keyId, actor) );
+    }
+    function canTakeOverPublicationKey(keyId, actor) {
+      let next = request.resource.data;
+      let newPath = /databases/$(database)/documents/route_plans/$(next.planId);
+      return next.planId is string && exists(newPath) && publicationKeyMatchesPlan(get(newPath).data, actor, keyId) &&
+          next.diff(resource.data).affectedKeys().hasOnly([ 'planId', 'updatedByUid', 'updatedAt', 'active', 'weekStart', 'salesmanUid', 'salesmanCode' ]);
+    }
+    allow delete: if false;
+  }
+  match /route_stop_progress/{stopDocId} {
+    function canReadStopEvidence(data) {
+      let actor = caller();
+      return actor._active == true && ( actor.role in ['admin', 'developer'] || ( actor.role == 'salesman' &&
+          data.get('salesmanUid', '') == request.auth.uid ) || ( actor.role == 'supervisor' && data.get('salesmanCode', '') in
+          actor.assignedSalesmanCodes ) || ( actor.role == 'branch_manager' && actor.branchId != '' &&
+          data.get('branchId', '') == actor.branchId ) );
+    }
+    function canGetMissingStopEvidence(stopDocId) {
+      let actor = caller();
+      return actor._active == true && isCanonicalMissingStopGet(stopDocId);
+    }
+    function stopDocIdentity(stopDocId, data) {
+      return data.salesmanUid == request.auth.uid && stopDocId == canonicalStopDocId(data.planId, data.stopId);
+    }
+    function validV2StopIdentity(stopDocId, data) {
+      return stopDocIdentity(stopDocId, data) && data.salesmanCode is string && data.salesmanCode.size() > 0 && data.branchId is string &&
+          data.retailerId is string && data.retailerId.size() > 0 && data.lifecycleSchemaVersion == 2;
+    }
+    function validV2StopSessionEvent(data, eventId, status) {
+      let livePath = /databases/$(database)/documents/live_tracking/$(request.auth.uid);
+      let live = get(livePath).data;
+      return data.workSessionId.matches('^[0-9a-f]{32}$') && data.workSessionGeneration is int && data.workSessionGeneration > 0 &&
+          data.sessionEventSequence is int && data.sessionEventSequence > 0 && eventId == data.workSessionId + '_' + data.stopId + '_' + status &&
+          eventId.size() <= 100 && data.deviceOccurredAt <= request.time + duration.value(60, 'm') && data.receivedAt == request.time &&
+          data.updatedAt == request.time && live.uid == request.auth.uid && live.workSessionStatus == 'active' && live.activeSessionId == data.workSessionId &&
+          live.activeSessionGeneration == data.workSessionGeneration;
+    }
+    function validArrivalDistance(data, referenceLatitude, referenceLongitude) {
+      let measuredDistance = latlng.value( data.arrivalLatitude, data.arrivalLongitude ).distance(latlng.value(referenceLatitude, referenceLongitude));
+      return measuredDistance <= 75 && data.arrivalDistanceMeters <= 75 && data.arrivalDistanceMeters >= 0;
+    }
+    function validCurrentRetailerCoordinates(data) {
+      let retailerPath = /databases/$(database)/documents/retailers/$(data.retailerId);
+      let retailer = exists(retailerPath) ? get(retailerPath).data : {};
+      let coordinateStatus = retailer.get('coordinateStatus', '').lower();
+      let reviewStatus = retailer.get('coordinateReviewStatus', '').lower();
+      let coordinateSource = retailer.get('coordinateSource', '');
+      let latitude = retailer.get('latitude', retailer.get('lat', retailer.get('gpsLatitude', retailer.get('gps_latitude', null))));
+      let longitude = retailer.get('longitude', retailer.get('lng', retailer.get('gpsLongitude', retailer.get('gps_longitude', null))));
+      return ( coordinateStatus == 'verified' || (coordinateStatus == '' && (reviewStatus in ['reviewed', 'verified'] || coordinateSource == 'admin_review'))
+          ) && validLatLng(latitude, longitude) && coordinateSource == data.retailerCoordinateSource && validArrivalDistance(data, latitude, longitude);
+    }
+    function validPublishedSnapshotArrivalEvidence(data) {
+      let route = get( /databases/$(database)/documents/route_plans/$(data.planId) ).data;
+      let stopSnapshots = route.get('stopCoordinateSnapshots', {});
+      let snapshot = stopSnapshots is map ? stopSnapshots.get(data.stopId, {}) : {};
+      return route.get('publishedAt', null) is timestamp && routeOpenToSalesman(route) && data.coordinateSnapshotAt == route.publishedAt &&
+          data.coordinateSnapshotAt <= request.time && route.get('stopRetailerIds', {}).get(data.stopId, '') == data.retailerId && snapshot is map &&
+          snapshot.get('retailerId', '') == data.retailerId && snapshot.get('coordinateStatus', '').lower() == 'verified' &&
+          validLatLng(snapshot.get('latitude', null), snapshot.get('longitude', null)) &&
+          snapshot.get('coordinateRevision', '') == data.retailerCoordinateRevision && snapshot.get('coordinateSource', '') == data.retailerCoordinateSource &&
+          validArrivalDistance(data, snapshot.latitude, snapshot.longitude);
+    }
+    function validV2ArrivalEvidence(data) {
+      return data.arrivalMode in ['location_verified', 'manual_unverified'] && data.arrivalEventId == data.eventId && data.arrivedAt is timestamp &&
+          data.arrivedAt == data.arrivalDeviceOccurredAt && data.arrivalDeviceOccurredAt == data.deviceOccurredAt &&
+          data.arrivalWorkSessionId == data.workSessionId && data.arrivalWorkSessionGeneration == data.workSessionGeneration &&
+          data.arrivalSessionEventSequence == data.sessionEventSequence && data.arrivalReceivedAt == request.time && ( data.arrivalMode == 'location_verified'
+          ? data.coordinateReferenceMode in [ 'current_retailer', 'published_snapshot_offline' ] && data.retailerCoordinateRevision.size() > 0 &&
+          data.retailerCoordinateRevision.size() <= 1024 && data.retailerCoordinateSource.size() <= 100 &&
+          validLatLng(data.arrivalLatitude, data.arrivalLongitude) &&
+          data.arrivalAccuracyMeters is number && data.arrivalAccuracyMeters >= 0 && data.arrivalAccuracyMeters <= 25 && data.arrivalDistanceMeters is number &&
+          data.arrivalDistanceMeters >= 0 && data.arrivalDistanceMeters <= 75 && data.arrivalDeviceCapturedAt is timestamp &&
+          data.arrivalDeviceCapturedAt == data.deviceOccurredAt && data.arrivalIsMocked == false && !('arrivalFailureCode' in data) && (
+          data.coordinateReferenceMode == 'current_retailer' ? data.coordinateCheckedAt is timestamp &&
+          data.coordinateCheckedAt <= request.time + duration.value(60, 'm') && validCurrentRetailerCoordinates(data)
+          : data.coordinateSnapshotAt is timestamp && validPublishedSnapshotArrivalEvidence(data) ) : data.coordinateReferenceMode == 'unverified' &&
+          data.retailerCoordinateRevision == '' && data.retailerCoordinateSource == '' && 'arrivalFailureCode' in data &&
+          data.arrivalFailureCode.matches('^(disabled_by_user|service_disabled|permission_denied|permission_denied_forever|unavailable|invalid_coordinates|stale|inaccurate|mocked|missing_retailer_coordinates|outside_radius)$') &&
+          data.overrideReasonCode.matches('^(gps_unavailable|retailer_coordinates_incorrect|manager_approved_exception|safety_or_access_issue)$') && data.overrideNote is string &&
+          data.overrideNote.size() >= 3 && data.overrideNote.size() <= 300 ) && data.keys().hasOnly([ 'planId', 'salesmanUid', 'salesmanCode', 'branchId',
+          'stopId', 'retailerId', 'retailerName', 'lifecycleSchemaVersion', 'status', 'eventId', 'workSessionId', 'workSessionGeneration',
+          'sessionEventSequence', 'deviceOccurredAt', 'receivedAt', 'updatedAt', 'arrivedAt', 'arrivalEventId',
+          'arrivalWorkSessionId', 'arrivalWorkSessionGeneration', 'arrivalSessionEventSequence', 'arrivalDeviceOccurredAt',
+          'arrivalReceivedAt', 'arrivalMode', 'arrivalFailureCode', 'overrideReasonCode', 'overrideNote', 'arrivalLatitude',
+          'arrivalLongitude', 'arrivalAccuracyMeters', 'arrivalDeviceCapturedAt', 'arrivalIsMocked', 'arrivalDistanceMeters', 'retailerCoordinateRevision',
+          'retailerCoordinateSource', 'coordinateReferenceMode', 'coordinateSnapshotAt', 'coordinateCheckedAt',
+          'completedAt', 'skippedAt', 'skipReason', 'notes', 'legacyArrivalEvidence' ]);
+    }
+    function stopEntryStatus(parent, stopId) {
+      let entries = parent.get('stopProgress', {});
+      let entry = entries is map ? entries.get(stopId, {}) : {};
+      return entry is map ? entry.get('status', '') : '';
+    }
+    function validV2StopLifecycleCreate(data, isArrival, isCompleted, isSkipped) {
+      let parentPath = /databases/$(database)/documents/route_plan_progress/$(data.planId + '_' + request.auth.uid);
+      let parent = exists(parentPath) ? get(parentPath).data : {};
+      let entryStatus = stopEntryStatus(parent, data.stopId);
+      return !(entryStatus in ['completed', 'skipped']) && ( isArrival ? parent.get('selectedStopId', '') == data.stopId && validV2ArrivalEvidence(data)
+          : isSkipped ? data.skipReason is string && data.skipReason.size() > 0 && data.skipReason.size() <= 300 : isCompleted && entryStatus == 'arrived' );
+    }
+    function validStopParentAfterProjection(data) {
+      let parentPath = /databases/$(database)/documents/route_plan_progress/$(data.planId + '_' + request.auth.uid);
+      let parent = getAfter(parentPath).data;
+      return parent.salesmanCode == data.salesmanCode && parent.get('branchId', '') == data.branchId && parent.get('lastStopWriteStopId', '') == data.stopId &&
+          parent.lastStopWriteStatus == data.status && parent.lastStopWriteEventId == data.eventId && parent.lastStopWriteWorkSessionGeneration ==
+          data.workSessionGeneration && parent.lastStopWriteSequence == data.sessionEventSequence && parent.updatedAt == request.time &&
+          parent.lastSyncedAt == request.time;
+    }
+    function validV2StopLifecycleUpdate(data, status) {
+      let old = resource.data;
+      let changed = data.diff(old).affectedKeys();
+      let isCompleted = status == 'completed';
+      let isSkipped = status == 'skipped';
+      let oldStatus = old.get('status', '');
+      let oldGeneration = old.get('workSessionGeneration', 0);
+      let oldSequence = old.get('sessionEventSequence', 0);
+      let exactReplay = oldStatus == status && old.get('lifecycleSchemaVersion', 0) == 2 && old.get('eventId', '') == data.eventId &&
+          oldGeneration == data.workSessionGeneration && oldSequence == data.sessionEventSequence &&
+          old.get('deviceOccurredAt', null) == data.deviceOccurredAt && changed.hasOnly(['receivedAt', 'updatedAt']);
+      return exactReplay || (oldStatus == 'arrived' && (isCompleted || isSkipped) && data.workSessionGeneration >= oldGeneration &&
+          (data.workSessionGeneration > oldGeneration || (data.workSessionId == old.get('workSessionId', '') && data.sessionEventSequence > oldSequence)) &&
+          changed.hasOnly([
+          'lifecycleSchemaVersion', 'status', 'eventId', 'workSessionId', 'workSessionGeneration', 'sessionEventSequence', 'deviceOccurredAt', 'receivedAt',
+          'updatedAt', 'completedAt', 'skippedAt', 'skipReason', 'notes']) && (isCompleted ? data.completedAt == data.deviceOccurredAt
+          : data.skippedAt == data.deviceOccurredAt && data.skipReason is string && data.skipReason.size() > 0 && data.skipReason.size() <= 300));
+    }
+    function validV2StopLifecycleMutation(stopDocId, data) {
+      let status = data.status;
+      return status in ['arrived', 'completed', 'skipped'] && validV2StopIdentity(stopDocId, data) &&
+          validV2StopSessionEvent(data, data.eventId, status) && validStopParentAfterProjection(data) &&
+          (resource == null ? validV2StopLifecycleCreate(data, status == 'arrived', status == 'completed', status == 'skipped')
+          : validV2StopLifecycleUpdate(data, status));
+    }
+    function isCanonicalMissingStopGet(stopDocId) {
+      return request.auth.uid.matches('^[A-Za-z0-9_-]+$') && stopDocId.matches( '^.*_' + identityPathPart(request.auth.uid) + '_.*$' );
+    }
+    allow get: if signedIn() && ( resource == null ? canGetMissingStopEvidence(stopDocId) : canReadStopEvidence(resource.data) );
+    allow list: if signedIn() && canReadStopEvidence(resource.data);
+    allow create, update: if signedIn() && validV2StopLifecycleMutation(stopDocId, request.resource.data);
+    allow delete: if false;
+  }
+}
+
+match /documents {
+  function lockRequestPath(id) { return /databases/$(database)/documents/account_lock_requests/$(id); }
+  function lockReceiptPath(id) { return /databases/$(database)/documents/account_lock_receipts/$(id); }
+  function lockLimitPath(email) { return /databases/$(database)/documents/account_lock_limits/$(identityPathPart(email)); }
+  function lockWindowId() { return 'h' + string(int(request.time.toMillis() / 3600000)); }
+  function lockWindowPath() { return /databases/$(database)/documents/account_lock_windows/$(lockWindowId()); }
+  function lockReportAuditPath(id) { return /databases/$(database)/documents/system_audit_logs/$('lock_request_' + id); }
+  function lockUnlockAuditPath(id) { return /databases/$(database)/documents/system_audit_logs/$('lock_unlock_' + id); }
+  function validLockId(id) { return id is string && id.matches('^[a-f0-9]{64}$'); }
+  function activeLockAdmin() { return signedIn() && isActiveProfile() && isAdminProfile(); }
+  function lockRequestKeys() { return ['claimedEmail', 'client', 'localLockedUntil', 'createdAt', 'status', 'reviewedAt', 'reviewedBy']; }
+  function validLockRequestShape(data) {
+    return exactKeys(data, lockRequestKeys()) && data.claimedEmail is string &&
+        data.claimedEmail.size() >= 3 && data.claimedEmail.size() <= 320 && data.claimedEmail == data.claimedEmail.lower() &&
+        data.claimedEmail.matches('^[^\\s@]+@[^\\s@]+[.][^\\s@]+$') && data.client in ['mobile', 'dashboard'] &&
+        data.localLockedUntil is timestamp && data.createdAt is timestamp;
+  }
+  function validPendingLockRequest(data) {
+    return validLockRequestShape(data) && data.createdAt == request.time && data.status == 'pending' && data.reviewedAt == null && data.reviewedBy == null;
+  }
+  function validLockReceiptShape(data) {
+    return exactKeys(data, ['status', 'createdAt', 'reviewedAt']);
+  }
+  function lockAuditKeys() {
+    return ['action', 'entityType', 'entityId', 'summary', 'actorUid', 'actorEmail', 'actorName', 'actorRole', 'metadata', 'createdAt'];
+  }
+  function validLockAuditShape(data, id) {
+    return exactKeys(data, lockAuditKeys()) && data.entityType == 'account_lock_requests' && data.entityId == id &&
+        data.createdAt == request.time;
+  }
+  function validLockReportAudit(data, id, report) {
+    return validLockAuditShape(data, id) && data.action == 'local_lock_reported' && data.summary == 'Unverified local lock reported.' &&
+        data.actorUid == '' && data.actorEmail == '' && data.actorName == '' && data.actorRole == 'unauthenticated' &&
+        data.metadata == {'client': report.client, 'unverified': true};
+  }
+  function validLockWindowAfter(id) {
+    let previous = exists(lockWindowPath()) ? get(lockWindowPath()).data.get('count', 0) : 0;
+    let next = existsAfter(lockWindowPath()) ? getAfter(lockWindowPath()).data : {};
+    return exactKeys(next, ['count', 'requestId']) && next.requestId == id && next.count is int &&
+        next.count == previous + 1 && next.count <= 30;
+  }
+  function validLockLimitAfter(id, report) {
+    let path = lockLimitPath(report.claimedEmail);
+    let previousExists = exists(path);
+    let previous = previousExists ? get(path).data : {};
+    let previousReport = previousExists ? get(lockRequestPath(previous.requestId)).data : {};
+    let next = existsAfter(path) ? getAfter(path).data : {};
+    return (!previousExists || (previous.createdAt is timestamp && (previousReport.status == 'unlocked' || request.time >= previous.createdAt +
+        duration.value(previousReport.client == 'dashboard' ? 15 : 30, 'm')))) &&
+        exactKeys(next, ['claimedEmail', 'requestId', 'createdAt']) && next.claimedEmail == report.claimedEmail && next.requestId == id &&
+        next.createdAt == request.time;
+  }
+  function validAtomicLockReport(id) {
+    let report = getAfter(lockRequestPath(id)).data;
+    let receipt = getAfter(lockReceiptPath(id)).data;
+    let audit = getAfter(lockReportAuditPath(id)).data;
+    return request.auth == null && validLockId(id) && !exists(lockRequestPath(id)) && !exists(lockReceiptPath(id)) &&
+        !exists(lockReportAuditPath(id)) && validPendingLockRequest(report) && validLockReceiptShape(receipt) && receipt.status == 'pending' &&
+        receipt.createdAt == request.time && receipt.reviewedAt == null && validLockReportAudit(audit, id, report) && (validLockWindowAfter(id) || validLockLimitAfter(id, report));
+  }
+  function validLockUnlockAudit(data, id, actorRole) {
+    return validLockAuditShape(data, id) && data.action == 'local_lock_unlocked' && data.summary == 'Admin released a reported local retry delay.' &&
+        data.actorUid == request.auth.uid && data.actorRole == actorRole && data.actorEmail is string && data.actorEmail.size() <= 320 &&
+        data.actorEmail.lower() == request.auth.token.get('email', '').lower() &&
+        data.actorName is string && data.actorName.size() <= 200 && data.metadata == {'unverified': true};
+  }
+  function validAtomicLockUnlock(id) {
+    let previous = get(lockRequestPath(id)).data;
+    let next = getAfter(lockRequestPath(id)).data;
+    let oldReceipt = get(lockReceiptPath(id)).data;
+    let receipt = getAfter(lockReceiptPath(id)).data;
+    let audit = getAfter(lockUnlockAuditPath(id)).data;
+    let actor = caller();
+    return signedIn() && actor._active == true && isAdminFor(actor) && validLockId(id) && validLockRequestShape(next) && previous.status == 'pending' &&
+        previous.reviewedAt == null && previous.reviewedBy == null && next.diff(previous).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy']) &&
+        next.status == 'unlocked' && next.reviewedAt == request.time && next.reviewedBy == request.auth.uid &&
+        validLockReceiptShape(receipt) && oldReceipt.status == 'pending' && oldReceipt.createdAt == previous.createdAt && oldReceipt.reviewedAt == null &&
+        receipt.diff(oldReceipt).affectedKeys().hasOnly(['status', 'reviewedAt']) && receipt.status == 'unlocked' && receipt.reviewedAt == request.time &&
+        !exists(lockUnlockAuditPath(id)) && validLockUnlockAudit(audit, id, actor.role);
+  }
+  match /account_lock_requests/{id} {
+    allow get, list: if activeLockAdmin();
+    allow create: if validAtomicLockReport(id);
+    allow update: if validAtomicLockUnlock(id);
+    allow delete: if false;
+  }
+  match /account_lock_receipts/{id} {
+    allow get: if validLockId(id);
+    allow list: if false;
+    allow create: if validAtomicLockReport(id);
+    allow update: if validAtomicLockUnlock(id);
+    allow delete: if false;
+  }
+  match /account_lock_limits/{emailKey} {
+    allow read, delete: if false;
+    allow create, update: if request.auth == null && request.resource.data.claimedEmail is string &&
+        emailKey == identityPathPart(request.resource.data.claimedEmail) && getAfter(lockRequestPath(request.resource.data.requestId)).data.claimedEmail ==
+        request.resource.data.claimedEmail && validAtomicLockReport(request.resource.data.requestId) &&
+        validLockLimitAfter(request.resource.data.requestId, getAfter(lockRequestPath(request.resource.data.requestId)).data);
+  }
+  match /account_lock_windows/{windowId} {
+    allow read, delete: if false;
+    allow create, update: if request.auth == null && windowId == lockWindowId() && request.resource.data.requestId is string &&
+        validAtomicLockReport(request.resource.data.requestId) && validLockWindowAfter(request.resource.data.requestId);
+  }
+  match /system_audit_logs/{auditId} {
+    function validAuditShape(data) {
+      let metadata = data.get('metadata', {});
+      return data.keys().hasOnly([ 'action', 'entityType', 'entityId', 'summary', 'actorUid', 'actorEmail', 'actorName', 'actorRole', 'metadata',
+          'createdAt' ]) && boundedText(data, 'action', 200) && boundedText(data, 'entityType', 200) && boundedText(data, 'entityId', 400) &&
+          boundedText(data, 'summary', data.get('action', '') == 'permission_matrix_updated' ? 50000 : 2000) && boundedText(data, 'actorEmail', 320) && boundedText(data, 'actorName', 200) &&
+          boundedText(data, 'actorRole', 50) && metadata is map && metadata.keys().size() <= 50 && metadata.keys().join(',').size() <= 2000;
+    }
+    function validDashboardAudit(data) {
+      let actor = caller();
+      let email = request.auth.token.get('email', '').lower();
+      return isDashboardRoleFor(actor) && validAuditShape(data) && data.actorUid == request.auth.uid && data.createdAt == request.time &&
+          data.get('actorRole', '') in ['', actor.get('role', '')] && data.get('actorEmail', '').lower() in ['', email];
+    }
+    allow read: if isAdminProfile();
+    allow create: if ( auditId == 'lock_request_' + request.resource.data.get('entityId', '') &&
+        validAtomicLockReport(request.resource.data.get('entityId', '')) ) || ( auditId == 'lock_unlock_' + request.resource.data.get('entityId', '') &&
+        validAtomicLockUnlock(request.resource.data.get('entityId', '')) ) || ( !auditId.matches('^lock_(request|unlock)_.*$') &&
+        !(request.resource.data.get('action', '') in ['local_lock_reported', 'local_lock_unlocked']) &&
+        request.resource.data.get('entityType', '') != 'account_lock_requests' && signedIn() && validDashboardAudit(request.resource.data) );
+    allow update, delete: if false;
+  }
+}
+
+match /documents {
+  function scenarioRunPath(runId) { return /databases/$(database)/documents/scenario_runs/$(runId); }
+  function scenarioAccessId(uid, runId) { return identityPathPart(uid) + '_' + identityPathPart(runId); }
+  function scenarioAccessPath(uid, runId) { return /databases/$(database)/documents/scenario_run_access/$(scenarioAccessId(uid, runId)); }
+  function scenarioAdminSeedActor(actor) { return isCompanyMemberFor(actor) && isAdminFor(actor); }
+  function scenarioRunHasState(runId, state) {
+    let path = scenarioRunPath(runId);
+    let present = exists(path);
+    let run = present ? get(path).data : {};
+    return present && run.get('runId', '') == runId && run.get('state', '') == state;
+  }
+  function scenarioIndexMatchesActor(index, runId, actor) {
+    let role = actor.get('role', '');
+    return index.get('uid', '') == request.auth.uid && index.get('runId', '') == runId && index.get('role', '') == role && ( role in ['admin', 'developer'] || (
+        role == 'salesman' && actor.get('salesmanCode', '') != '' && actor.get('branchId', '') != '' && index.get('salesmanUid', '') == request.auth.uid &&
+        index.get('salesmanCode', '') == actor.get('salesmanCode', '') && index.get('branchId', '') == actor.get('branchId', '') ) || ( role == 'supervisor' &&
+        actor.get('branchId', '') != '' && index.get('branchId', '') == actor.get('branchId', '') && index.get('assignedSalesmanCodes', null) is list &&
+        index.assignedSalesmanCodes == actor.get('assignedSalesmanCodes', []) ) || ( role == 'branch_manager' && actor.get('branchId', '') != '' &&
+        index.get('branchId', '') == actor.get('branchId', '') ) );
+  }
+  function scenarioHasReadyRunAccess(runId, actor) {
+    let indexPath = scenarioAccessPath(request.auth.uid, runId);
+    let indexExists = exists(indexPath);
+    let index = indexExists ? get(indexPath).data : {};
+    return signedIn() && isCompanyMemberFor(actor) && scenarioRunHasState(runId, 'ready') && indexExists && scenarioIndexMatchesActor(index, runId, actor);
+  }
+  match /scenario_runs/{runId} {
+    function scenarioCanReadRun(runId, run) {
+      let actor = caller();
+      return signedIn() && isCompanyMemberFor(actor) && run.get('runId', '') == runId && ( ( run.get('state', '') == 'preparing' &&
+          scenarioAdminSeedActor(actor) && run.get('createdByUid', '') == request.auth.uid ) || ( run.get('state', '') == 'ready' &&
+          scenarioHasReadyRunAccess(runId, actor) ) );
+    }
+    function validScenarioRunCreate(runId, data) {
+      let day = '^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
+      return data.keys().hasOnly([ 'runId', 'targetProjectId', 'generatorVersion', 'seed', 'scenarioAsOfDate', 'timeZone', 'rangeStart', 'rangeEnd',
+          'sourceSnapshotHash', 'counts', 'createdByUid', 'createdAt', 'readyAt', 'state' ]) && data.keys().size() == 14 &&
+          runId.matches('^[A-Za-z0-9_-]{1,64}$') && data.runId == runId && data.targetProjectId is string && data.targetProjectId.size() > 0 &&
+          data.generatorVersion is string && data.generatorVersion.size() > 0 && data.seed is int && data.get('scenarioAsOfDate', null) is string &&
+          data.scenarioAsOfDate.matches(day) && data.timeZone == 'Asia/Kuala_Lumpur' && data.get('rangeStart', null) is string &&
+          data.rangeStart.matches(day) && data.get('rangeEnd', null) is string &&
+          data.rangeEnd.matches(day) && data.get('sourceSnapshotHash', null) is string &&
+          data.sourceSnapshotHash.matches('^[A-Fa-f0-9]{64}$') && data.counts is map && data.createdByUid == request.auth.uid &&
+          data.createdAt == request.time && data.readyAt == null && data.state == 'preparing';
+    }
+    function validScenarioRunReadyTransition(runId) {
+      let next = request.resource.data;
+      let old = resource.data;
+      return old.runId == runId && old.state == 'preparing' && old.createdByUid == request.auth.uid &&
+          next.runId == runId && next.state == 'ready' && next.readyAt == request.time &&
+          changedExactly(['state', 'readyAt']);
+    }
+    function scenarioChildCollectionAllowed(collection) {
+      return collection in [ 'weekly_coverage', 'activity_weeks', 'orders', 'visits', 'conversation_outcomes', 'plans', 'route_plan_progress',
+          'route_stop_progress', 'forecasts' ];
+    }
+    function scenarioCanReadChild(runId, collection, data) {
+      let actor = caller();
+      let role = actor.get('role', '');
+      return scenarioChildCollectionAllowed(collection) && data.get('scenarioRunId', '') == runId && data.get('synthetic', false) == true &&
+          scenarioHasReadyRunAccess(runId, actor) && ( role in ['admin', 'developer'] || ( role == 'salesman' &&
+          data.get('salesmanUid', '') == request.auth.uid && data.get('salesmanCode', '') == actor.salesmanCode &&
+          data.get('branchId', '') == actor.branchId && ( collection != 'weekly_coverage' || data.get('scopeType', '') == 'salesperson' ) ) || (
+          role == 'supervisor' && actor.branchId != '' && data.get('branchId', '') == actor.branchId &&
+          data.get('salesmanCode', '') is string && data.get('salesmanCode', '') in actor.assignedSalesmanCodes ) || ( role == 'branch_manager' &&
+          actor.branchId != '' && data.get('branchId', '') == actor.branchId ) );
+    }
+    function scenarioCanSeedChild(runId, collection, data) {
+      let actor = caller();
+      return scenarioChildCollectionAllowed(collection) && scenarioAdminSeedActor(actor) && scenarioRunHasState(runId, 'preparing') &&
+          data.get('scenarioRunId', '') == runId && data.get('synthetic', false) == true;
+    }
+    allow get: if scenarioCanReadRun(runId, resource.data);
+    allow create, update: if signedIn() && scenarioAdminSeedActor(caller()) && ( resource == null ? validScenarioRunCreate(runId, request.resource.data)
+        : validScenarioRunReadyTransition(runId) );
+    allow delete: if false;
+    match /{collection}/{documentId} {
+      allow get, list: if scenarioCanReadChild( runId, collection, resource.data );
+      allow create, update: if resource == null ? scenarioCanSeedChild(runId, collection, request.resource.data)
+          : scenarioCanSeedChild(runId, collection, resource.data) && scenarioCanSeedChild(runId, collection, request.resource.data);
+      allow delete: if false;
+    }
+  }
+  match /scenario_run_access/{accessId} {
+    function validScenarioAccessIndex(uid, runId, data) {
+      return data.keys().hasOnly([ 'uid', 'runId', 'role', 'branchId', 'salesmanUid', 'salesmanCode', 'assignedSalesmanCodes' ]) && data.keys().size() == 7 &&
+          data.uid == uid && uid.size() > 0 && data.runId == runId && data.role in [ 'admin', 'developer', 'supervisor', 'branch_manager', 'salesman' ] &&
+          data.branchId is string && data.salesmanUid is string && data.salesmanCode is string && data.assignedSalesmanCodes is list && (
+          data.role != 'salesman' || (data.salesmanUid == uid && data.salesmanCode.size() > 0 && data.branchId.size() > 0) ) &&
+          (data.role != 'branch_manager' || data.branchId.size() > 0);
+    }
+    function scenarioCanCreateAccessIndex(accessId, data) {
+      let actor = caller();
+      let uid = data.get('uid', null);
+      let runId = data.get('runId', null);
+      return signedIn() && scenarioAdminSeedActor(actor) && uid is string && runId is string &&
+          accessId == scenarioAccessId(uid, runId) && scenarioRunHasState(runId, 'preparing') && validScenarioAccessIndex(uid, runId, data);
+    }
+    function scenarioCanListAccessIndex(data) {
+      let actor = caller();
+      return signedIn() && isCompanyMemberFor(actor) && data.get('uid', '') == request.auth.uid;
+    }
+    function scenarioCanReadAccessIndex(accessId, data) {
+      let actor = caller();
+      let runId = data.get('runId', '');
+      return signedIn() && isCompanyMemberFor(actor) && data.get('uid', '') == request.auth.uid && accessId == scenarioAccessId(request.auth.uid, runId) &&
+          scenarioHasReadyRunAccess(runId, actor);
+    }
+    allow get: if scenarioCanReadAccessIndex(accessId, resource.data);
+    allow list: if scenarioCanListAccessIndex(resource.data);
+    allow create: if scenarioCanCreateAccessIndex(accessId, request.resource.data);
+    allow update, delete: if false;
+  }
+}
+
+match /documents {
+  match /login_attempts/{docId} {
+    allow read, write: if false;
+  }
+  match /branches/{docId} {
+    allow read: if isCompanyMember();
+    allow write: if isAdminProfile();
+  }
+  match /retailers/{retailerId} {
+    function dashboardCanWriteBranchRecord(data) {
+      let actor = caller();
+      return actor._active == true && actor.role in ['admin', 'developer'];
+    }
+    function retailerIsRetired(data) { return text(data, 'status', 'status') == 'retired' || ('retiredAt' in data && data.retiredAt != null); }
+    function validRetailerDashboardUpdate(existing, incoming, actor) {
+      let role = actor.get('role', '');
+      let changed = incoming.diff(existing).affectedKeys();
+      let retirementRequested = text(incoming, 'status', 'retailerStatus') == 'retired' || changed.hasAny([ 'retiredAt', 'retiredByUid', 'retiredByRole' ]);
+      let validRetirement = !retirementRequested || ( ![existing.get('isDemo', false), existing.get('is_demo', false), existing.get('demo', false)].hasAny([true, 'true']) && changed.hasOnly([ 'status', 'stockListVisible', 'retiredAt', 'retiredByUid', 'retiredByRole', 'updatedAt' ]) &&
+          incoming.status == 'retired' && incoming.stockListVisible == false && incoming.retiredAt == request.time && incoming.updatedAt == request.time &&
+          incoming.retiredByUid == request.auth.uid && incoming.retiredByRole == role );
+      let verifiedNow = incoming.get('coordinateStatus', '') == 'verified' && changed.hasAny([ 'coordinateStatus', 'latitude', 'longitude', 'coordinateSource',
+          'coordinateReviewStatus', 'coordinateReviewedByUid', 'coordinateReviewedAt' ]);
+      let validVerification = !verifiedNow || ( incoming.get('coordinateSource', '') == 'admin_review' && incoming.get('coordinateReviewStatus', '') == 'reviewed' &&
+          incoming.get('coordinateReviewedByUid', '') == request.auth.uid && incoming.get('coordinateReviewedAt', null) == request.time );
+      return actor._active == true && role in ['admin', 'developer'] && !retailerIsRetired(existing) && validRetirement && validVerification;
+    }
+    function canReadRetailer(data) {
+      let actor = caller();
+      let role = actor.get('role', '');
+      let branch = actor.get('branchId', '');
+      let code = actor.get('salesmanCode', '');
+      return actor._active == true && ( role in ['admin', 'developer'] || ( role in ['branch_manager', 'supervisor', 'salesman'] && branch != '' &&
+          text(data, 'branchId', 'branch_id') == branch ) || ( role == 'salesman' && code != '' && ( data.get('assignedSalesmanId', null) == code ||
+          data.get('assignedSalesmanId', null) == request.auth.uid ) ) );
+    }
+    allow read: if signedIn() && canReadRetailer(resource.data);
+    allow create: if dashboardCanWriteBranchRecord(request.resource.data);
+    allow update: if canUpdateRetailer(caller());
+    function canUpdateRetailer(actor) {
+      let next = request.resource.data;
+      let old = resource.data;
+      return ( isSalesmanFor(actor) &&
+          old.get('assignedSalesmanId', '') != '' && old.get('assignedSalesmanId', '') in [ actor.salesmanCode, request.auth.uid
+          ] && next.get('lastSalesmanUid', '') == request.auth.uid && next.diff(old).affectedKeys().hasOnly([
+          'progress', 'lastOrderId', 'lastSubmittedAt', 'lastSalesmanUid', 'lastSalesmanId', 'lastSalesmanName', 'updatedAt', 'step3At', 'pendingSignatures' ])
+          ) || validRetailerDashboardUpdate(old, next, actor);
+    }
+    allow delete: if false;
+  }
+  match /special_requests/{docId} {
+    function specialRequestRoles() { return [ 'admin', 'developer', 'supervisor', 'branch_manager', 'salesman', 'Sales Representative', 'sales representative' ]; }
+    function specialRequestOrderPath(data) { return /databases/$(database)/documents/orders/$(data.orderId); }
+    function specialRequestKeys() {
+      return [ 'retailerName', 'requestedItem', 'reason', 'salesmanCode', 'branchId', 'createdByUid', 'createdByRole', 'createdAt', 'updatedAt', 'status',
+          'approvalStep', 'lastActorUid', 'lastActorRole', 'lastActionAt' ];
+    }
+    function specialRequestStageKeys() { return [ 'status', 'approvalStep', 'updatedAt', 'lastActorUid', 'lastActorRole', 'lastActionAt' ]; }
+    function specialRequestStatus(data) { return 'status' in data && data.status is string ? data.status : ''; }
+    function specialRequestInViewerScope(data, actor) {
+      return managesScope(actor, routeSalesmanCode(data), routeBranchId(data)) || ( actor._active == true &&
+          actor.role == 'salesman' && routeSalesmanCode(data) == actor.salesmanCode && data.get('createdByUid', '') == request.auth.uid );
+    }
+    function specialRequestTargetAllowedForCreator(data, actor) {
+      let role = actor.role;
+      return role in ['admin', 'developer'] || ( role == 'supervisor' && codeInTeam(routeSalesmanCode(data), actor.assignedSalesmanCodes) && (
+          actor.branchId == '' || routeBranchId(data) == actor.branchId ) ) || ( role == 'salesman' &&
+          routeSalesmanCode(data) == actor.salesmanCode && ( actor.branchId == '' ||
+          routeBranchId(data) == actor.branchId ) );
+    }
+    function validSpecialRequestOrderLink(data) {
+      return (!('orderId' in data) || (nonEmptyText(data.orderId, 200))) &&
+          data.get('requestType', 'other') in [ 'non_catalogue_item', 'urgent_delivery', 'pricing', 'other' ];
+    }
+    function specialRequestOrderOwnedByCreator(data, actor) {
+      return actor.role != 'salesman' || !('orderId' in data) || ( exists(specialRequestOrderPath(data)) &&
+          get(specialRequestOrderPath(data)).data.get('salesmanUid', '') == request.auth.uid );
+    }
+    function validSpecialRequestShape(data) {
+      return data.keys().hasOnly( specialRequestKeys().concat( ['orderId', 'requestType', 'retailerId', 'selectedProductId'] ) ) &&
+          validSpecialRequestOrderLink(data) && validSpecialRequestCatalogueIdentity(data) && nonEmptyText(data.retailerName, 200) && nonEmptyText(data.requestedItem, 200) &&
+          data.reason is string && data.reason.size() <= 1000 && nonEmptyText(data.salesmanCode, 100) && nonEmptyText(data.branchId, 100);
+    }
+    function validSpecialRequestCreate(data) {
+      let actor = caller();
+      let role = actor.get('role', '');
+      return actor._active == true && role in ['admin', 'developer', 'supervisor', 'salesman'] && validSpecialRequestShape(data) &&
+          data.createdByUid == request.auth.uid && data.createdByRole == role && data.lastActorUid == request.auth.uid && data.lastActorRole == role &&
+          data.createdAt == request.time && data.updatedAt == request.time && data.lastActionAt == request.time && ( role == 'salesman'
+          ? data.status == 'pending_supervisor' && data.approvalStep == 'Supervisor' : data.status == 'pending_admin' && data.approvalStep == 'Admin' ) &&
+          specialRequestTargetAllowedForCreator(data, actor) && specialRequestOrderOwnedByCreator(data, actor);
+    }
+    function specialRequestDecisionActor(status, data, actor) {
+      let role = actor.role;
+      return role in ['admin', 'developer'] || ( role == 'supervisor' && status == 'pending_supervisor' && data.createdByUid != request.auth.uid &&
+          routeSalesmanCode(data) in actor.assignedSalesmanCodes );
+    }
+    function specialRequestCreatorRoleIsValid(data) {
+      return 'createdByRole' in data && data.createdByRole in specialRequestRoles();
+    }
+    function specialRequestCreatorPairIsValid(data) {
+      return data.keys().hasAll(['createdByUid', 'createdByRole']) && data.createdByUid is string && data.createdByUid.size() > 0 &&
+          specialRequestCreatorRoleIsValid(data);
+    }
+    function validSpecialRequestCatalogueIdentity(data) {
+      return (!data.keys().hasAny(['retailerId', 'selectedProductId']) || (data.get('requestType', '') == 'non_catalogue_item' &&
+          data.get('orderId', '') != '' && nonEmptyText(data.get('retailerId', ''), 200) &&
+          get(specialRequestOrderPath(data)).data.get('retailerId', '') == data.retailerId)) &&
+          (!('selectedProductId' in data) || (nonEmptyText(data.selectedProductId, 100) && data.selectedProductId.matches('^[^/]+$') &&
+          exists(/databases/$(database)/documents/products/$(data.selectedProductId))));
+    }
+    function specialRequestCatalogueSettingsReady(data, product) {
+      let retailerId = data.retailerId;
+      let settingsPath = /databases/$(database)/documents/retailer_score_sheet_settings/$(retailerId);
+      let settings = getAfter(settingsPath).data;
+      let productId = product.get('productId', '') == '' ? data.catalogueProductId : product.productId;
+      let override = settings.get('productOverrides', {}).get(productId, {});
+      return (settings.get('visibleProductIds', []).size() == 0 || productId in settings.visibleProductIds) &&
+          !(productId in settings.get('hiddenProductIds', [])) && !(productId in settings.get('disabledProductIds', [])) &&
+          override.get('isVisible', true) == true && override.get('status', 'active') != 'hidden';
+    }
+    function specialRequestCatalogueReady(data) {
+      let product = getAfter(/databases/$(database)/documents/products/$(data.catalogueProductId)).data;
+      return get(specialRequestOrderPath(data)).data.get('retailerId', '') == data.retailerId && (data.get('selectedProductId', '') == '' || data.selectedProductId == data.catalogueProductId) &&
+          (!existsAfter(/databases/$(database)/documents/retailer_score_sheet_settings/$(data.retailerId)) ||
+          specialRequestCatalogueSettingsReady(data, product));
+    }
+    function validSpecialRequestCatalogueStage(actor) {
+      let data = request.resource.data;
+      let productId = data.get('catalogueProductId', '');
+      return productId == '' ? !('catalogueProductId' in data) && !(actor.role in ['admin', 'developer'] &&
+          data.get('requestType', '') == 'non_catalogue_item' && data.get('retailerId', '') != '' && data.status == 'approved')
+          : actor.role in ['admin', 'developer'] && data.get('requestType', '') == 'non_catalogue_item' && data.status == 'approved' &&
+          productId is string && productId.size() <= 100 && productId.matches('^[^/]+$') && resource.data.get('catalogueProductId', '') == '' &&
+          specialRequestCatalogueReady(data);
+    }
+    function validSpecialRequestTransition(actor) {
+      let next = request.resource.data;
+      let old = resource.data;
+      let oldStatus = specialRequestStatus(old);
+      let newStatus = specialRequestStatus(next);
+      return (oldStatus in [ 'pending_supervisor', 'pending_branch_manager', 'pending_admin' ] || (oldStatus == 'approved' && newStatus == 'approved' &&
+          old.get('requestType', '') == 'non_catalogue_item' && old.get('catalogueProductId', '') == '' &&
+          next.get('catalogueProductId', '') != '' && actor.role in ['admin', 'developer'])) && ( ( newStatus == 'approved' &&
+          next.approvalStep == 'Approved' ) || ( newStatus == 'rejected' && next.approvalStep == 'Rejected' ) ) &&
+          specialRequestDecisionActor(oldStatus, old, actor);
+    }
+    function validSpecialRequestUpdate() {
+      let next = request.resource.data;
+      let actor = caller();
+      let role = actor.get('role', '');
+      return actor._active == true && role in ['admin', 'developer', 'supervisor'] &&
+          specialRequestInViewerScope(resource.data, actor) && changedKeys().hasOnly(specialRequestStageKeys().concat(['catalogueProductId'])) && validSpecialRequestCatalogueStage(actor) &&
+          next.updatedAt == request.time && next.lastActionAt == request.time &&
+          next.lastActorUid == request.auth.uid && next.lastActorRole == role && validSpecialRequestTransition(actor);
+    }
+    function validSpecialRequestLegacyUpgrade() {
+      let old = resource.data;
+      let incoming = request.resource.data;
+      let actor = caller();
+      let role = actor.get('role', '');
+      let oldCreatedAt = old.get('createdAt', null);
+      return actor._active == true && role in ['admin', 'developer'] && specialRequestStatus(old) in [
+          '', 'pending_supervisor', 'pending_branch_manager', 'pending_admin' ] && validSpecialRequestShape(incoming) &&
+          incoming.status == 'pending_supervisor' && incoming.approvalStep == 'Supervisor' && incoming.updatedAt == request.time &&
+          incoming.lastActionAt == request.time && incoming.lastActorUid == request.auth.uid && incoming.lastActorRole == role && (
+          specialRequestCreatorPairIsValid(old) ? incoming.createdByUid == old.createdByUid && incoming.createdByRole == old.createdByRole
+          : incoming.createdByUid == request.auth.uid && incoming.createdByRole == role ) && incoming.createdAt == (
+          oldCreatedAt is timestamp ? oldCreatedAt : request.time ) && ( !('retailerName' in old) || incoming.retailerName == old.retailerName ) &&
+          ( !('requestedItem' in old) || incoming.requestedItem == old.requestedItem ) && ( !('reason' in old) || old.reason == '' ||
+          incoming.reason == old.reason );
+    }
+    allow read: if specialRequestInViewerScope( resource.data, caller() );
+    allow create: if !exists( /databases/$(database)/documents/special_requests/$(docId) ) && validSpecialRequestCreate(request.resource.data);
+    allow update: if resource.data.keys().hasAll(specialRequestKeys()) ? validSpecialRequestUpdate() : validSpecialRequestLegacyUpgrade();
+    allow delete: if caller().get('role', '') == 'developer';
+  }
+  match /cms_backups/{docId} {
+    allow read, write: if isAdminProfile();
+  }
+  match /system_settings/{docId} {
+    allow read: if isDashboardRole();
+    allow get: if docId == 'order_purge' && isSalesmanProfile();
+    allow write: if isAdminProfile();
+  }
+  match /purge_exports/{docId} {
+    allow read, write: if isAdminProfile();
+  }
+  match /demand_forecasts/{docId} {
+    allow read: if isDashboardRole();
+    allow write: if false;
+  }
+  match /forecast_training_runs/{docId} {
+    allow read: if isDashboardRole();
+    allow write: if false;
+  }
+  match /forecast_imports/{docId} {
+    allow read: if isDashboardRole();
+    allow write: if false;
+  }
+  match /dashboard_notifications/{docId} {
+    function notificationRoleTarget(notification) { return text(notification, 'roleTarget', 'role_target'); }
+    function canReadDashboardNotification(notification) {
+      let actor = caller();
+      let role = actor.get('role', '');
+      return actor._active == true && ( role in ['admin', 'developer'] || ( role == 'supervisor' &&
+          notificationRoleTarget(notification) == 'supervisor' && codeInTeam(routeSalesmanCode(notification),
+          actor.assignedSalesmanCodes) ) || ( role == 'branch_manager' && actor.branchId != '' &&
+          routeBranchId(notification) == actor.branchId && notificationRoleTarget(notification) in [ 'supervisor', 'branch_manager' ] ) );
+    }
+    allow read: if canReadDashboardNotification(resource.data);
+    allow write: if false;
+  }
+  match /notification_read_state/{uid} {
+    allow read: if signedIn() && request.auth.uid == uid && isActiveProfile();
+    function validReadState(changed) {
+      let data = request.resource.data;
+      return signedIn() && request.auth.uid == uid && isActiveProfile() && changed.hasOnly(['readThroughAt', 'updatedAt']) &&
+          'readThroughAt' in data && data.readThroughAt == request.time && (!('updatedAt' in data) || data.updatedAt == request.time);
+    }
+    allow create: if validReadState(request.resource.data.keys());
+    allow update: if validReadState(changedKeys());
+    allow delete: if false;
+  }
+  match /action_centre_items/{docId} {
+    allow read: if isDashboardRole();
+    allow write: if false;
+  }
+  match /weekly_ai_summaries/{docId} {
+    function canReadWeeklyAiSummary(summary) {
+      let actor = caller();
+      let role = actor.get('role', '');
+      return actor._active == true && ( role in ['admin', 'developer'] || ( role == 'supervisor' && summary.scopeType == 'salesman' &&
+          summary.scopeKey in actor.assignedSalesmanCodes ) || ( role == 'branch_manager' && actor.branchId != '' &&
+          summary.scopeType == 'branch' && summary.scopeKey == actor.branchId ) );
+    }
+    allow read: if canReadWeeklyAiSummary(resource.data);
+    allow write: if false;
+  }
+  match /ai_runs/{docId} {
+    allow read: if isAdminProfile();
+    allow write: if false;
+  }
+  match /action_centre_user_status/{docId} {
+    function validActionStatusDocument(data) {
+      return data.keys().hasOnly(['uid', 'actionId', 'status', 'note', 'updatedAt']) && data.status in ['new', 'in_review', 'resolved', 'ignored'] &&
+          data.actionId.size() <= 200 && (!('note' in data) || (data.note is string && data.note.size() <= 1000));
+    }
+    allow get: if signedIn() && (resource == null ? docId.size() > request.auth.uid.size() + 1 && docId[0:request.auth.uid.size() + 1] == request.auth.uid + '_'
+        : resource.data.uid == request.auth.uid) && accountNotSuspended();
+    allow list: if signedIn() && resource.data.uid == request.auth.uid && accountNotSuspended();
+    allow create: if lifecycleWritable() && request.resource.data.uid == request.auth.uid && 'actionId' in request.resource.data &&
+        request.resource.data.actionId is string && request.resource.data.actionId.size() > 0 &&
+        docId == request.auth.uid + '_' + request.resource.data.actionId && validActionStatusDocument(request.resource.data);
+    allow update: if lifecycleWritable() && resource.data.uid == request.auth.uid && request.resource.data.uid == resource.data.uid && validActionStatusDocument(request.resource.data);
+    allow delete: if lifecycleWritable() && resource.data.uid == request.auth.uid;
+  }
+  match /dashboard_preferences/{uid} {
+    allow read: if signedIn() && request.auth.uid == uid && accountNotSuspended();
+    allow create, update: if lifecycleWritable() && request.auth.uid == uid && request.resource.data.keys().size() <= 50;
+    allow delete: if lifecycleWritable() && request.auth.uid == uid;
+  }
+  match /system_access_config/{docId} {
+    function validPermissionConfigAudit(data) {
+      let auditId = data.get('auditDocumentId', '');
+      let audit = /databases/$(database)/documents/system_audit_logs/$(auditId);
+      return auditId is string && auditId.size() >= 12 && auditId.size() <= 120 && !exists(audit) && existsAfter(audit) &&
+          validPermissionAuditEntry(getAfter(audit).data, data);
+    }
+    function validPermissionAuditEntry(audit, data) {
+      let metadata = audit.get('metadata', {});
+      return audit.get('action', '') == 'permission_matrix_updated' && audit.get('entityType', '') == 'system_access_config' &&
+          audit.get('entityId', '') == 'permission_matrix' && audit.get('actorUid', '') == request.auth.uid && audit.get('createdAt', null) == request.time &&
+          metadata is map && metadata.get('nextRevision', -1) == data.revision;
+    }
+    function mirrorRevisionMatches(role, revision) {
+      let mirrorPath = /databases/$(database)/documents/role_permission_grants/$(role);
+      return existsAfter(mirrorPath) && getAfter(mirrorPath).data.get('revision', -1) == revision;
+    }
+    function validGrantList(value) { return value is list && value.size() <= 200; }
+    function validAccessConfigWrite(docId, data, previous) {
+      let roles = data.get('roles', null);
+      return docId == 'permission_matrix' && data.keys().hasOnly([ 'roles', 'revision', 'updatedByUid', 'updatedByName',
+          'updatedByEmail', 'updatedAt', 'auditDocumentId' ]) && data.keys().hasAll([ 'roles', 'revision', 'updatedByUid', 'updatedAt', 'auditDocumentId' ]) &&
+          data.updatedByUid == request.auth.uid && data.updatedAt == request.time && data.revision is int && ( previous == null ? data.revision == 1
+          : data.revision == previous.get('revision', 0) + 1 ) && roles is map && roles.keys().hasOnly(['admin', 'branch_manager', 'supervisor']) &&
+          mirrorRevisionMatches('supervisor', data.revision) && mirrorRevisionMatches('branch_manager', data.revision) &&
+          (!roles.keys().hasAny(['admin']) || validGrantList(roles['admin'])) && (!roles.keys().hasAny(['branch_manager']) ||
+          validGrantList(roles['branch_manager'])) && (!roles.keys().hasAny(['supervisor']) || validGrantList(roles['supervisor'])) &&
+          validPermissionConfigAudit(data);
+    }
+    allow read: if isAdminProfile();
+    allow create: if isAdminProfile() && validAccessConfigWrite(docId, request.resource.data, null);
+    allow update: if isAdminProfile() && validAccessConfigWrite(docId, request.resource.data, resource.data);
+    allow delete: if false;
+  }
+  match /role_permission_grants/{docId} {
+    function matrixTokens() {
+      return [ 'products:view', 'products:create', 'products:edit', 'products:delete', 'departments:view', 'departments:create', 'departments:edit',
+          'departments:delete', 'categories:view', 'categories:create', 'categories:edit', 'categories:delete', 'retailer_scoresheets:view',
+          'retailer_scoresheets:create', 'retailer_scoresheets:edit', 'retailer_scoresheets:delete', 'department_pic:view', 'department_pic:create',
+          'department_pic:edit', 'department_pic:delete', 'website_pages:view', 'website_pages:create', 'website_pages:edit', 'website_pages:delete' ];
+    }
+    function matrixDocumentPath() { return /databases/$(database)/documents/system_access_config/permission_matrix; }
+    function viewBacksWrites(module, grants) {
+      return (module + ':view') in grants || !((module + ':create') in grants || (module + ':edit') in grants || (module + ':delete') in grants);
+    }
+    function validGrantMirror(role, data) {
+      let matrix = getAfter(matrixDocumentPath()).data;
+      let row = matrix.get('roles', {}).get(role, null);
+      let grants = data.get('grants', null);
+      return role in ['supervisor', 'branch_manager'] && existsAfter(matrixDocumentPath()) &&
+          exactKeys(data, [ 'role', 'grants', 'revision', 'updatedByUid', 'updatedAt', 'shape' ]) && data.shape == 3 && data.role == role && data.revision == matrix.revision &&
+          data.updatedByUid == request.auth.uid && data.updatedAt == request.time && grants is list && grants.size() <= 24 && row is list &&
+          grants.hasOnly(matrixTokens()) && grants.hasOnly(row) && row.hasOnly(grants) && viewBacksWrites('products', grants) && viewBacksWrites('departments', grants) &&
+          viewBacksWrites('categories', grants) && viewBacksWrites('retailer_scoresheets', grants) && viewBacksWrites('department_pic', grants) &&
+          viewBacksWrites('website_pages', grants);
+    }
+    function canReadGrantMirror(actor) { return isAdminFor(actor) || (isDashboardRoleFor(actor) && actor.get('role', '') == docId); }
+    allow get: if canReadGrantMirror(caller());
+    allow create, update: if isAdminProfile() && validGrantMirror(docId, request.resource.data);
+    allow delete: if false;
+  }
+  match /config/{docId} {
+    allow read: if (docId == 'plan' || docId == 'lifecycle') ? isCompanyMember() : docId == 'usage' ? isAdminProfile() : false;
+    allow write: if false;
+  }
+  match /{collection}/{document=**} {
+    allow read, write: if false;
+  }
+}
+}
+}

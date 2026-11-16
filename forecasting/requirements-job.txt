@@ -1,0 +1,6 @@
+-r requirements-ai-runner.txt
+-r ../platform_service/requirements.txt
+pandas==2.2.3
+numpy==1.26.4
+scipy==1.15.3
+statsmodels==0.14.6

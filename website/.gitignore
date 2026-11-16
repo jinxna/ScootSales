@@ -1,0 +1,10 @@
+node_modules/
+.output/
+.tanstack/
+dist/
+*.local
+.env
+qa-output/
+.taste-skill/
+site-static/
+images/preview/

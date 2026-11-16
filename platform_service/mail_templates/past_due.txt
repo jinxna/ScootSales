@@ -1,0 +1,8 @@
+The payment for {{ params.companyName }} is overdue.
+
+Pay the open invoice soon. Then your account stays active.
+
+If you already paid, contact the Scoot Sales team.
+
+Scoot Sales
+This is an automatic message.

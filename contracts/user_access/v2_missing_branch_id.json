@@ -1,0 +1,42 @@
+{
+  "description": "v2 record without the branchId key: rules deny and both readers reject it.",
+  "uid": "ct-nobranchkey",
+  "userDoc": {
+    "uid": "ct-nobranchkey",
+    "email": "ct-nobranchkey@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "employeeCode": "S112",
+    "branchId": "B1"
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-nobranchkey",
+    "userDocId": "ct-nobranchkey@contracts.test",
+    "employeeCode": "S112",
+    "userId": "S112",
+    "email": "ct-nobranchkey@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "isActive": true,
+    "branch_id": "B1",
+    "supervisorId": "",
+    "supervisor_id": "",
+    "supervisorUid": "",
+    "seatClass": "salesperson",
+    "assignedSalesmanCodes": {
+      "$sentinel": "delete"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "rejected",
+    "pythonIdentity": "rejected",
+    "pythonAdminAccess": "deny"
+  }
+}

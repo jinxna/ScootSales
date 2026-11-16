@@ -1,0 +1,226 @@
+[
+  {
+    "confidence": 0.35,
+    "confidenceLabel": "low",
+    "forecast": {
+      "dataCutoff": null,
+      "generatedAt": null,
+      "model": null,
+      "modelVersion": null,
+      "nonZeroPeriods": 0,
+      "observedPeriods": 0,
+      "periodDays": 7.0,
+      "periodStart": null,
+      "point": null,
+      "pointSemantics": "",
+      "probabilityNonZero": null,
+      "status": "insufficient_history"
+    },
+    "inputs": {
+      "lastOrderDaysAgo": 21,
+      "lastOrderQty": 12,
+      "patternMeanQty": 12.0,
+      "runRatePerDay": null
+    },
+    "packingSize": "",
+    "productId": "P-MAGGI-5",
+    "productName": "",
+    "rationale": "Insufficient usable weekly history (no weekly series); no order quantity suggested.",
+    "retailerId": "R-KCH-0001",
+    "suggestedQty": null,
+    "suggestionStatus": "insufficient_history",
+    "unitOfMeasure": ""
+  },
+  {
+    "confidence": 0.805,
+    "confidenceLabel": "high",
+    "forecast": {
+      "dataCutoff": null,
+      "generatedAt": null,
+      "model": null,
+      "modelVersion": null,
+      "nonZeroPeriods": 3,
+      "observedPeriods": 0,
+      "periodDays": 7.0,
+      "periodStart": null,
+      "point": null,
+      "pointSemantics": "",
+      "probabilityNonZero": null,
+      "status": "legacy"
+    },
+    "inputs": {
+      "lastOrderDaysAgo": 21,
+      "lastOrderQty": 10,
+      "patternMeanQty": 8.0,
+      "runRatePerDay": 0.5
+    },
+    "packingSize": "",
+    "productId": "P-MILO-1KG",
+    "productName": "",
+    "rationale": "Last ordered 21 days ago (qty 10). Run-rate 0.5/day projects 10.5 units over the gap; typical order 8.0.",
+    "retailerId": "R-KCH-0001",
+    "suggestedQty": 10,
+    "suggestionStatus": "legacy_unverified",
+    "unitOfMeasure": ""
+  },
+  {
+    "confidence": 0.35,
+    "confidenceLabel": "low",
+    "forecast": {
+      "dataCutoff": null,
+      "generatedAt": null,
+      "model": null,
+      "modelVersion": null,
+      "nonZeroPeriods": 0,
+      "observedPeriods": 0,
+      "periodDays": 7.0,
+      "periodStart": null,
+      "point": null,
+      "pointSemantics": "",
+      "probabilityNonZero": null,
+      "status": "legacy"
+    },
+    "inputs": {
+      "lastOrderDaysAgo": 15,
+      "lastOrderQty": 24,
+      "patternMeanQty": 12.5,
+      "runRatePerDay": null
+    },
+    "packingSize": "",
+    "productId": "P-SARDIN-155",
+    "productName": "",
+    "rationale": "Last ordered 15 days ago (qty 24). No run-rate available; using typical order 12.5.",
+    "retailerId": "R-KCH-0002",
+    "suggestedQty": 13,
+    "suggestionStatus": "legacy_unverified",
+    "unitOfMeasure": ""
+  },
+  {
+    "confidence": 0.35,
+    "confidenceLabel": "low",
+    "forecast": {
+      "dataCutoff": null,
+      "generatedAt": null,
+      "model": null,
+      "modelVersion": null,
+      "nonZeroPeriods": 0,
+      "observedPeriods": 0,
+      "periodDays": 7.0,
+      "periodStart": null,
+      "point": null,
+      "pointSemantics": "",
+      "probabilityNonZero": null,
+      "status": "insufficient_history"
+    },
+    "inputs": {
+      "lastOrderDaysAgo": 4,
+      "lastOrderQty": 3,
+      "patternMeanQty": 3.0,
+      "runRatePerDay": null
+    },
+    "packingSize": "",
+    "productId": "P-GULA-1KG",
+    "productName": "",
+    "rationale": "Insufficient usable weekly history (no weekly series); no order quantity suggested.",
+    "retailerId": "R-KCH-0004",
+    "suggestedQty": null,
+    "suggestionStatus": "insufficient_history",
+    "unitOfMeasure": ""
+  },
+  {
+    "confidence": 0.35,
+    "confidenceLabel": "low",
+    "forecast": {
+      "dataCutoff": null,
+      "generatedAt": null,
+      "model": null,
+      "modelVersion": null,
+      "nonZeroPeriods": 0,
+      "observedPeriods": 0,
+      "periodDays": 7.0,
+      "periodStart": null,
+      "point": null,
+      "pointSemantics": "",
+      "probabilityNonZero": null,
+      "status": "insufficient_history"
+    },
+    "inputs": {
+      "lastOrderDaysAgo": 5,
+      "lastOrderQty": 1,
+      "patternMeanQty": 1.0,
+      "runRatePerDay": null
+    },
+    "packingSize": "",
+    "productId": "P-KICAP-320",
+    "productName": "",
+    "rationale": "Insufficient usable weekly history (no weekly series); no order quantity suggested.",
+    "retailerId": "R-KCH-0004",
+    "suggestedQty": null,
+    "suggestionStatus": "insufficient_history",
+    "unitOfMeasure": ""
+  },
+  {
+    "confidence": 0.35,
+    "confidenceLabel": "low",
+    "forecast": {
+      "dataCutoff": null,
+      "generatedAt": null,
+      "model": null,
+      "modelVersion": null,
+      "nonZeroPeriods": 0,
+      "observedPeriods": 0,
+      "periodDays": 7.0,
+      "periodStart": null,
+      "point": null,
+      "pointSemantics": "",
+      "probabilityNonZero": null,
+      "status": "insufficient_history"
+    },
+    "inputs": {
+      "lastOrderDaysAgo": 1,
+      "lastOrderQty": 6,
+      "patternMeanQty": 6.0,
+      "runRatePerDay": null
+    },
+    "packingSize": "",
+    "productId": "P-GULA-1KG",
+    "productName": "",
+    "rationale": "Insufficient usable weekly history (no weekly series); no order quantity suggested.",
+    "retailerId": "R-KCH-0005",
+    "suggestedQty": null,
+    "suggestionStatus": "insufficient_history",
+    "unitOfMeasure": ""
+  },
+  {
+    "confidence": 0.35,
+    "confidenceLabel": "low",
+    "forecast": {
+      "dataCutoff": null,
+      "generatedAt": null,
+      "model": null,
+      "modelVersion": null,
+      "nonZeroPeriods": 0,
+      "observedPeriods": 0,
+      "periodDays": 7.0,
+      "periodStart": null,
+      "point": null,
+      "pointSemantics": "",
+      "probabilityNonZero": null,
+      "status": "insufficient_history"
+    },
+    "inputs": {
+      "lastOrderDaysAgo": 1,
+      "lastOrderQty": 2,
+      "patternMeanQty": 2.0,
+      "runRatePerDay": null
+    },
+    "packingSize": "",
+    "productId": "P-KICAP-320",
+    "productName": "",
+    "rationale": "Insufficient usable weekly history (no weekly series); no order quantity suggested.",
+    "retailerId": "R-KCH-0005",
+    "suggestedQty": null,
+    "suggestionStatus": "insufficient_history",
+    "unitOfMeasure": ""
+  }
+]

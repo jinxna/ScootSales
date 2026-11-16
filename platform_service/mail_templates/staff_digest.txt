@@ -1,0 +1,13 @@
+Open items for {{ params.date }}.
+
+Payments to check: {{ params.paymentsToCheck }}
+Approvals waiting: {{ params.approvalsWaiting }}
+Invoice drafts to issue: {{ params.invoicesToIssue }}
+Invoices to send: {{ params.invoicesToSend }}
+Companies past due: {{ params.companiesPastDue }}
+Companies unpaid after the 14-day grace: {{ params.companiesGraceOver }}
+
+Open the Control Centre to work through them.
+
+Scoot Sales
+This is an automatic message.

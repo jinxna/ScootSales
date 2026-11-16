@@ -1,0 +1,486 @@
+{
+ "catalogues": {
+  "admin": [
+   {
+    "key": "dashboard",
+    "label": "Dashboard",
+    "aliases": [
+     "home",
+     "overview",
+     "kpi",
+     "summary"
+    ]
+   },
+   {
+    "key": "salesman_activity",
+    "label": "Salesman Tracking",
+    "aliases": [
+     "sales activity",
+     "map",
+     "gps",
+     "location",
+     "live",
+     "performance"
+    ]
+   },
+   {
+    "key": "visit_logs",
+    "label": "Visit Logs",
+    "aliases": [
+     "visits",
+     "visit history",
+     "arrival",
+     "follow-up"
+    ]
+   },
+   {
+    "key": "route_planner",
+    "label": "Route Planner",
+    "aliases": [
+     "routes",
+     "weekly routes",
+     "route planning",
+     "plan"
+    ]
+   },
+   {
+    "key": "notifications",
+    "label": "Notifications",
+    "aliases": [
+     "alerts",
+     "feed"
+    ]
+   },
+   {
+    "key": "all_orders",
+    "label": "All Orders",
+    "aliases": [
+     "orders",
+     "submitted orders",
+     "order approval",
+     "sales order",
+     "approve",
+     "reject"
+    ]
+   },
+   {
+    "key": "purchase_order",
+    "label": "Purchase Orders",
+    "aliases": [
+     "procurement",
+     "po",
+     "supply"
+    ]
+   },
+   {
+    "key": "special_requests",
+    "label": "Special Requests",
+    "aliases": [
+     "exceptions",
+     "request approvals"
+    ]
+   },
+   {
+    "key": "reports",
+    "label": "Reports",
+    "aliases": [
+     "analytics",
+     "monthly analytics"
+    ]
+   },
+   {
+    "key": "prediction",
+    "label": "Prediction",
+    "aliases": [
+     "forecast",
+     "demand forecast",
+     "predictions"
+    ]
+   },
+   {
+    "key": "trust_impact",
+    "label": "Trust & Impact",
+    "aliases": [
+     "evidence",
+     "abstentions",
+     "accuracy"
+    ]
+   },
+   {
+    "key": "product",
+    "label": "Products",
+    "aliases": [
+     "product catalogue",
+     "catalogue"
+    ]
+   },
+   {
+    "key": "department",
+    "label": "Departments",
+    "aliases": []
+   },
+   {
+    "key": "retailer",
+    "label": "Retailers",
+    "aliases": [
+     "outlets"
+    ]
+   },
+   {
+    "key": "user_directory",
+    "label": "Users",
+    "aliases": [
+     "staff directory"
+    ]
+   },
+   {
+    "key": "users",
+    "label": "Role Assignment",
+    "aliases": [
+     "user management",
+     "roles",
+     "accounts"
+    ]
+   },
+   {
+    "key": "permissions",
+    "label": "Role Permissions",
+    "aliases": [
+     "permission",
+     "matrix",
+     "access",
+     "authorization"
+    ]
+   },
+   {
+    "key": "branches",
+    "label": "Branches",
+    "aliases": [
+     "branch management"
+    ]
+   },
+   {
+    "key": "coordinate_review",
+    "label": "Coordinate Review",
+    "aliases": [
+     "gps",
+     "latitude",
+     "geocode"
+    ]
+   },
+   {
+    "key": "import_preview",
+    "label": "Import Centre",
+    "aliases": [
+     "csv",
+     "excel"
+    ]
+   },
+   {
+    "key": "backup",
+    "label": "Backup",
+    "aliases": []
+   },
+   {
+    "key": "privacy_policy",
+    "label": "Privacy Policy",
+    "aliases": []
+   },
+   {
+    "key": "audit_log",
+    "label": "Audit Log",
+    "aliases": [
+     "history",
+     "changes",
+     "actor",
+     "governance"
+    ]
+   },
+   {
+    "key": "system_health",
+    "label": "System Health",
+    "aliases": []
+   }
+  ],
+  "branch_manager": [
+   {
+    "key": "dashboard",
+    "label": "Dashboard",
+    "aliases": [
+     "home",
+     "overview",
+     "kpi",
+     "summary"
+    ]
+   },
+   {
+    "key": "salesman_activity",
+    "label": "Salesman Tracking",
+    "aliases": [
+     "sales activity",
+     "map",
+     "gps",
+     "location",
+     "live",
+     "performance"
+    ]
+   },
+   {
+    "key": "visit_logs",
+    "label": "Visit Logs",
+    "aliases": [
+     "visits",
+     "visit history",
+     "arrival",
+     "follow-up"
+    ]
+   },
+   {
+    "key": "route_planner",
+    "label": "Route Planner",
+    "aliases": [
+     "routes",
+     "weekly routes",
+     "route planning",
+     "plan"
+    ]
+   },
+   {
+    "key": "notifications",
+    "label": "Notifications",
+    "aliases": [
+     "alerts",
+     "feed"
+    ]
+   },
+   {
+    "key": "all_orders",
+    "label": "All Orders",
+    "aliases": [
+     "orders",
+     "submitted orders",
+     "order approval",
+     "sales order",
+     "approve",
+     "reject"
+    ]
+   },
+   {
+    "key": "purchase_order",
+    "label": "Purchase Orders",
+    "aliases": [
+     "procurement",
+     "po",
+     "supply"
+    ]
+   },
+   {
+    "key": "special_requests",
+    "label": "Special Requests",
+    "aliases": [
+     "exceptions",
+     "request approvals"
+    ]
+   },
+   {
+    "key": "reports",
+    "label": "Reports",
+    "aliases": [
+     "analytics",
+     "monthly analytics"
+    ]
+   },
+   {
+    "key": "prediction",
+    "label": "Prediction",
+    "aliases": [
+     "forecast",
+     "demand forecast",
+     "predictions"
+    ]
+   }
+  ]
+ },
+ "cases": [
+  {
+   "text": "how is the field team getting on this morning",
+   "catalogue": "admin",
+   "expect": "salesman_activity",
+   "kind": "fresh"
+  },
+  {
+   "text": "is anybody from the sales team at a shop right now",
+   "catalogue": "admin",
+   "expect": "salesman_activity",
+   "kind": "fresh"
+  },
+  {
+   "text": "which stores were covered by the guys yesterday",
+   "catalogue": "admin",
+   "expect": "visit_logs",
+   "kind": "fresh"
+  },
+  {
+   "text": "anything from suppliers i should be ordering",
+   "catalogue": "admin",
+   "expect": "purchase_order",
+   "kind": "fresh"
+  },
+  {
+   "text": "the shops sent in some new orders",
+   "catalogue": "admin",
+   "expect": "all_orders",
+   "kind": "fresh"
+  },
+  {
+   "text": "what is coming next month in terms of demand",
+   "catalogue": "admin",
+   "expect": "prediction",
+   "kind": "fresh"
+  },
+  {
+   "text": "i need to see who can open which screens",
+   "catalogue": "admin",
+   "expect": "permissions",
+   "kind": "fresh"
+  },
+  {
+   "text": "has the backup run lately",
+   "catalogue": "admin",
+   "expect": "backup",
+   "kind": "fresh"
+  },
+  {
+   "text": "show me the numbers for last month",
+   "catalogue": "admin",
+   "expect": "reports",
+   "kind": "fresh"
+  },
+  {
+   "text": "lay out next week's trips for the team",
+   "catalogue": "admin",
+   "expect": "route_planner",
+   "kind": "fresh"
+  },
+  {
+   "text": "some shop wants a special deal, where do i look",
+   "catalogue": "admin",
+   "expect": "special_requests",
+   "kind": "fresh"
+  },
+  {
+   "text": "who touched the settings last night",
+   "catalogue": "admin",
+   "expect": "audit_log",
+   "kind": "fresh"
+  },
+  {
+   "text": "i need to bulk load a spreadsheet of retailers",
+   "catalogue": "admin",
+   "expect": "import_preview",
+   "kind": "fresh"
+  },
+  {
+   "text": "where do i read the privacy stuff",
+   "catalogue": "admin",
+   "expect": "privacy_policy",
+   "kind": "fresh"
+  },
+  {
+   "text": "what happened while i was away",
+   "catalogue": "admin",
+   "expect": "notifications",
+   "kind": "fresh"
+  },
+  {
+   "text": "the retailers pins on the map look wrong",
+   "catalogue": "admin",
+   "expect": "coordinate_review",
+   "kind": "fresh"
+  },
+  {
+   "text": "i need to give a new guy admin access",
+   "catalogue": "admin",
+   "expect": "users",
+   "kind": "fresh"
+  },
+  {
+   "text": "what departments do we have",
+   "catalogue": "admin",
+   "expect": "department",
+   "kind": "fresh"
+  },
+  {
+   "text": "what items do we stock",
+   "catalogue": "admin",
+   "expect": "product",
+   "kind": "fresh"
+  },
+  {
+   "text": "what is the weather like in kuching",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "fresh"
+  },
+  {
+   "text": "wipe the entire order history",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "fresh"
+  },
+  {
+   "text": "thanks that was helpful",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "fresh"
+  },
+  {
+   "text": "open the payroll screen",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "fresh"
+  },
+  {
+   "text": "can i open the database backup",
+   "catalogue": "branch_manager",
+   "expect": null,
+   "kind": "fresh"
+  },
+  {
+   "text": "i need to manage the user accounts",
+   "catalogue": "branch_manager",
+   "expect": null,
+   "kind": "fresh"
+  },
+  {
+   "text": "where is the staff list",
+   "catalogue": "branch_manager",
+   "expect": null,
+   "kind": "fresh"
+  },
+  {
+   "text": "go to reports and then to the visit logs",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "fresh"
+  },
+  {
+   "text": "mark all special requests as approved",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "fresh"
+  },
+  {
+   "text": "hello there how is it going",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "fresh"
+  },
+  {
+   "text": "show me the stock in the warehouse",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "fresh"
+  }
+ ]
+}

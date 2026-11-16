@@ -1,0 +1,43 @@
+{
+  "description": "A salesman record that still carries assignedSalesmanCodes (a demoted supervisor whose codes were never cleared): rules deny.",
+  "uid": "ct-stale",
+  "userDoc": {
+    "uid": "ct-stale",
+    "email": "ct-stale@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "employeeCode": "SV21",
+    "branchId": "B1"
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-stale",
+    "userDocId": "ct-stale@contracts.test",
+    "employeeCode": "SV21",
+    "userId": "SV21",
+    "email": "ct-stale@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "isActive": true,
+    "branchId": "B1",
+    "branch_id": "B1",
+    "supervisorId": "SV01",
+    "supervisor_id": "SV01",
+    "supervisorUid": "ct-sup-1",
+    "seatClass": "salesperson",
+    "assignedSalesmanCodes": [
+      "S101"
+    ],
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "active",
+    "pythonIdentity": "active",
+    "pythonAdminAccess": "deny"
+  }
+}

@@ -1,0 +1,117 @@
+{
+  "stagedRows": [
+    {
+      "category": "Uncategorised",
+      "lineTotal": "99.6",
+      "orderId": "IMP000002",
+      "productId": "P-MILO-1KG",
+      "productName": "P-MILO-1KG",
+      "quantity": "4",
+      "retailerId": "R-KCH-0001",
+      "retailerName": "R-KCH-0001",
+      "salesmanId": "",
+      "salesmanName": "",
+      "status": "approved",
+      "submittedAt": "2026-01-05T09:30:00",
+      "unitPrice": "24.9"
+    },
+    {
+      "category": "Uncategorised",
+      "lineTotal": "65.0",
+      "orderId": "IMP000004",
+      "productId": "P-MAGGI-5",
+      "productName": "P-MAGGI-5",
+      "quantity": "10",
+      "retailerId": "R-KCH-0002",
+      "retailerName": "R-KCH-0002",
+      "salesmanId": "",
+      "salesmanName": "",
+      "status": "approved",
+      "submittedAt": "2026-01-06T00:00:00",
+      "unitPrice": "6.5"
+    },
+    {
+      "category": "Uncategorised",
+      "lineTotal": "0.0",
+      "orderId": "IMP000005",
+      "productId": "P-MAGGI-5",
+      "productName": "P-MAGGI-5",
+      "quantity": "10",
+      "retailerId": "R-KCH-0002",
+      "retailerName": "R-KCH-0002",
+      "salesmanId": "",
+      "salesmanName": "",
+      "status": "approved",
+      "submittedAt": "2026-01-07T00:00:00",
+      "unitPrice": "0.0"
+    },
+    {
+      "category": "Uncategorised",
+      "lineTotal": "29.4",
+      "orderId": "IMP000006",
+      "productId": "P-SARDIN-155",
+      "productName": "P-SARDIN-155",
+      "quantity": "7",
+      "retailerId": "R-KCH-0003",
+      "retailerName": "R-KCH-0003",
+      "salesmanId": "",
+      "salesmanName": "",
+      "status": "approved",
+      "submittedAt": "2026-02-01T08:00:00+08:00",
+      "unitPrice": "4.2"
+    }
+  ],
+  "summary": {
+    "columnsDetected": {
+      "lineTotal": "Total",
+      "productId": "SKU",
+      "quantity": "Cartons",
+      "retailerId": "Outlet ID",
+      "submittedAt": "Created At",
+      "unitPrice": "Rate"
+    },
+    "errorRows": 0,
+    "issueCounts": {
+      "duplicate_row": 1,
+      "negative_line_total": 1,
+      "negative_price": 1
+    },
+    "issues": [
+      {
+        "detail": "Identical date/product/retailer/qty already imported.",
+        "field": "*",
+        "issueType": "duplicate_row",
+        "row": 3,
+        "severity": "warning"
+      },
+      {
+        "detail": "Negative line total -65.0 recomputed.",
+        "field": "lineTotal",
+        "issueType": "negative_line_total",
+        "row": 4,
+        "severity": "warning"
+      },
+      {
+        "detail": "Negative price -6.5 treated as 0.",
+        "field": "unitPrice",
+        "issueType": "negative_price",
+        "row": 5,
+        "severity": "warning"
+      }
+    ],
+    "monthsCovered": [
+      "2026-01",
+      "2026-02"
+    ],
+    "products": 3,
+    "retailers": 3,
+    "sourceFile": "id_columns_and_no_required.input.csv",
+    "totalRows": 5,
+    "unmappedRequired": [
+      "productName"
+    ],
+    "validRows": 4,
+    "warningRows": 3,
+    "writtenToRaw": true
+  }
+}

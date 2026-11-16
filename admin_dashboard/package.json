@@ -1,0 +1,12 @@
+{
+  "name": "admin_dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "firebase-admin": "^13.9.0"
+  },
+  "scripts": {
+    "preflight:firebase": "node scripts/diagnostics/demo_preflight.js",
+    "report:demo": "node scripts/maintenance/reset_demo_data.js"
+  }
+}

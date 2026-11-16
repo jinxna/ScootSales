@@ -1,0 +1,57 @@
+{
+  "description": "Suspended admin: the forecasting admin gate and the mobile app must both refuse it even though rules accept the suspension write.",
+  "uid": "ct-admin-sus",
+  "userDoc": {
+    "uid": "ct-admin-sus",
+    "email": "ct-admin-sus@contracts.test",
+    "role": "admin",
+    "user_group": "admin",
+    "status": "suspended",
+    "employeeCode": "A0003",
+    "branchId": ""
+  },
+  "producer": {
+    "inputs": {
+      "uid": "ct-admin-sus",
+      "userDocId": "ct-admin-sus@contracts.test",
+      "employeeCode": "A0003",
+      "email": "ct-admin-sus@contracts.test",
+      "roleRaw": "admin",
+      "statusRaw": "suspended",
+      "branchId": "",
+      "supervisorId": "",
+      "supervisorUid": "",
+      "assignedSalesmanCodes": null
+    }
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-admin-sus",
+    "userDocId": "ct-admin-sus@contracts.test",
+    "employeeCode": "A0003",
+    "userId": "A0003",
+    "email": "ct-admin-sus@contracts.test",
+    "role": "admin",
+    "user_group": "admin",
+    "status": "suspended",
+    "isActive": false,
+    "branchId": "",
+    "branch_id": "",
+    "supervisorId": "",
+    "supervisor_id": "",
+    "supervisorUid": "",
+    "seatClass": "free",
+    "assignedSalesmanCodes": {
+      "$sentinel": "delete"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "rejected",
+    "pythonIdentity": "rejected",
+    "pythonAdminAccess": "deny"
+  }
+}

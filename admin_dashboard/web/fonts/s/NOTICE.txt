@@ -1,0 +1,4 @@
+Noto Sans SC, Noto Sans HK and Noto Color Emoji.
+Copyright The Noto Project Authors.
+Licensed under the SIL Open Font License, Version 1.1 (https://openfontlicense.org).
+These files are served from this origin so the browser never calls fonts.gstatic.com.

@@ -1,0 +1,756 @@
+{
+ "catalogues": {
+  "admin": [
+   {
+    "key": "dashboard",
+    "label": "Dashboard",
+    "aliases": [
+     "home",
+     "overview",
+     "kpi",
+     "summary"
+    ]
+   },
+   {
+    "key": "salesman_activity",
+    "label": "Salesman Tracking",
+    "aliases": [
+     "sales activity",
+     "map",
+     "gps",
+     "location",
+     "live",
+     "performance"
+    ]
+   },
+   {
+    "key": "visit_logs",
+    "label": "Visit Logs",
+    "aliases": [
+     "visits",
+     "visit history",
+     "arrival",
+     "follow-up"
+    ]
+   },
+   {
+    "key": "route_planner",
+    "label": "Route Planner",
+    "aliases": [
+     "routes",
+     "weekly routes",
+     "route planning",
+     "plan"
+    ]
+   },
+   {
+    "key": "notifications",
+    "label": "Notifications",
+    "aliases": [
+     "alerts",
+     "feed"
+    ]
+   },
+   {
+    "key": "all_orders",
+    "label": "All Orders",
+    "aliases": [
+     "orders",
+     "submitted orders",
+     "order approval",
+     "sales order",
+     "approve",
+     "reject"
+    ]
+   },
+   {
+    "key": "purchase_order",
+    "label": "Purchase Orders",
+    "aliases": [
+     "procurement",
+     "po",
+     "supply"
+    ]
+   },
+   {
+    "key": "special_requests",
+    "label": "Special Requests",
+    "aliases": [
+     "exceptions",
+     "request approvals"
+    ]
+   },
+   {
+    "key": "reports",
+    "label": "Reports",
+    "aliases": [
+     "analytics",
+     "monthly analytics"
+    ]
+   },
+   {
+    "key": "prediction",
+    "label": "Prediction",
+    "aliases": [
+     "forecast",
+     "demand forecast",
+     "predictions"
+    ]
+   },
+   {
+    "key": "trust_impact",
+    "label": "Trust & Impact",
+    "aliases": [
+     "evidence",
+     "abstentions",
+     "accuracy"
+    ]
+   },
+   {
+    "key": "product",
+    "label": "Products",
+    "aliases": [
+     "product catalogue",
+     "catalogue"
+    ]
+   },
+   {
+    "key": "retailer",
+    "label": "Retailers",
+    "aliases": [
+     "outlets"
+    ]
+   },
+   {
+    "key": "user_directory",
+    "label": "Users",
+    "aliases": [
+     "staff directory"
+    ]
+   },
+   {
+    "key": "users",
+    "label": "Role Assignment",
+    "aliases": [
+     "user management",
+     "roles",
+     "accounts"
+    ]
+   },
+   {
+    "key": "branches",
+    "label": "Branches",
+    "aliases": [
+     "branch management"
+    ]
+   },
+   {
+    "key": "coordinate_review",
+    "label": "Coordinate Review",
+    "aliases": [
+     "gps",
+     "latitude",
+     "geocode"
+    ]
+   },
+   {
+    "key": "import_preview",
+    "label": "Import Centre",
+    "aliases": [
+     "csv",
+     "excel"
+    ]
+   },
+   {
+    "key": "backup",
+    "label": "Backup",
+    "aliases": []
+   },
+   {
+    "key": "system_health",
+    "label": "System Health",
+    "aliases": []
+   }
+  ],
+  "branch_manager": [
+   {
+    "key": "dashboard",
+    "label": "Dashboard",
+    "aliases": [
+     "home",
+     "overview",
+     "kpi",
+     "summary"
+    ]
+   },
+   {
+    "key": "salesman_activity",
+    "label": "Salesman Tracking",
+    "aliases": [
+     "sales activity",
+     "map",
+     "gps",
+     "location",
+     "live",
+     "performance"
+    ]
+   },
+   {
+    "key": "visit_logs",
+    "label": "Visit Logs",
+    "aliases": [
+     "visits",
+     "visit history",
+     "arrival",
+     "follow-up"
+    ]
+   },
+   {
+    "key": "route_planner",
+    "label": "Route Planner",
+    "aliases": [
+     "routes",
+     "weekly routes",
+     "route planning",
+     "plan"
+    ]
+   },
+   {
+    "key": "notifications",
+    "label": "Notifications",
+    "aliases": [
+     "alerts",
+     "feed"
+    ]
+   },
+   {
+    "key": "all_orders",
+    "label": "All Orders",
+    "aliases": [
+     "orders",
+     "submitted orders",
+     "order approval",
+     "sales order",
+     "approve",
+     "reject"
+    ]
+   },
+   {
+    "key": "purchase_order",
+    "label": "Purchase Orders",
+    "aliases": [
+     "procurement",
+     "po",
+     "supply"
+    ]
+   },
+   {
+    "key": "special_requests",
+    "label": "Special Requests",
+    "aliases": [
+     "exceptions",
+     "request approvals"
+    ]
+   },
+   {
+    "key": "reports",
+    "label": "Reports",
+    "aliases": [
+     "analytics",
+     "monthly analytics"
+    ]
+   },
+   {
+    "key": "prediction",
+    "label": "Prediction",
+    "aliases": [
+     "forecast",
+     "demand forecast",
+     "predictions"
+    ]
+   }
+  ]
+ },
+ "cases": [
+  {
+   "text": "i wanna check how my reps are doing today",
+   "catalogue": "admin",
+   "expect": "salesman_activity",
+   "kind": "natural"
+  },
+  {
+   "text": "where are my salesmen right now",
+   "catalogue": "admin",
+   "expect": "salesman_activity",
+   "kind": "natural"
+  },
+  {
+   "text": "show me where the sales team is",
+   "catalogue": "admin",
+   "expect": "salesman_activity",
+   "kind": "natural"
+  },
+  {
+   "text": "who has visited which shop",
+   "catalogue": "admin",
+   "expect": "visit_logs",
+   "kind": "natural"
+  },
+  {
+   "text": "i need to see the visit history",
+   "catalogue": "admin",
+   "expect": "visit_logs",
+   "kind": "natural"
+  },
+  {
+   "text": "what orders are waiting for me",
+   "catalogue": "admin",
+   "expect": "all_orders",
+   "kind": "natural"
+  },
+  {
+   "text": "i have some orders to approve",
+   "catalogue": "admin",
+   "expect": "all_orders",
+   "kind": "natural"
+  },
+  {
+   "text": "can you open the orders for me",
+   "catalogue": "admin",
+   "expect": "all_orders",
+   "kind": "natural"
+  },
+  {
+   "text": "let me look at the sales orders",
+   "catalogue": "admin",
+   "expect": "all_orders",
+   "kind": "natural"
+  },
+  {
+   "text": "i need to plan the routes for next week",
+   "catalogue": "admin",
+   "expect": "route_planner",
+   "kind": "natural"
+  },
+  {
+   "text": "open the weekly route thing",
+   "catalogue": "admin",
+   "expect": "route_planner",
+   "kind": "natural"
+  },
+  {
+   "text": "take me to the map of my drivers",
+   "catalogue": "admin",
+   "expect": "salesman_activity",
+   "kind": "natural"
+  },
+  {
+   "text": "what is the demand forecast",
+   "catalogue": "admin",
+   "expect": "prediction",
+   "kind": "natural"
+  },
+  {
+   "text": "how many units will we sell next week",
+   "catalogue": "admin",
+   "expect": "prediction",
+   "kind": "natural"
+  },
+  {
+   "text": "show me the predictions",
+   "catalogue": "admin",
+   "expect": "prediction",
+   "kind": "natural"
+  },
+  {
+   "text": "i want to see the monthly analytics",
+   "catalogue": "admin",
+   "expect": "reports",
+   "kind": "natural"
+  },
+  {
+   "text": "pull up the reports",
+   "catalogue": "admin",
+   "expect": "reports",
+   "kind": "natural"
+  },
+  {
+   "text": "any new alerts",
+   "catalogue": "admin",
+   "expect": "notifications",
+   "kind": "natural"
+  },
+  {
+   "text": "check my notifications",
+   "catalogue": "admin",
+   "expect": "notifications",
+   "kind": "natural"
+  },
+  {
+   "text": "go back home",
+   "catalogue": "admin",
+   "expect": "dashboard",
+   "kind": "natural"
+  },
+  {
+   "text": "take me to the main overview",
+   "catalogue": "admin",
+   "expect": "dashboard",
+   "kind": "natural"
+  },
+  {
+   "text": "open the home page",
+   "catalogue": "admin",
+   "expect": "dashboard",
+   "kind": "natural"
+  },
+  {
+   "text": "i need to create a purchase order",
+   "catalogue": "admin",
+   "expect": "purchase_order",
+   "kind": "natural"
+  },
+  {
+   "text": "show procurement",
+   "catalogue": "admin",
+   "expect": "purchase_order",
+   "kind": "natural"
+  },
+  {
+   "text": "are there any special requests to approve",
+   "catalogue": "admin",
+   "expect": "special_requests",
+   "kind": "natural"
+  },
+  {
+   "text": "open exceptions",
+   "catalogue": "admin",
+   "expect": "special_requests",
+   "kind": "natural"
+  },
+  {
+   "text": "show me the product catalogue",
+   "catalogue": "admin",
+   "expect": "product",
+   "kind": "natural"
+  },
+  {
+   "text": "i want to look at the products",
+   "catalogue": "admin",
+   "expect": "product",
+   "kind": "natural"
+  },
+  {
+   "text": "list all the outlets",
+   "catalogue": "admin",
+   "expect": "retailer",
+   "kind": "natural"
+  },
+  {
+   "text": "open retailers",
+   "catalogue": "admin",
+   "expect": "retailer",
+   "kind": "natural"
+  },
+  {
+   "text": "who are the staff",
+   "catalogue": "admin",
+   "expect": "user_directory",
+   "kind": "natural"
+  },
+  {
+   "text": "show the staff directory",
+   "catalogue": "admin",
+   "expect": "user_directory",
+   "kind": "natural"
+  },
+  {
+   "text": "change someones role",
+   "catalogue": "admin",
+   "expect": "users",
+   "kind": "natural"
+  },
+  {
+   "text": "i need to assign roles to people",
+   "catalogue": "admin",
+   "expect": "users",
+   "kind": "natural"
+  },
+  {
+   "text": "show me the branches",
+   "catalogue": "admin",
+   "expect": "branches",
+   "kind": "natural"
+  },
+  {
+   "text": "review the gps coordinates of outlets",
+   "catalogue": "admin",
+   "expect": "coordinate_review",
+   "kind": "natural"
+  },
+  {
+   "text": "i want to import a csv",
+   "catalogue": "admin",
+   "expect": "import_preview",
+   "kind": "natural"
+  },
+  {
+   "text": "upload an excel file",
+   "catalogue": "admin",
+   "expect": "import_preview",
+   "kind": "natural"
+  },
+  {
+   "text": "is the system healthy",
+   "catalogue": "admin",
+   "expect": "system_health",
+   "kind": "natural"
+  },
+  {
+   "text": "open backup",
+   "catalogue": "admin",
+   "expect": "backup",
+   "kind": "natural"
+  },
+  {
+   "text": "show trust and impact",
+   "catalogue": "admin",
+   "expect": "trust_impact",
+   "kind": "natural"
+  },
+  {
+   "text": "how accurate are the forecasts",
+   "catalogue": "admin",
+   "expect": "trust_impact",
+   "kind": "natural"
+  },
+  {
+   "text": "open the ordrs",
+   "catalogue": "admin",
+   "expect": "all_orders",
+   "kind": "typo"
+  },
+  {
+   "text": "show salesmen trackin",
+   "catalogue": "admin",
+   "expect": "salesman_activity",
+   "kind": "typo"
+  },
+  {
+   "text": "go to reprots",
+   "catalogue": "admin",
+   "expect": "reports",
+   "kind": "typo"
+  },
+  {
+   "text": "opne notifcations",
+   "catalogue": "admin",
+   "expect": "notifications",
+   "kind": "typo"
+  },
+  {
+   "text": "route plaanner please",
+   "catalogue": "admin",
+   "expect": "route_planner",
+   "kind": "typo"
+  },
+  {
+   "text": "show me visit lgos",
+   "catalogue": "admin",
+   "expect": "visit_logs",
+   "kind": "typo"
+  },
+  {
+   "text": "purchse orders",
+   "catalogue": "admin",
+   "expect": "purchase_order",
+   "kind": "typo"
+  },
+  {
+   "text": "sales man activity",
+   "catalogue": "admin",
+   "expect": "salesman_activity",
+   "kind": "typo"
+  },
+  {
+   "text": "open system health",
+   "catalogue": "branch_manager",
+   "expect": null,
+   "kind": "role_gated"
+  },
+  {
+   "text": "show me the backup",
+   "catalogue": "branch_manager",
+   "expect": null,
+   "kind": "role_gated"
+  },
+  {
+   "text": "i want to import a csv",
+   "catalogue": "branch_manager",
+   "expect": null,
+   "kind": "role_gated"
+  },
+  {
+   "text": "open role assignment",
+   "catalogue": "branch_manager",
+   "expect": null,
+   "kind": "role_gated"
+  },
+  {
+   "text": "show the staff directory",
+   "catalogue": "branch_manager",
+   "expect": null,
+   "kind": "role_gated"
+  },
+  {
+   "text": "open trust and impact",
+   "catalogue": "branch_manager",
+   "expect": null,
+   "kind": "role_gated"
+  },
+  {
+   "text": "review the gps coordinates of outlets",
+   "catalogue": "branch_manager",
+   "expect": null,
+   "kind": "role_gated"
+  },
+  {
+   "text": "show me the products",
+   "catalogue": "branch_manager",
+   "expect": null,
+   "kind": "role_gated"
+  },
+  {
+   "text": "show me the orders",
+   "catalogue": "branch_manager",
+   "expect": "all_orders",
+   "kind": "role_ok"
+  },
+  {
+   "text": "where are my reps",
+   "catalogue": "branch_manager",
+   "expect": "salesman_activity",
+   "kind": "role_ok"
+  },
+  {
+   "text": "plan the routes",
+   "catalogue": "branch_manager",
+   "expect": "route_planner",
+   "kind": "role_ok"
+  },
+  {
+   "text": "what is the weather today",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "tell me a joke",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "delete all the orders",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "reset everyone's password",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "send an email to the supplier",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "what time is it",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "how do i cook rice",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "approve order 1234",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "who won the football match",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "sing me a song",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "hello",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "um",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "banana",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "turn off the lights",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "call my manager",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "negative"
+  },
+  {
+   "text": "open orders and then open reports",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "compound"
+  },
+  {
+   "text": "show the map and then go to notifications",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "compound"
+  },
+  {
+   "text": "open products and check the retailers",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "compound"
+  },
+  {
+   "text": "go to visit logs then open the route planner",
+   "catalogue": "admin",
+   "expect": null,
+   "kind": "compound"
+  }
+ ]
+}

@@ -1,0 +1,22 @@
+[Unit]
+Description=Scoot Sales weekly forecast and retailer intelligence for hardware-client-sales
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=scoot
+Group=scoot
+WorkingDirectory=/opt/scoot/platform
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+Environment=GOOGLE_APPLICATION_CREDENTIALS=/etc/scoot/company-keys/hardware-client-sales.json
+ExecStart=-/opt/scoot/forecast-venv/bin/python -m forecasting.service.push_forecasts --project hardware --apply --confirm APPLY-hardware-client-sales
+ExecStart=/opt/scoot/forecast-venv/bin/python -m forecasting.ai_service.cli --project hardware --apply --confirm APPLY-hardware-client-sales
+TimeoutStartSec=30min
+MemoryMax=450M
+OOMPolicy=continue
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

@@ -1,0 +1,43 @@
+{
+  "description": "Salesman record claiming the free seat class; rules deny it. Produced by patching the dashboard payload, so no producer inputs.",
+  "uid": "ct-sales-seat",
+  "userDoc": {
+    "uid": "ct-sales-seat",
+    "email": "ct-sales-seat@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "employeeCode": "S104",
+    "branchId": "B1"
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-sales-seat",
+    "userDocId": "ct-sales-seat@contracts.test",
+    "employeeCode": "S104",
+    "userId": "S104",
+    "email": "ct-sales-seat@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "isActive": true,
+    "branchId": "B1",
+    "branch_id": "B1",
+    "supervisorId": "",
+    "supervisor_id": "",
+    "supervisorUid": "",
+    "seatClass": "free",
+    "assignedSalesmanCodes": {
+      "$sentinel": "delete"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "active",
+    "pythonIdentity": "active",
+    "pythonAdminAccess": "deny"
+  }
+}

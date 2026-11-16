@@ -1,0 +1,958 @@
+{
+  "topics": [
+    "Company status",
+    "Your data",
+    "Accounts and sign-in",
+    "Orders and visits",
+    "Routes, teams and permissions",
+    "Plans and billing",
+    "Assistant",
+    "Control Centre: approvals",
+    "Control Centre: payments and invoices",
+    "Control Centre: companies",
+    "Control Centre: staff and records"
+  ],
+  "items": [
+    {
+      "id": "status-meaning",
+      "audiences": [
+        "public",
+        "admin",
+        "supervisor",
+        "branch_manager",
+        "salesperson"
+      ],
+      "topic": "Company status",
+      "question": "What do the company statuses mean?",
+      "answer": [
+        "Active: everything works.",
+        "Past due: a payment is late. Everything still works. The grace period is 14 days.",
+        "Suspended: the company is paused. Work stops. Administrators can only download the data export and give support access.",
+        "Expired and cancelled: the same limits as suspended.",
+        "A person at Scoot Sales decides each suspension. The system never suspends a company by itself."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "status-past-due",
+      "audiences": [
+        "admin"
+      ],
+      "topic": "Company status",
+      "question": "Why is our company past due?",
+      "answer": [
+        "The company becomes past due when an invoice is unpaid 14 days after it was sent. It also becomes past due when the paid period ends.",
+        "The billing email gets a message that the payment is overdue.",
+        "Everyone can still work. Pay the invoice. When Scoot Sales staff confirm the payment, they set the company back to active."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "status-suspended-roles",
+      "audiences": [
+        "public",
+        "admin",
+        "supervisor",
+        "branch_manager",
+        "salesperson"
+      ],
+      "topic": "Company status",
+      "question": "What can each person do when the company is suspended?",
+      "answer": [
+        "Administrators can sign in to the dashboard. The dashboard is read-only. Only the Account page opens. There you can download the data export and give support access.",
+        "Supervisors and branch managers see the page \"Workspace not active\". They cannot open other pages.",
+        "Salespeople see the \"Company paused\" screen on the phone. They cannot start new work.",
+        "The same limits apply when the company is expired or cancelled."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "status-who-decides",
+      "audiences": [
+        "public",
+        "admin"
+      ],
+      "topic": "Company status",
+      "question": "Who decides to suspend or reactivate our company?",
+      "answer": [
+        "A person at Scoot Sales decides. The system never suspends a company by itself.",
+        "A second staff member must approve each suspension, cancellation and reactivation.",
+        "The billing email gets a message when the company is suspended, becomes read-only or is restored."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "status-data-window",
+      "audiences": [
+        "public",
+        "admin"
+      ],
+      "topic": "Company status",
+      "question": "How long can we get our data after a suspension?",
+      "answer": [
+        "You have 30 days from the first stop. A stop is a suspension, an expiry or a cancellation.",
+        "If the company moves from one stopped state to another, the 30 days keep their start date.",
+        "If the company is reactivated and then stopped again, a new 30 days start.",
+        "In that time, an administrator can download the data export and give support access.",
+        "Download the export early. Ask Scoot Sales for the exact end date."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "status-after-window",
+      "audiences": [
+        "public",
+        "admin"
+      ],
+      "topic": "Company status",
+      "question": "What happens after the 30 days?",
+      "answer": [
+        "The data export and support access stop.",
+        "The data is not deleted automatically at that moment. Deletion is a separate step."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "status-held-work",
+      "audiences": [
+        "public",
+        "admin",
+        "supervisor",
+        "salesperson"
+      ],
+      "topic": "Company status",
+      "question": "What happens to work saved on a phone before a suspension?",
+      "answer": [
+        "Route updates and orders recorded before the pause are held on the phone. The \"Company paused\" screen shows how many items are held.",
+        "The phone sends held work by itself until the time shown on that screen. After that time, the phone keeps the work. It sends it when the company is active again.",
+        "Work recorded after the pause is not accepted. The phone shows each refused item. The manager can review it.",
+        "Drafts that were never submitted stay on the phone. Submit them when the company is active again.",
+        "The phone needs internet to send held work."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "status-reactivate",
+      "audiences": [
+        "public",
+        "admin"
+      ],
+      "topic": "Company status",
+      "question": "How do we make our company active again?",
+      "answer": [
+        "Pay the open invoice by bank transfer. Use the invoice number as the payment reference.",
+        "Scoot Sales staff record your payment. They reactivate the company only with a payment that covers today.",
+        "A second staff member must approve the reactivation. This needs a person, so it is not instant.",
+        "The billing email gets a message when the company is restored. People can then sign in and work again."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "data-export",
+      "audiences": [
+        "public",
+        "admin"
+      ],
+      "topic": "Your data",
+      "question": "Can we export our company data?",
+      "answer": [
+        "Yes. Only an administrator can do it. Open Account and enter your password. Then choose Download tenant export.",
+        "The ZIP file has JSON and CSV files. They cover products, retailers, users, orders, routes, route progress, visit outcomes and score sheets.",
+        "The ZIP also has a manifest with a checksum for each file.",
+        "It does not include sign-in accounts, invoices, the audit log or live tracking positions.",
+        "If you signed in more than 5 minutes ago, sign in again first.",
+        "The export works until the 30-day window after a suspension, expiry or cancellation ends."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "data-gps-kept",
+      "audiences": [
+        "public",
+        "admin",
+        "supervisor",
+        "branch_manager",
+        "salesperson"
+      ],
+      "topic": "Your data",
+      "question": "How long is location (GPS) data kept?",
+      "answer": [
+        "The location saved with an order is kept for 1 year.",
+        "All other location data is kept for 30 days. This includes live tracking and arrival positions.",
+        "A daily job removes older location data. An order stays. Only its coordinates are removed."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "data-hosting",
+      "audiences": [
+        "public",
+        "admin"
+      ],
+      "topic": "Your data",
+      "question": "Where is our data stored?",
+      "answer": [
+        "Company data is stored in Google Firebase.",
+        "The region is chosen when the company's Firebase project is created, for example Singapore (asia-southeast1).",
+        "Ask Scoot Sales which region your company uses."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "data-support-access",
+      "audiences": [
+        "public",
+        "admin"
+      ],
+      "topic": "Your data",
+      "question": "Can Scoot Sales support see our data?",
+      "answer": [
+        "Only if an administrator agrees. Support staff cannot start or extend access.",
+        "Open Account. In Support access, enter the support person's email and a reason. Choose Grant 45-minute diagnostics access.",
+        "The system allows support access for 5 to 60 minutes only. The dashboard gives 45 minutes.",
+        "Choose Revoke support access to end it early.",
+        "Support cannot open orders, products or reports."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "acct-invite",
+      "audiences": [
+        "admin"
+      ],
+      "topic": "Accounts and sign-in",
+      "question": "How do I add a new person?",
+      "answer": [
+        "Open Role Assignment. Enter the role, employee code, full name, and an email or phone number. Choose Create User.",
+        "The dashboard shows an invitation code and a QR code. Give the code to the person.",
+        "If you entered an email, the person can also get the invitation by email.",
+        "Only an administrator can create users. The plan limits apply."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "acct-redeem",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager",
+        "salesperson"
+      ],
+      "topic": "Accounts and sign-in",
+      "question": "How do I use my invitation code?",
+      "answer": [
+        "On the phone app, choose Redeem invitation. Enter the code, or scan the QR code. An invitation email link also opens the form.",
+        "Enter the last 4 digits of your phone number, or your email. Then set your password.",
+        "The app shows your sign-in ID. Keep it.",
+        "You need internet for this step."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "acct-invite-failed",
+      "audiences": [
+        "public",
+        "admin",
+        "supervisor",
+        "branch_manager",
+        "salesperson"
+      ],
+      "topic": "Accounts and sign-in",
+      "question": "Why did my invitation code not work?",
+      "answer": [
+        "A code works one time only. It expires after 72 hours.",
+        "It locks after 5 wrong tries.",
+        "A code for another company does not work here. Change the company first.",
+        "Ask your administrator for a new invitation."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "acct-google",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Accounts and sign-in",
+      "question": "Can I sign in with Google?",
+      "answer": [
+        "Yes, on the dashboard. Your administrator must invite you first. Use the invitation code first. Then choose Continue with Google.",
+        "If your email already has a password, sign in with the password one time. After that, Google is linked to your account.",
+        "The phone app does not have Google sign-in."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "acct-forgot-password",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager",
+        "salesperson"
+      ],
+      "topic": "Accounts and sign-in",
+      "question": "I forgot my password. What do I do?",
+      "answer": [
+        "On the sign-in page, choose Forgot password. Enter your email. Send the reset link.",
+        "Open the link in the email. Set a new password. Look in the spam folder if the email is not in the inbox.",
+        "You need internet for this step."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "acct-change-password",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Accounts and sign-in",
+      "question": "How do I change my dashboard password?",
+      "answer": [
+        "Sign out. On the sign-in page, choose Forgot password. Use the reset link to set a new password.",
+        "The company dashboard has no separate change-password screen."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "acct-new-device-email",
+      "audiences": [
+        "admin"
+      ],
+      "topic": "Accounts and sign-in",
+      "question": "Why did I get a \"New sign-in\" email?",
+      "answer": [
+        "Administrators get this email when their account signs in from a new device.",
+        "If it was not you, reset your password at once. Then tell your administrator."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "acct-lost-phone",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "salesperson"
+      ],
+      "topic": "Accounts and sign-in",
+      "question": "We lost a phone. What do we do?",
+      "answer": [
+        "An administrator opens Role Assignment and chooses Revoke account for the person.",
+        "The person is signed out and cannot sign in again. Their records are kept.",
+        "Orders already sent are safe on the server. Drafts and held work that never reached the server are lost with the phone."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "acct-too-many-tries",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Accounts and sign-in",
+      "question": "The dashboard says \"Too many failed attempts\". What do I do?",
+      "answer": [
+        "After 3 wrong passwords, the dashboard sign-in stops for 15 minutes.",
+        "Wait until the time ends. Or ask an administrator for help."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "acct-session-expired",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Accounts and sign-in",
+      "question": "Why does the dashboard say \"Session expired\"?",
+      "answer": [
+        "The dashboard signs you out after 30 minutes with no activity.",
+        "Sign in again."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "acct-offline-signin",
+      "audiences": [
+        "salesperson"
+      ],
+      "topic": "Accounts and sign-in",
+      "question": "Can I sign in to the phone app with no signal?",
+      "answer": [
+        "The first sign-in needs internet.",
+        "After that, the phone keeps your account check for 24 hours.",
+        "When that check is too old, the app asks you to reconnect."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "work-no-barcode",
+      "audiences": [
+        "public",
+        "salesperson"
+      ],
+      "topic": "Orders and visits",
+      "question": "Can we take orders for products that have no barcode?",
+      "answer": [
+        "Yes. Scanning is a shortcut only.",
+        "Type in Search SKU or product, or choose a category. Then tick the products.",
+        "If a scan finds nothing, the app says that the barcode was not found for this retailer. Search by name."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "work-offline-order",
+      "audiences": [
+        "public",
+        "admin",
+        "supervisor",
+        "salesperson"
+      ],
+      "topic": "Orders and visits",
+      "question": "What happens to an order when the phone is offline?",
+      "answer": [
+        "The app saves the order on the phone as an unsent draft. It tells you that the order was not sent.",
+        "A draft is never sent by itself. Open the draft and choose Submit Order when you are online.",
+        "Save Draft also keeps an order in progress on the phone. A draft is not an order."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "work-check-submission",
+      "audiences": [
+        "salesperson"
+      ],
+      "topic": "Orders and visits",
+      "question": "What does \"Submission not confirmed\" mean?",
+      "answer": [
+        "The app sent the order but did not get an answer.",
+        "Choose Check Submission. It looks for the same order. It never sends a second order.",
+        "You need internet to check."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "work-offline-catalogue",
+      "audiences": [
+        "salesperson"
+      ],
+      "topic": "Orders and visits",
+      "question": "Can I see products with no signal?",
+      "answer": [
+        "Yes, after one full online load. The phone keeps a copy of the product list.",
+        "The app shows when the copy was prepared. Prices and products may have changed since then.",
+        "If the copy is incomplete, connect to the internet to refresh it."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "work-price-change",
+      "audiences": [
+        "public",
+        "salesperson"
+      ],
+      "topic": "Orders and visits",
+      "question": "What if a price changes while a draft is waiting?",
+      "answer": [
+        "The app compares each line with the current price. It shows \"Prices changed since this draft was saved\" and the old and new price.",
+        "Submit Order stays off until you choose Accept new prices.",
+        "The retailer must then sign again.",
+        "If a product has no valid price, ask an administrator to fix the price."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "work-who-sets-prices",
+      "audiences": [
+        "public",
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Orders and visits",
+      "question": "Who sets product prices?",
+      "answer": [
+        "Only an administrator sets prices. This includes product prices and shop prices on a score sheet.",
+        "Edit permission on Score Sheets does not include prices for supervisors and branch managers."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "work-gps-not-verified",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager",
+        "salesperson"
+      ],
+      "topic": "Orders and visits",
+      "question": "What does GPS \"not verified\" mean?",
+      "answer": [
+        "At arrival, the phone compares your position with the retailer. You must be within 75 m.",
+        "The position must be accurate to 25 m and less than 30 seconds old.",
+        "If the check fails, choose Retry GPS. Or choose Record unverified. A manager then reviews the arrival.",
+        "For an order, the dashboard shows Location not verified when the phone had no good position."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "work-phone-clock",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager",
+        "salesperson"
+      ],
+      "topic": "Orders and visits",
+      "question": "What does \"phone clock is ahead\" mean?",
+      "answer": [
+        "Salesman Tracking shows a warning when the phone clock and the server clock differ by more than 2 minutes.",
+        "Set the phone to automatic date and time."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "work-tracking-modes",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "salesperson"
+      ],
+      "topic": "Orders and visits",
+      "question": "What is the Battery saver tracking mode?",
+      "answer": [
+        "Battery saver is the default tracking mode. The phone sends its position every 3 minutes when moving and every 5 minutes when still.",
+        "Standard and Live send more often.",
+        "An administrator, or the salesperson's supervisor, changes the mode on Salesman Tracking. Branch managers can only view it."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "work-approve-orders",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Orders and visits",
+      "question": "Who can approve orders and special requests?",
+      "answer": [
+        "An administrator can approve any order or special request.",
+        "A supervisor can approve orders and requests from their own team.",
+        "Branch managers can only view them.",
+        "Administrators cannot delete a submitted order."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "route-plan-publish",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "How do I plan and publish a route?",
+      "answer": [
+        "Open Route Planner. Add stops. Choose Save draft, then Approve, then Publish.",
+        "A published route goes to the salesperson's phone. Published routes are locked.",
+        "To change one, choose Withdraw to edit. You cannot withdraw it after the salesperson has accepted it.",
+        "A route that goes back to draft loses its old approve and publish dates. Approve and publish it again.",
+        "Administrators plan for everyone. Supervisors plan for their own team. Branch managers can only view routes."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "route-on-phone",
+      "audiences": [
+        "salesperson"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "Where is my route on the phone?",
+      "answer": [
+        "The phone shows only published routes assigned to you.",
+        "It keeps the last synced route for use with no signal.",
+        "You cannot change the route. You can mark each stop arrived, completed or skipped."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "team-move-salesperson",
+      "audiences": [
+        "admin",
+        "supervisor"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "How do I move a salesperson to another supervisor?",
+      "answer": [
+        "An administrator does it. Open Role Assignment and choose Team chart.",
+        "Drag the salesperson onto the new supervisor. Or use the move button.",
+        "The new supervisor must be in the same branch. A supervisor can have at most 5 salespeople.",
+        "A person who has not accepted the invitation cannot move yet."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "team-role-permissions",
+      "audiences": [
+        "admin"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "How do role permissions work?",
+      "answer": [
+        "Open Role Permissions. Each area has View, Create, Edit and Delete ticks for each role.",
+        "A write tick needs View.",
+        "Supervisors and branch managers can get write ticks only on Score Sheets and Retailer Department PIC. These cover their own team's shops.",
+        "Choose Save changes. The change works at once for everyone who is signed in."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "team-page-not-available",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "What is the \"Page not available\" page?",
+      "answer": [
+        "Your role cannot open that page. This is not a fault.",
+        "Choose the Go to button to return to your start page."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "plan-limits",
+      "audiences": [
+        "public",
+        "admin"
+      ],
+      "topic": "Plans and billing",
+      "question": "What limits does each plan have?",
+      "answer": [
+        "Each plan sets how many salespeople, supervisors, administrators, branch managers and products you can have.",
+        "Starter: 5 salespeople and 100 products. Standard: 10 and 500. Professional: 20 and 2000. Enterprise: 40 and 5000.",
+        "Your company can have different limits by agreement. Ask Scoot Sales if you are not sure."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "plan-at-limit",
+      "audiences": [
+        "admin"
+      ],
+      "topic": "Plans and billing",
+      "question": "We are at our plan limit. What do we do?",
+      "answer": [
+        "The dashboard tells you the limit. Remove or suspend a person first. For products, hide or remove one first.",
+        "Or ask for an upgrade on the Plans page."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "plan-upgrade",
+      "audiences": [
+        "public",
+        "admin"
+      ],
+      "topic": "Plans and billing",
+      "question": "How do we change our plan?",
+      "answer": [
+        "Open Plans and choose Request this plan. The Scoot Sales team contacts you to arrange payment.",
+        "A plan can only change to a larger one.",
+        "Your company stays the same. Your users, products, retailers and orders stay."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "bill-invoices",
+      "audiences": [
+        "public",
+        "admin"
+      ],
+      "topic": "Plans and billing",
+      "question": "Where do we get our invoices?",
+      "answer": [
+        "Scoot Sales emails each invoice to your billing email. The PDF is attached.",
+        "The invoice is due 14 days after it is sent.",
+        "Keep the invoice emails. The dashboard does not show invoice files."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "bill-how-to-pay",
+      "audiences": [
+        "public",
+        "admin"
+      ],
+      "topic": "Plans and billing",
+      "question": "How do we pay?",
+      "answer": [
+        "Pay by bank transfer. Use the invoice number as the payment reference.",
+        "There is no card payment and no online checkout.",
+        "Scoot Sales staff check the payment against the bank statement. Then the billing email gets a receipt."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "setup-new-company",
+      "audiences": [
+        "public"
+      ],
+      "topic": "Plans and billing",
+      "question": "Who sets up a new company?",
+      "answer": [
+        "The Scoot Sales team sets up each company. There is no self-service sign-up.",
+        "The team invites your first administrator. Your administrator then invites the other people."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "assistant-what",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Assistant",
+      "question": "What can the assistant do?",
+      "answer": [
+        "It searches and exports orders. It ranks top retailers and products. It opens pages for you.",
+        "On Professional and Enterprise plans, it also gives a daily briefing, explains a ranking and can set the status of an Action Centre item.",
+        "It never approves, rejects or deletes anything.",
+        "Typed requests need internet. Without a connection, only the fixed commands work."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "assistant-not-available",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Assistant",
+      "question": "The assistant says \"Assistant is not available now\". Why?",
+      "answer": [
+        "Some requests use a shared daily allowance. The allowance can be used up, or the service can be busy.",
+        "Try again later. You lose nothing. You can still use the menu."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "staff-approvals",
+      "audiences": [
+        "staff"
+      ],
+      "topic": "Control Centre: approvals",
+      "question": "Which actions need a second person to approve?",
+      "answer": [
+        "These actions need a second person to approve them.",
+        "Suspend, cancel or reactivate a company. Change a billing email. Issue a credit note. Void a payment. Extend an invoice. Set a package or quote price. Override a package.",
+        "You cannot approve your own request. Another owner or operator must approve it.",
+        "Exception: the solo owner setting is on and you are the only approver. Then you approve your own requests. The audit log marks each one \"solo approval\".",
+        "Owners and operators can both ask and approve. A request that nobody answers ends after 7 days."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "staff-two-accounts",
+      "audiences": [
+        "staff"
+      ],
+      "topic": "Control Centre: approvals",
+      "question": "Do we need two staff accounts?",
+      "answer": [
+        "Usually, yes. Every approval needs a second owner or operator.",
+        "There is one exception. The solo owner setting can be on while you are the owner and the only approver. Then you approve your own requests and payment checks. The audit log marks each one \"solo approval\".",
+        "Once a second owner or operator is active, the solo setting stops working. The other person must approve."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "staff-record-payment",
+      "audiences": [
+        "staff"
+      ],
+      "topic": "Control Centre: payments and invoices",
+      "question": "How do I record a payment?",
+      "answer": [
+        "Select Record payment. Pick the invoice. Enter the bank date, the bank reference and a reason.",
+        "The amount must match the invoice balance. The currency is always MYR.",
+        "The bank date cannot be in the future. It cannot be before the invoice date.",
+        "A bank date more than 3 days ago needs the owner.",
+        "You can use each bank reference only once."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "staff-check-payment",
+      "audiences": [
+        "staff"
+      ],
+      "topic": "Control Centre: payments and invoices",
+      "question": "Who checks a payment, and how?",
+      "answer": [
+        "A different person checks it. The person who recorded the payment cannot check it. The solo owner is the only exception.",
+        "Compare the payment with the bank statement. Then select Matches bank statement.",
+        "The invoice then shows as paid. The billing email gets a receipt.",
+        "Before the check, the payment covers the company for 7 days. After the check, it covers the whole invoice period."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "staff-void-payment",
+      "audiences": [
+        "staff"
+      ],
+      "topic": "Control Centre: payments and invoices",
+      "question": "How do I void a payment?",
+      "answer": [
+        "Select Ask to void this payment. Then select Send for approval.",
+        "Another owner or operator must approve. The person who recorded the payment cannot approve it. The solo owner is the only exception.",
+        "You can void a payment only one time."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "staff-invoices",
+      "audiences": [
+        "staff"
+      ],
+      "topic": "Control Centre: payments and invoices",
+      "question": "How do I create and send an invoice?",
+      "answer": [
+        "Select New invoice. Then select Create draft. You can still change the note and dates of a draft.",
+        "Select Issue invoice. The invoice gets its number. After that, you cannot change it.",
+        "Select Send invoice. The billing email gets the invoice as a PDF. It is due in 14 days.",
+        "The system makes a renewal draft 14 days before the paid-to date. It never issues or sends a draft by itself. You do that.",
+        "To fix an issued invoice, issue a credit note. Then issue a new invoice.",
+        "A voided invoice moves to the Void tab. An overdue invoice shows only in the Overdue tab."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "staff-suspend",
+      "audiences": [
+        "staff"
+      ],
+      "topic": "Control Centre: companies",
+      "question": "How do I suspend or cancel a company?",
+      "answer": [
+        "Open the company. Select More, then Change status. Pick the new status.",
+        "Another owner or operator must approve the change. The solo owner can approve their own.",
+        "A person always decides to suspend. The system only marks a company past due.",
+        "A past due company gets a 14-day grace period. When it ends, nothing happens by itself. You decide what to do next."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "staff-reactivate",
+      "audiences": [
+        "staff"
+      ],
+      "topic": "Control Centre: companies",
+      "question": "How do I reactivate a company?",
+      "answer": [
+        "Record the payment first. The payment must cover today.",
+        "A suspended or cancelled company needs approval from another owner or operator. The solo owner can approve their own.",
+        "A past due company is simpler. An owner or operator sets it back to active and picks that payment."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "staff-failed-email",
+      "audiences": [
+        "staff"
+      ],
+      "topic": "Control Centre: companies",
+      "question": "An email was not delivered. What do I do?",
+      "answer": [
+        "Open the Inbox. Failed, held and bounced emails show there. Each company page also has an Emails tab.",
+        "Select Retry to send the email again. Or select Mark handled if you no longer need it.",
+        "You cannot resend sign-in codes or one-time links. Ask the person to request a new one.",
+        "If an address bounced, fix the address first. Then select Lift block."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "staff-onboarding",
+      "audiences": [
+        "staff"
+      ],
+      "topic": "Control Centre: companies",
+      "question": "How do I set up a new company?",
+      "answer": [
+        "Open Onboarding. Select Add company. Enter the company name, workspace code, first administrator, billing email, package and billing period.",
+        "Work through the checklist. The first invoice must be paid and checked.",
+        "The owner or an engineer then selects Complete setup. This creates the company record.",
+        "The system sends no invitation until access is opened.",
+        "A draft lasts 30 days. The owner can extend it one time, by 30 days."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "staff-accounts",
+      "audiences": [
+        "staff"
+      ],
+      "topic": "Control Centre: staff and records",
+      "question": "How do I add or remove a staff member?",
+      "answer": [
+        "An owner opens Staff and access. The owner selects Add staff member, then Send invitation.",
+        "The email must be on an allowed staff domain.",
+        "The invitation link ends after 48 hours. The new person sets a password.",
+        "There are four roles: owner, operator, engineer and support. Only owners manage staff and settings.",
+        "To remove a person: select Turn off access on their row first. Then select Remove on the same row."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "staff-signin",
+      "audiences": [
+        "staff"
+      ],
+      "topic": "Control Centre: staff and records",
+      "question": "How do I sign in to the Control Centre?",
+      "answer": [
+        "Enter your email and password. Or select Continue with Google. You can use Google only after you accept your invitation.",
+        "Then enter the 6-digit code from your email. The code works for 10 minutes.",
+        "If the email does not come, select Send a new code. You can also use a backup code.",
+        "To change your password, open My account. Then select Change password."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "staff-audit-log",
+      "audiences": [
+        "staff"
+      ],
+      "topic": "Control Centre: staff and records",
+      "question": "What does the audit log show?",
+      "answer": [
+        "It records who did what, to which company, and when.",
+        "Nobody can edit or delete an entry. Each entry is linked to the one before it.",
+        "Search by person, company or action. Select Check today's log to test the links. Select Export CSV to save the log.",
+        "Owners and operators can open the log. Only the owner can export it."
+      ],
+      "since": "2026-11-05"
+    },
+    {
+      "id": "staff-support-grants",
+      "audiences": [
+        "staff"
+      ],
+      "topic": "Control Centre: staff and records",
+      "question": "Can staff open company data for support?",
+      "answer": [
+        "No. Only a company administrator can give support access. Staff cannot start or extend it.",
+        "Support staff see a list of companies with support access open now. Each row shows the company, the task, the access and the end time."
+      ],
+      "since": "2026-11-05"
+    }
+  ]
+}

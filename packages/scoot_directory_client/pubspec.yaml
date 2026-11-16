@@ -1,0 +1,12 @@
+name: scoot_directory_client
+description: Verifies signed company directory records and checks company service addresses. Shared by the dashboard and the phone app.
+publish_to: 'none'
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  cryptography: ^2.9.0
+
+dev_dependencies:
+  test: ^1.25.0

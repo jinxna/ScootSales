@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    AI_RUNNER_DISABLE_LOCAL_KEYS=1
+
+WORKDIR /app
+
+RUN addgroup --system app \
+    && adduser --system --ingroup app --home /home/app app
+
+COPY forecasting/requirements-ai-runner.txt /tmp/requirements.txt
+RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt
+
+COPY forecasting/ai_core/ ./forecasting/ai_core/
+COPY forecasting/ai_service/ ./forecasting/ai_service/
+COPY platform_service/__init__.py platform_service/config.py platform_service/directory.py platform_service/records.py platform_service/signing.py platform_service/tenant_binding.py platform_service/audit.py platform_service/commands.py platform_service/ids.py platform_service/operations.py ./platform_service/
+COPY runner.py ./runner.py
+
+USER app
+
+ENTRYPOINT ["python", "runner.py"]
+CMD ["--dry-run"]

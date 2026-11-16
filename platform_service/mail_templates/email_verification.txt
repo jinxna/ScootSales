@@ -1,0 +1,8 @@
+Confirm the email address of your {{ params.accountName }} account.
+
+Open {{ params.verifyUrl }} to confirm it.
+
+If you did not ask for this, ignore this message.
+
+Scoot Sales
+This is an automatic message.

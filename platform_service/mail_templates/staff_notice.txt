@@ -1,0 +1,8 @@
+{{ params.sentence }}
+
+Time: {{ params.at }}
+
+If you do not expect this, tell the owner at once.
+
+Scoot Sales
+This is an automatic message.

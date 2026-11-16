@@ -1,0 +1,57 @@
+{
+  "description": "Active salesman assigned to a supervisor: the common case.",
+  "uid": "ct-sales-1",
+  "userDoc": {
+    "uid": "ct-sales-1",
+    "email": "ct-sales-1@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "employeeCode": "S101",
+    "branchId": "B1"
+  },
+  "producer": {
+    "inputs": {
+      "uid": "ct-sales-1",
+      "userDocId": "ct-sales-1@contracts.test",
+      "employeeCode": "S101",
+      "email": "ct-sales-1@contracts.test",
+      "roleRaw": "Sales Representative",
+      "statusRaw": "active",
+      "branchId": "B1",
+      "supervisorId": "SV01",
+      "supervisorUid": "ct-sup-1",
+      "assignedSalesmanCodes": null
+    }
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-sales-1",
+    "userDocId": "ct-sales-1@contracts.test",
+    "employeeCode": "S101",
+    "userId": "S101",
+    "email": "ct-sales-1@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "isActive": true,
+    "branchId": "B1",
+    "branch_id": "B1",
+    "supervisorId": "SV01",
+    "supervisor_id": "SV01",
+    "supervisorUid": "ct-sup-1",
+    "seatClass": "salesperson",
+    "assignedSalesmanCodes": {
+      "$sentinel": "delete"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "active",
+    "pythonIdentity": "active",
+    "pythonAdminAccess": "deny"
+  }
+}

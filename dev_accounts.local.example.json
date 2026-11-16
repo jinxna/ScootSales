@@ -1,0 +1,4 @@
+{
+  "_comment": "Copy this file to dev_accounts.local.json (git-ignored) and fill in real test accounts. Debug-only quick sign-in. Format of DEV_ACCOUNTS: records separated by ';;', fields by '|' as label|email|password|role.",
+  "DEV_ACCOUNTS": "Admin / Dev|admin01@example.com|changeme|Admin;;Supervisor|sv0001@example.com|changeme|Supervisor;;Branch Manager|bm0001@example.com|changeme|Branch Manager;;Salesman|salesman@example.com|changeme|Salesman"
+}

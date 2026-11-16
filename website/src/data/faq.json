@@ -1,0 +1,233 @@
+{
+  "topics": [
+    "Company status",
+    "Your data",
+    "Accounts and sign-in",
+    "Orders and visits",
+    "Plans and billing"
+  ],
+  "items": [
+    {
+      "id": "status-meaning",
+      "topic": "Company status",
+      "question": "What do the company statuses mean?",
+      "answer": [
+        "Active: everything works.",
+        "Past due: a payment is late. Everything still works. The grace period is 14 days.",
+        "Suspended: the company is paused. Work stops. Administrators can only download the data export and give support access.",
+        "Expired and cancelled: the same limits as suspended.",
+        "A person at Scoot Sales decides each suspension. The system never suspends a company by itself."
+      ]
+    },
+    {
+      "id": "status-suspended-roles",
+      "topic": "Company status",
+      "question": "What can each person do when the company is suspended?",
+      "answer": [
+        "Administrators can sign in to the dashboard. The dashboard is read-only. Only the Account page opens. There you can download the data export and give support access.",
+        "Supervisors and branch managers see the page \"Workspace not active\". They cannot open other pages.",
+        "Salespeople see the \"Company paused\" screen on the phone. They cannot start new work.",
+        "The same limits apply when the company is expired or cancelled."
+      ]
+    },
+    {
+      "id": "status-who-decides",
+      "topic": "Company status",
+      "question": "Who decides to suspend or reactivate our company?",
+      "answer": [
+        "A person at Scoot Sales decides. The system never suspends a company by itself.",
+        "A second staff member must approve each suspension, cancellation and reactivation.",
+        "The billing email gets a message when the company is suspended, becomes read-only or is restored."
+      ]
+    },
+    {
+      "id": "status-data-window",
+      "topic": "Company status",
+      "question": "How long can we get our data after a suspension?",
+      "answer": [
+        "You have 30 days from the first stop. A stop is a suspension, an expiry or a cancellation.",
+        "If the company moves from one stopped state to another, the 30 days keep their start date.",
+        "If the company is reactivated and then stopped again, a new 30 days start.",
+        "In that time, an administrator can download the data export and give support access.",
+        "Download the export early. Ask Scoot Sales for the exact end date."
+      ]
+    },
+    {
+      "id": "status-after-window",
+      "topic": "Company status",
+      "question": "What happens after the 30 days?",
+      "answer": [
+        "The data export and support access stop.",
+        "The data is not deleted automatically at that moment. Deletion is a separate step."
+      ]
+    },
+    {
+      "id": "status-held-work",
+      "topic": "Company status",
+      "question": "What happens to work saved on a phone before a suspension?",
+      "answer": [
+        "Route updates and orders recorded before the pause are held on the phone. The \"Company paused\" screen shows how many items are held.",
+        "The phone sends held work by itself until the time shown on that screen. After that time, the phone keeps the work. It sends it when the company is active again.",
+        "Work recorded after the pause is not accepted. The phone shows each refused item. The manager can review it.",
+        "Drafts that were never submitted stay on the phone. Submit them when the company is active again.",
+        "The phone needs internet to send held work."
+      ]
+    },
+    {
+      "id": "status-reactivate",
+      "topic": "Company status",
+      "question": "How do we make our company active again?",
+      "answer": [
+        "Pay the open invoice by bank transfer. Use the invoice number as the payment reference.",
+        "Scoot Sales staff record your payment. They reactivate the company only with a payment that covers today.",
+        "A second staff member must approve the reactivation. This needs a person, so it is not instant.",
+        "The billing email gets a message when the company is restored. People can then sign in and work again."
+      ]
+    },
+    {
+      "id": "data-export",
+      "topic": "Your data",
+      "question": "Can we export our company data?",
+      "answer": [
+        "Yes. Only an administrator can do it. Open Account and enter your password. Then choose Download tenant export.",
+        "The ZIP file has JSON and CSV files. They cover products, retailers, users, orders, routes, route progress, visit outcomes and score sheets.",
+        "The ZIP also has a manifest with a checksum for each file.",
+        "It does not include sign-in accounts, invoices, the audit log or live tracking positions.",
+        "If you signed in more than 5 minutes ago, sign in again first.",
+        "The export works until the 30-day window after a suspension, expiry or cancellation ends."
+      ]
+    },
+    {
+      "id": "data-gps-kept",
+      "topic": "Your data",
+      "question": "How long is location (GPS) data kept?",
+      "answer": [
+        "The location saved with an order is kept for 1 year.",
+        "All other location data is kept for 30 days. This includes live tracking and arrival positions.",
+        "A daily job removes older location data. An order stays. Only its coordinates are removed."
+      ]
+    },
+    {
+      "id": "data-hosting",
+      "topic": "Your data",
+      "question": "Where is our data stored?",
+      "answer": [
+        "Company data is stored in Google Firebase.",
+        "The region is chosen when the company's Firebase project is created, for example Singapore (asia-southeast1).",
+        "Ask Scoot Sales which region your company uses."
+      ]
+    },
+    {
+      "id": "data-support-access",
+      "topic": "Your data",
+      "question": "Can Scoot Sales support see our data?",
+      "answer": [
+        "Only if an administrator agrees. Support staff cannot start or extend access.",
+        "Open Account. In Support access, enter the support person's email and a reason. Choose Grant 45-minute diagnostics access.",
+        "The system allows support access for 5 to 60 minutes only. The dashboard gives 45 minutes.",
+        "Choose Revoke support access to end it early.",
+        "Support cannot open orders, products or reports."
+      ]
+    },
+    {
+      "id": "acct-invite-failed",
+      "topic": "Accounts and sign-in",
+      "question": "Why did my invitation code not work?",
+      "answer": [
+        "A code works one time only. It expires after 72 hours.",
+        "It locks after 5 wrong tries.",
+        "A code for another company does not work here. Change the company first.",
+        "Ask your administrator for a new invitation."
+      ]
+    },
+    {
+      "id": "work-no-barcode",
+      "topic": "Orders and visits",
+      "question": "Can we take orders for products that have no barcode?",
+      "answer": [
+        "Yes. Scanning is a shortcut only.",
+        "Type in Search SKU or product, or choose a category. Then tick the products.",
+        "If a scan finds nothing, the app says that the barcode was not found for this retailer. Search by name."
+      ]
+    },
+    {
+      "id": "work-offline-order",
+      "topic": "Orders and visits",
+      "question": "What happens to an order when the phone is offline?",
+      "answer": [
+        "The app saves the order on the phone as an unsent draft. It tells you that the order was not sent.",
+        "A draft is never sent by itself. Open the draft and choose Submit Order when you are online.",
+        "Save Draft also keeps an order in progress on the phone. A draft is not an order."
+      ]
+    },
+    {
+      "id": "work-price-change",
+      "topic": "Orders and visits",
+      "question": "What if a price changes while a draft is waiting?",
+      "answer": [
+        "The app compares each line with the current price. It shows \"Prices changed since this draft was saved\" and the old and new price.",
+        "Submit Order stays off until you choose Accept new prices.",
+        "The retailer must then sign again.",
+        "If a product has no valid price, ask an administrator to fix the price."
+      ]
+    },
+    {
+      "id": "work-who-sets-prices",
+      "topic": "Orders and visits",
+      "question": "Who sets product prices?",
+      "answer": [
+        "Only an administrator sets prices. This includes product prices and shop prices on a score sheet.",
+        "Edit permission on Score Sheets does not include prices for supervisors and branch managers."
+      ]
+    },
+    {
+      "id": "plan-limits",
+      "topic": "Plans and billing",
+      "question": "What limits does each plan have?",
+      "answer": [
+        "Each plan sets how many salespeople, supervisors, administrators, branch managers and products you can have.",
+        "Starter: 5 salespeople and 100 products. Standard: 10 and 500. Professional: 20 and 2000. Enterprise: 40 and 5000.",
+        "Your company can have different limits by agreement. Ask Scoot Sales if you are not sure."
+      ]
+    },
+    {
+      "id": "plan-upgrade",
+      "topic": "Plans and billing",
+      "question": "How do we change our plan?",
+      "answer": [
+        "Open Plans and choose Request this plan. The Scoot Sales team contacts you to arrange payment.",
+        "A plan can only change to a larger one.",
+        "Your company stays the same. Your users, products, retailers and orders stay."
+      ]
+    },
+    {
+      "id": "bill-invoices",
+      "topic": "Plans and billing",
+      "question": "Where do we get our invoices?",
+      "answer": [
+        "Scoot Sales emails each invoice to your billing email. The PDF is attached.",
+        "The invoice is due 14 days after it is sent.",
+        "Keep the invoice emails. The dashboard does not show invoice files."
+      ]
+    },
+    {
+      "id": "bill-how-to-pay",
+      "topic": "Plans and billing",
+      "question": "How do we pay?",
+      "answer": [
+        "Pay by bank transfer. Use the invoice number as the payment reference.",
+        "There is no card payment and no online checkout.",
+        "Scoot Sales staff check the payment against the bank statement. Then the billing email gets a receipt."
+      ]
+    },
+    {
+      "id": "setup-new-company",
+      "topic": "Plans and billing",
+      "question": "Who sets up a new company?",
+      "answer": [
+        "The Scoot Sales team sets up each company. There is no self-service sign-up.",
+        "The team invites your first administrator. Your administrator then invites the other people."
+      ]
+    }
+  ]
+}

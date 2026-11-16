@@ -1,0 +1,4 @@
+# Training/evaluation extras on top of requirements.txt (torch/transformers not upgraded).
+peft==0.21.1
+accelerate==1.15.0
+datasets==5.0.1

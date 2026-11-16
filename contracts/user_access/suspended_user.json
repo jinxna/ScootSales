@@ -1,0 +1,57 @@
+{
+  "description": "Suspended salesman: rules accept the record, readers reject it.",
+  "uid": "ct-sales-sus",
+  "userDoc": {
+    "uid": "ct-sales-sus",
+    "email": "ct-sales-sus@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "suspended",
+    "employeeCode": "S102",
+    "branchId": "B1"
+  },
+  "producer": {
+    "inputs": {
+      "uid": "ct-sales-sus",
+      "userDocId": "ct-sales-sus@contracts.test",
+      "employeeCode": "S102",
+      "email": "ct-sales-sus@contracts.test",
+      "roleRaw": "salesman",
+      "statusRaw": "suspended",
+      "branchId": "B1",
+      "supervisorId": "SV01",
+      "supervisorUid": "ct-sup-1",
+      "assignedSalesmanCodes": null
+    }
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-sales-sus",
+    "userDocId": "ct-sales-sus@contracts.test",
+    "employeeCode": "S102",
+    "userId": "S102",
+    "email": "ct-sales-sus@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "suspended",
+    "isActive": false,
+    "branchId": "B1",
+    "branch_id": "B1",
+    "supervisorId": "SV01",
+    "supervisor_id": "SV01",
+    "supervisorUid": "ct-sup-1",
+    "seatClass": "salesperson",
+    "assignedSalesmanCodes": {
+      "$sentinel": "delete"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "rejected",
+    "pythonIdentity": "rejected",
+    "pythonAdminAccess": "deny"
+  }
+}

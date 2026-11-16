@@ -1,0 +1,39 @@
+{
+  "today": "2026-03-25",
+  "orders": [
+    {"orderId": "O1", "retailerId": "R-KCH-0001", "status": "approved", "submittedAt": "2026-02-04T10:00:00+08:00", "items": [{"productId": "P-MILO-1KG", "qty": 6}]},
+    {"orderId": "O2", "retailerId": "R-KCH-0001", "status": "approved", "submittedAt": "2026-02-18T10:00:00+08:00", "items": [{"productId": "P-MILO-1KG", "qty": 8}]},
+    {"orderId": "O3", "retailerId": "R-KCH-0001", "status": "approved", "submittedAt": "2026-03-04T10:00:00+08:00", "items": [{"productId": "P-MILO-1KG", "qty": 10}, {"productId": "P-MAGGI-5", "qty": 12}]},
+    {"orderId": "O4", "retailerId": "R-KCH-0001", "status": "cancelled", "submittedAt": "2026-03-20T10:00:00+08:00", "items": [{"productId": "P-MILO-1KG", "qty": 100}]},
+    {"orderId": "O5", "retailer_id": "R-KCH-0002", "submittedAt": "2026-03-10T08:00:00Z", "items": [{"sku": "P-SARDIN-155", "quantity": "24"}]},
+    {"orderId": "O6", "retailerId": "R-KCH-0002", "submittedAt": "2026-03-25T09:00:00+08:00", "items": [{"productId": "P-MAGGI-5", "qty": 30}]},
+    {"orderId": "O7", "retailerId": "R-KCH-0003", "submittedAt": "2026-03-01T09:00:00+08:00", "items": [{"productId": "P-100PLUS-500", "qty": 48}]},
+    {"orderId": "O8", "retailerId": "R-KCH-0003", "submittedAt": "2026-02-01T09:00:00+08:00", "items": [{"productId": "P-BERAS-10", "qty": 4}]},
+    {"orderId": "O9", "retailerId": "R-KCH-0004", "submittedAt": "2026-03-20T09:00:00+08:00", "items": [{"productId": "P-KICAP-320", "qty": 1}]},
+    {"orderId": "O10", "retailerId": "R-KCH-0004", "submittedAt": "2026-03-21T09:00:00+08:00", "items": [{"productId": "P-GULA-1KG", "qty": 3}]},
+    {"orderId": "O11", "retailerId": "R-KCH-0004", "submittedAt": "not a date", "items": [{"productId": "P-GULA-1KG", "qty": 3}]},
+    {"orderId": "O12", "retailerId": "R-KCH-0004", "submittedAt": "2026-04-02T09:00:00+08:00", "items": [{"productId": "P-FUTURE", "qty": 3}]},
+    {"orderId": "O13", "retailerId": "R-KCH-0005", "submittedAt": "2026-03-24T00:30:00+08:00", "items": [{"productId": "P-GULA-1KG", "qty": 6}]},
+    {"orderId": "O14", "retailerId": "R-KCH-0005", "submittedAt": "2026-03-23T23:30:00-05:00", "items": [{"productId": "P-KICAP-320", "qty": 2}]}
+  ],
+  "itemPatterns": [
+    {"retailerId": "R-KCH-0001", "productId": "P-MILO-1KG", "weeklyQuantities": [0, 6, 0, 8, 0, 10, 0, 0], "weeklyOrderCounts": [0, 1, 0, 1, 0, 1, 0, 0], "baselineAverage": 3.0, "trend": "stable"},
+    {"retailerId": "R-KCH-0003", "productId": "P-100PLUS-500", "weeklyQuantities": [0, 0, 0, 0, 0, 0, 48, 0], "weeklyOrderCounts": [0, 0, 0, 0, 0, 0, 1, 0], "trend": "stopped"},
+    {"retailer_id": "R-KCH-0002", "product_id": "P-SARDIN-155", "baselineAverage": "12.5", "trend": "growing"}
+  ],
+  "memory": [
+    {"retailerId": "R-KCH-0003", "lastConfirmedIssues": [
+      {"issueKey": "overdue_reorder::R-KCH-0003::P-BERAS-10", "reasonCode": "switched_to_alternative"},
+      {"issueKey": "overdue_reorder::R-KCH-0003::P-100PLUS-500", "reasonCode": "price_too_high"}
+    ]},
+    {"retailerId": "R-KCH-0004", "lastConfirmedIssues": "corrupt"}
+  ],
+  "runRates": [
+    {"retailerId": "R-KCH-0001", "productId": "P-MILO-1KG", "runRatePerDay": 0.5},
+    {"retailerId": "R-KCH-0001", "productId": "P-MAGGI-5", "run_rate_per_day": "2.0"},
+    {"retailerId": "R-KCH-0002", "productId": "P-MAGGI-5", "runRate": 5},
+    {"retailerId": "R-KCH-0002", "productId": "P-SARDIN-155", "rate": 0},
+    {"retailerId": "R-KCH-0003", "productId": "P-100PLUS-500", "runRatePerDay": 1},
+    {"retailerId": "R-KCH-0004", "productId": "P-KICAP-320", "runRatePerDay": 10}
+  ]
+}

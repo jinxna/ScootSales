@@ -1,0 +1,35 @@
+{
+  "description": "Same self-save on a legacy (pre-v2) admin record: still allowed.",
+  "actor": "self",
+  "uid": "ct-self-admin",
+  "userDoc": {
+    "uid": "ct-self-admin",
+    "email": "ct-self-admin@contracts.test",
+    "role": "admin",
+    "user_group": "admin",
+    "status": "active",
+    "employeeCode": "A0100",
+    "branchId": ""
+  },
+  "existingAccess": {
+    "uid": "ct-self-admin",
+    "userDocId": "ct-self-admin@contracts.test",
+    "role": "admin",
+    "user_group": "admin",
+    "status": "active",
+    "isActive": true,
+    "employeeCode": "A0100",
+    "userId": "A0100",
+    "branchId": "",
+    "branch_id": ""
+  },
+  "access": {
+    "email": "ct-self-admin@contracts.test",
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "allow"
+  }
+}

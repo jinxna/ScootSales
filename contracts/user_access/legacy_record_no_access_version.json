@@ -1,0 +1,31 @@
+{
+  "description": "Pre-v2 access index: no accessVersion. Rules accept the legacy shape; the mobile app resolves it through the linked profile (legacy path); the forecasting service accepts it via the linked users document.",
+  "uid": "ct-legacy",
+  "userDoc": {
+    "uid": "ct-legacy",
+    "email": "ct-legacy@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "employeeCode": "S110",
+    "branchId": "B1"
+  },
+  "access": {
+    "uid": "ct-legacy",
+    "userDocId": "S110",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "isActive": true,
+    "employeeCode": "S110",
+    "userId": "S110",
+    "branchId": "B1",
+    "branch_id": "B1"
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "legacy",
+    "pythonIdentity": "active",
+    "pythonAdminAccess": "deny"
+  }
+}

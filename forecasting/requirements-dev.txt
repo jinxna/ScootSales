@@ -1,0 +1,6 @@
+-r requirements.txt
+# Keep development tooling above its published security fixes. The runner lock
+# is deliberately separate because production does not require test tooling.
+# Pip is bootstrapping tooling: upgrade it separately before installing this file.
+pytest==9.1.0
+httpx==0.28.1

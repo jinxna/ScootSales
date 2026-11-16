@@ -1,0 +1,57 @@
+{
+  "description": "users/{id} says supervisor while the access record says salesman: rules deny the write (v2ProfileMirrors); readers ignore the profile.",
+  "uid": "ct-sales-drift",
+  "userDoc": {
+    "uid": "ct-sales-drift",
+    "email": "ct-sales-drift@contracts.test",
+    "role": "supervisor",
+    "user_group": "supervisor",
+    "status": "active",
+    "employeeCode": "S105",
+    "branchId": "B1"
+  },
+  "producer": {
+    "inputs": {
+      "uid": "ct-sales-drift",
+      "userDocId": "ct-sales-drift@contracts.test",
+      "employeeCode": "S105",
+      "email": "ct-sales-drift@contracts.test",
+      "roleRaw": "salesman",
+      "statusRaw": "active",
+      "branchId": "B1",
+      "supervisorId": "",
+      "supervisorUid": "",
+      "assignedSalesmanCodes": null
+    }
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-sales-drift",
+    "userDocId": "ct-sales-drift@contracts.test",
+    "employeeCode": "S105",
+    "userId": "S105",
+    "email": "ct-sales-drift@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "isActive": true,
+    "branchId": "B1",
+    "branch_id": "B1",
+    "supervisorId": "",
+    "supervisor_id": "",
+    "supervisorUid": "",
+    "seatClass": "salesperson",
+    "assignedSalesmanCodes": {
+      "$sentinel": "delete"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "active",
+    "pythonIdentity": "active",
+    "pythonAdminAccess": "deny"
+  }
+}

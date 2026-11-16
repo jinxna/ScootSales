@@ -1,0 +1,117 @@
+{
+  "description": "A cart draft is local to the device and never submitted. If a draft-status order reaches Firestore the rules deny the create, and the dashboard must not count it as submitted.",
+  "salesman": {
+    "uid": "ct-order-sales",
+    "userDoc": {
+      "uid": "ct-order-sales",
+      "email": "ct-order-sales@contracts.test",
+      "role": "salesman",
+      "user_group": "salesman",
+      "status": "active",
+      "employeeCode": "S201",
+      "branchId": "B1"
+    },
+    "access": {
+      "accessVersion": 2,
+      "uid": "ct-order-sales",
+      "userDocId": "ct-order-sales@contracts.test",
+      "employeeCode": "S201",
+      "userId": "S201",
+      "email": "ct-order-sales@contracts.test",
+      "role": "salesman",
+      "user_group": "salesman",
+      "status": "active",
+      "isActive": true,
+      "branchId": "B1",
+      "branch_id": "B1",
+      "supervisorId": "SV01",
+      "supervisor_id": "SV01",
+      "supervisorUid": "ct-sup-1",
+      "seatClass": "salesperson",
+      "assignedSalesmanCodes": {
+        "$sentinel": "delete"
+      },
+      "updatedAt": {
+        "$sentinel": "serverTimestamp"
+      }
+    }
+  },
+  "order": {
+    "orderId": "ORD-CT-1003",
+    "visitSource": "personal_planner",
+    "retailerId": "ct-retailer-1",
+    "retailerName": "Kedai Maju",
+    "outlet": "Kedai Maju",
+    "uid": "ct-order-sales",
+    "userUid": "ct-order-sales",
+    "salesmanUid": "ct-order-sales",
+    "salesmanEmail": "ct-order-sales@contracts.test",
+    "salesmanId": "S201",
+    "salesmanName": "Sales Two",
+    "submittedByUid": "ct-order-sales",
+    "createdByUid": "ct-order-sales",
+    "branchId": "B1",
+    "supervisorId": "SV01",
+    "locationEvidence": {
+      "mode": "not_verified",
+      "failureCode": "unavailable"
+    },
+    "totalProducts": 1,
+    "totalBoxes": 1,
+    "totalPrice": 10.0,
+    "submittedAt": {
+      "$sentinel": "serverTimestamp"
+    },
+    "createdAt": {
+      "$sentinel": "serverTimestamp"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    },
+    "status": "draft",
+    "items": [
+      {
+        "name": "Orange Juice",
+        "productName": "Orange Juice",
+        "productId": "P-001",
+        "packingSize": "12 x 1L",
+        "price": 10.0,
+        "qty": 1,
+        "expiry": "2027-01-31",
+        "department": "Beverage",
+        "departmentName": "Beverage",
+        "shelfBatches": [],
+        "remarks": ""
+      }
+    ],
+    "commercialSchemaVersion": 1,
+    "commercialLines": [
+      "P-001~T3JhbmdlIEp1aWNl~1~1000"
+    ],
+    "signatureTimestamps": {
+      "Beverage": "2026-10-05 10:15"
+    }
+  },
+  "expect": {
+    "rulesSalesmanCreate": "deny",
+    "dashboard": {
+      "status": "draft",
+      "isSubmittedOrApproved": false,
+      "isPendingApproval": false,
+      "revenue": 10.0,
+      "quantity": 1,
+      "itemCount": 1,
+      "salesmanName": "Sales Two",
+      "retailerName": "Kedai Maju",
+      "items": [
+        {
+          "name": "Orange Juice",
+          "productId": "P-001",
+          "qty": 1,
+          "price": 10.0,
+          "department": "Beverage"
+        }
+      ]
+    }
+  }
+}

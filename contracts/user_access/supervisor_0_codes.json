@@ -1,0 +1,55 @@
+{
+  "description": "Supervisor with no assigned salesmen yet.",
+  "uid": "ct-sup-0",
+  "userDoc": {
+    "uid": "ct-sup-0",
+    "email": "ct-sup-0@contracts.test",
+    "role": "supervisor",
+    "user_group": "supervisor",
+    "status": "active",
+    "employeeCode": "SV10",
+    "branchId": "B1"
+  },
+  "producer": {
+    "inputs": {
+      "uid": "ct-sup-0",
+      "userDocId": "ct-sup-0@contracts.test",
+      "employeeCode": "SV10",
+      "email": "ct-sup-0@contracts.test",
+      "roleRaw": "supervisor",
+      "statusRaw": "active",
+      "branchId": "B1",
+      "supervisorId": "",
+      "supervisorUid": "",
+      "assignedSalesmanCodes": []
+    }
+  },
+  "access": {
+    "accessVersion": 2,
+    "uid": "ct-sup-0",
+    "userDocId": "ct-sup-0@contracts.test",
+    "employeeCode": "SV10",
+    "userId": "SV10",
+    "email": "ct-sup-0@contracts.test",
+    "role": "supervisor",
+    "user_group": "supervisor",
+    "status": "active",
+    "isActive": true,
+    "branchId": "B1",
+    "branch_id": "B1",
+    "supervisorId": "",
+    "supervisor_id": "",
+    "supervisorUid": "",
+    "seatClass": "free",
+    "assignedSalesmanCodes": [],
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "active",
+    "pythonIdentity": "active",
+    "pythonAdminAccess": "deny"
+  }
+}

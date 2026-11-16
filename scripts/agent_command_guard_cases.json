@@ -1,0 +1,398 @@
+[
+  {
+    "name": "heredoc text mentions start",
+    "tool": "Bash",
+    "command": "cat > notes.txt <<'EOF'\nstart the server first\nEOF",
+    "expect": "allow"
+  },
+  {
+    "name": "python heredoc assigns start",
+    "tool": "Bash",
+    "command": "python - <<'EOF'\nmods = closure(start)\nEOF",
+    "expect": "allow"
+  },
+  {
+    "name": "python heredoc line starts with start",
+    "tool": "Bash",
+    "command": "python - <<'PY'\nstart = next(item for item in items)\nprint(start)\nPY",
+    "expect": "allow"
+  },
+  {
+    "name": "heredoc with explorer variable",
+    "tool": "Bash",
+    "command": "python - <<'PY'\nexplorer = 1\nprint(explorer)\nPY",
+    "expect": "allow"
+  },
+  {
+    "name": "heredoc then a real start",
+    "tool": "Bash",
+    "command": "cat > notes.txt <<'EOF'\nplain text\nEOF\nstart .",
+    "expect": "deny"
+  },
+  {
+    "name": "heredoc into bash runs its body",
+    "tool": "Bash",
+    "command": "bash <<'EOF'\nstart .\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "heredoc into sh runs its body",
+    "tool": "Bash",
+    "command": "sh <<EOF\nStart-Process notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "heredoc piped into powershell runs its body",
+    "tool": "Bash",
+    "command": "cat <<'EOF' | powershell\nStart-Process notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "heredoc into cmd runs its body",
+    "tool": "Bash",
+    "command": "cmd <<'EOF'\nstart .\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "encoded command is refused",
+    "tool": "PowerShell",
+    "command": "powershell -EncodedCommand U3RhcnQtUHJvY2Vzcw==",
+    "expect": "deny"
+  },
+  {
+    "name": "commit message with newline and start",
+    "tool": "Bash",
+    "command": "git commit -m \"fix\nstart the job later\"",
+    "expect": "allow"
+  },
+  {
+    "name": "commit message with escaped quote",
+    "tool": "Bash",
+    "command": "git commit -m \"fix \\\"quoted\\\"\nstart page loads\"",
+    "expect": "allow"
+  },
+  {
+    "name": "commit message with apostrophe",
+    "tool": "Bash",
+    "command": "git commit -m \"don't start the job\"",
+    "expect": "allow"
+  },
+  {
+    "name": "commit message from heredoc",
+    "tool": "Bash",
+    "command": "git commit -m \"$(cat <<'EOF'\nfix\n\nstart page loads\nEOF\n)\"",
+    "expect": "allow"
+  },
+  {
+    "name": "Write tool content",
+    "tool": "Write",
+    "command": "start notepad",
+    "expect": "allow"
+  },
+  {
+    "name": "Edit tool content",
+    "tool": "Edit",
+    "command": "Start-Process notepad",
+    "expect": "allow"
+  },
+  {
+    "name": "Monitor start process",
+    "tool": "Monitor",
+    "command": "Start-Process notepad",
+    "expect": "deny"
+  },
+  {
+    "name": "PowerShell start process",
+    "tool": "PowerShell",
+    "command": "Start-Process notepad",
+    "expect": "deny"
+  },
+  {
+    "name": "chained start",
+    "tool": "Bash",
+    "command": "echo ok && start .",
+    "expect": "deny"
+  },
+  {
+    "name": "plain echo",
+    "tool": "Bash",
+    "command": "echo hello",
+    "expect": "allow"
+  },
+  {
+    "name": "git worktree remove",
+    "tool": "Bash",
+    "command": "git worktree remove ../x",
+    "expect": "deny"
+  },
+  {
+    "name": "emulator without no-window",
+    "tool": "Bash",
+    "command": "emulator -avd Pixel",
+    "expect": "deny"
+  },
+  {
+    "name": "emulator with no-window",
+    "tool": "Bash",
+    "command": "emulator -avd Pixel -no-window",
+    "expect": "allow"
+  },
+  {
+    "name": "quoted heredoc marker does not hide the next line",
+    "tool": "Bash",
+    "command": "echo \"<<EOF\"\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "commented heredoc marker does not hide the next line",
+    "tool": "Bash",
+    "command": "true # <<EOF\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "arithmetic shift is not a heredoc",
+    "tool": "Bash",
+    "command": "echo $((1<<EOF))\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "eval of a heredoc runs its body",
+    "tool": "Bash",
+    "command": "eval \"$(cat <<'EOF'\nstart notepad\nEOF\n)\"",
+    "expect": "deny"
+  },
+  {
+    "name": "source of a heredoc runs its body",
+    "tool": "Bash",
+    "command": "source /dev/stdin <<EOF\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "dot of a heredoc runs its body",
+    "tool": "Bash",
+    "command": ". /dev/stdin <<EOF\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "unquoted heredoc runs a command substitution",
+    "tool": "Bash",
+    "command": "cat <<EOF\n$(git worktree remove some-tree)\nEOF\n",
+    "expect": "deny"
+  },
+  {
+    "name": "unquoted heredoc runs a backtick substitution",
+    "tool": "Bash",
+    "command": "cat <<EOF\n`start notepad`\nEOF\n",
+    "expect": "deny"
+  },
+  {
+    "name": "unquoted heredoc with any substitution is checked whole",
+    "tool": "Bash",
+    "command": "cat > notes.txt <<EOF\nstart the server on $(date)\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "quoted heredoc keeps substitution text literal",
+    "tool": "Bash",
+    "command": "cat > notes.txt <<'EOF'\n$(git worktree remove some-tree)\nEOF",
+    "expect": "allow"
+  },
+  {
+    "name": "quoted paren inside a substitution does not hide the rest",
+    "tool": "Bash",
+    "command": "cat > out <<EOF\n$(echo \"x)\"; git worktree remove t)\nEOF\n",
+    "expect": "deny"
+  },
+  {
+    "name": "escaped backticks in an unquoted heredoc are text",
+    "tool": "Bash",
+    "command": "cat > out <<EOF\n\"\\`start notepad\\`\"\nEOF\n",
+    "expect": "allow"
+  },
+  {
+    "name": "unquoted heredoc without substitution stays text",
+    "tool": "Bash",
+    "command": "cat > out <<EOF\nstart the server first\nEOF\n",
+    "expect": "allow"
+  },
+  {
+    "name": "reader on a later line of a piped heredoc",
+    "tool": "Bash",
+    "command": "cat <<'EOF' |\nstart notepad\nEOF\nbash",
+    "expect": "deny"
+  },
+  {
+    "name": "loop that evals a heredoc",
+    "tool": "Bash",
+    "command": "while read l; do\neval \"$l\"\ndone <<'EOF'\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "brace group run by bash",
+    "tool": "Bash",
+    "command": "{\nbash\n} <<'EOF'\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "shell after a prefix word",
+    "tool": "Bash",
+    "command": "winpty bash <<'EOF'\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "shell after sudo options",
+    "tool": "Bash",
+    "command": "sudo -u me bash <<'EOF'\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "zsh reads a heredoc",
+    "tool": "Bash",
+    "command": "zsh <<'EOF'\ngit worktree remove t\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "escaped backslash before a substitution",
+    "tool": "Bash",
+    "command": "cat <<EOF\n\\\\$(git worktree remove t)\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "delimiter that only starts like the marker",
+    "tool": "Bash",
+    "command": "cat <<EOF-X\nhi\nEOF-X\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "marker inside a quote that spans lines",
+    "tool": "Bash",
+    "command": "echo \"x\n<<EOF y\"\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "heredoc stored then evaluated",
+    "tool": "Bash",
+    "command": "x=$(cat <<'EOF'\nstart notepad\nEOF\n)\neval \"$x\"",
+    "expect": "deny"
+  },
+  {
+    "name": "heredoc inside an eval argument",
+    "tool": "Bash",
+    "command": "eval \"$(cat <<'EOF'\nstart notepad\nEOF\n)\"",
+    "expect": "deny"
+  },
+  {
+    "name": "shell named by a variable",
+    "tool": "Bash",
+    "command": "S=bash; $S <<'EOF'\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "reader after a line continuation",
+    "tool": "Bash",
+    "command": "cat <<'EOF' | \\\nbash\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "PowerShell block comment is not a heredoc",
+    "tool": "PowerShell",
+    "command": "Write-Host hi <# <<EOF #>\nStart-Process notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "python heredoc with start in its code",
+    "tool": "Bash",
+    "command": "python - <<'EOF'\nt.start()\nstart = 1\nEOF",
+    "expect": "allow"
+  },
+  {
+    "name": "shell named by an unset-looking variable",
+    "tool": "Bash",
+    "command": "S=run; $S <<'EOF'\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "quoted SHELL variable reads a heredoc",
+    "tool": "Bash",
+    "command": "\"$SHELL\" <<'EOF'\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "heredoc stored then run as a command",
+    "tool": "Bash",
+    "command": "x=$(cat <<'EOF'\nstart notepad\nEOF\n)\n$x",
+    "expect": "deny"
+  },
+  {
+    "name": "heredoc line read then run",
+    "tool": "Bash",
+    "command": "read -r c <<'EOF'\nstart notepad\nEOF\n$c",
+    "expect": "deny"
+  },
+  {
+    "name": "substitution output run as a command",
+    "tool": "Bash",
+    "command": "$(cat <<'EOF'\nstart notepad\nEOF\n)",
+    "expect": "deny"
+  },
+  {
+    "name": "backtick output run as a command",
+    "tool": "Bash",
+    "command": "`cat <<'EOF'\nstart notepad\nEOF\n`",
+    "expect": "deny"
+  },
+  {
+    "name": "escaped less-than is not a heredoc",
+    "tool": "Bash",
+    "command": "echo a \\<<EOF\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "ANSI-C quote hides no heredoc",
+    "tool": "Bash",
+    "command": "echo $'a\\' <<EOF '\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "split shell name",
+    "tool": "Bash",
+    "command": "ba\"\"sh <<'EOF'\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "xargs runs heredoc lines",
+    "tool": "Bash",
+    "command": "xargs -L1 env <<'EOF'\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "shell name glued to the heredoc marker",
+    "tool": "Bash",
+    "command": "bash<<'EOF'\nstart notepad\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "shell name glued to a redirect",
+    "tool": "Bash",
+    "command": "bash>build.log 2>&1 <<'EOF'\nflutter emulators --launch a\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "pipe to a shell glued to a redirect",
+    "tool": "Bash",
+    "command": "cat <<'EOF' |sh>log\nwsl ls\nEOF",
+    "expect": "deny"
+  },
+  {
+    "name": "positional arguments run as a command",
+    "tool": "Bash",
+    "command": "set -- $(cat <<'EOF'\ngit worktree remove t\nEOF\n); \"$@\"",
+    "expect": "deny"
+  },
+  {
+    "name": "fish reads a heredoc",
+    "tool": "Bash",
+    "command": "fish <<'EOF'\nstart notepad\nEOF",
+    "expect": "deny"
+  }
+]

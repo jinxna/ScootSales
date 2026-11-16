@@ -1,0 +1,11 @@
+We received a payment for {{ params.companyName }}.
+
+Receipt number: {{ params.receiptNumber }}
+Invoice: {{ params.invoiceReference }}
+Amount: {{ params.amount }}
+Paid at: {{ params.paidAt }}
+
+Keep this message as your receipt.
+
+Scoot Sales
+This is an automatic message.

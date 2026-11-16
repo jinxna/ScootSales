@@ -1,0 +1,6 @@
+name: scoot_help
+description: Frequently asked questions for the company dashboard, the salesperson app and the Control Centre. Generated from faq/faq.json by scripts/build_faq.py.
+publish_to: 'none'
+
+environment:
+  sdk: ^3.8.0

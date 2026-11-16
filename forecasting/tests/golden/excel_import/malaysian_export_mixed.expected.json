@@ -1,0 +1,290 @@
+{
+  "stagedRows": [
+    {
+      "category": "Beverages",
+      "lineTotal": "149.4",
+      "orderId": "IMP000002",
+      "productId": "GEN_8268c674",
+      "productName": "Milo Tin 1kg",
+      "quantity": "6",
+      "retailerId": "GEN_7ab5dbde",
+      "retailerName": "Kedai Runcit Pelita",
+      "salesmanId": "",
+      "salesmanName": "Ahmad Faizal",
+      "status": "approved",
+      "submittedAt": "2025-03-10T00:00:00",
+      "unitPrice": "24.9"
+    },
+    {
+      "category": "Instant Noodles",
+      "lineTotal": "7800.0",
+      "orderId": "IMP000004",
+      "productId": "GEN_d495da26",
+      "productName": "Maggi Curry 5s",
+      "quantity": "1200",
+      "retailerId": "GEN_71feb94e",
+      "retailerName": "Mydin Mall Kuching",
+      "salesmanId": "",
+      "salesmanName": "Lim Siew Ling",
+      "status": "approved",
+      "submittedAt": "2025-03-13T00:00:00",
+      "unitPrice": "6.5"
+    },
+    {
+      "category": "Rice",
+      "lineTotal": "0.0",
+      "orderId": "IMP000005",
+      "productId": "GEN_c61dea09",
+      "productName": "Beras Cap Jati 10kg",
+      "quantity": "3",
+      "retailerId": "GEN_21205a61",
+      "retailerName": "Kedai Runcit Ah Seng 阿成",
+      "salesmanId": "",
+      "salesmanName": "Siti Aminah",
+      "status": "approved",
+      "submittedAt": "2025-04-03T00:00:00",
+      "unitPrice": "0.0"
+    },
+    {
+      "category": "Canned",
+      "lineTotal": "0.0",
+      "orderId": "IMP000014",
+      "productId": "GEN_b6bbcdb9",
+      "productName": "Ayam Brand Sardines 155g",
+      "quantity": "24",
+      "retailerId": "GEN_d7e467f1",
+      "retailerName": "Unknown Retailer",
+      "salesmanId": "",
+      "salesmanName": "Siti Aminah",
+      "status": "approved",
+      "submittedAt": "2025-03-20T00:00:00",
+      "unitPrice": "0.0"
+    },
+    {
+      "category": "Uncategorised",
+      "lineTotal": "6.25",
+      "orderId": "IMP000017",
+      "productId": "GEN_804b456c",
+      "productName": "100PLUS Original 500ml",
+      "quantity": "2",
+      "retailerId": "GEN_71feb94e",
+      "retailerName": "Mydin Mall Kuching",
+      "salesmanId": "",
+      "salesmanName": "Lim Siew Ling",
+      "status": "approved",
+      "submittedAt": "2025-03-23T00:00:00",
+      "unitPrice": "2.5"
+    }
+  ],
+  "summary": {
+    "columnsDetected": {
+      "category": "Category",
+      "lineTotal": "Amount",
+      "productName": "Item Name",
+      "quantity": "Qty",
+      "retailerName": "Customer",
+      "salesmanName": "Salesman",
+      "status": "Status",
+      "submittedAt": "Order Date",
+      "unitPrice": "Price"
+    },
+    "errorRows": 8,
+    "issueCounts": {
+      "duplicate_row": 1,
+      "empty_retailer": 2,
+      "invalid_date": 1,
+      "invalid_price": 2,
+      "invalid_quantity": 2,
+      "missing_date": 1,
+      "missing_product": 1,
+      "missing_product_id": 8,
+      "missing_quantity": 1,
+      "negative_line_total": 1,
+      "negative_quantity": 1,
+      "non_demand_status": 2,
+      "zero_quantity": 1
+    },
+    "issues": [
+      {
+        "detail": "Derived id GEN_8268c674 from product name.",
+        "field": "productId",
+        "issueType": "missing_product_id",
+        "row": 2,
+        "severity": "warning"
+      },
+      {
+        "detail": "Derived id GEN_8268c674 from product name.",
+        "field": "productId",
+        "issueType": "missing_product_id",
+        "row": 3,
+        "severity": "warning"
+      },
+      {
+        "detail": "Identical date/product/retailer/qty already imported.",
+        "field": "*",
+        "issueType": "duplicate_row",
+        "row": 3,
+        "severity": "warning"
+      },
+      {
+        "detail": "Derived id GEN_d495da26 from product name.",
+        "field": "productId",
+        "issueType": "missing_product_id",
+        "row": 4,
+        "severity": "warning"
+      },
+      {
+        "detail": "Derived id GEN_c61dea09 from product name.",
+        "field": "productId",
+        "issueType": "missing_product_id",
+        "row": 5,
+        "severity": "warning"
+      },
+      {
+        "detail": "Unusable price 'RM 32.50' treated as 0.",
+        "field": "unitPrice",
+        "issueType": "invalid_price",
+        "row": 5,
+        "severity": "warning"
+      },
+      {
+        "detail": "Quantity is zero (not real demand).",
+        "field": "quantity",
+        "issueType": "zero_quantity",
+        "row": 6,
+        "severity": "error"
+      },
+      {
+        "detail": "Negative quantity: -2.0.",
+        "field": "quantity",
+        "issueType": "negative_quantity",
+        "row": 7,
+        "severity": "error"
+      },
+      {
+        "detail": "Non-numeric quantity: 'abc'.",
+        "field": "quantity",
+        "issueType": "invalid_quantity",
+        "row": 8,
+        "severity": "error"
+      },
+      {
+        "detail": "No quantity.",
+        "field": "quantity",
+        "issueType": "missing_quantity",
+        "row": 9,
+        "severity": "error"
+      },
+      {
+        "detail": "No order date.",
+        "field": "submittedAt",
+        "issueType": "missing_date",
+        "row": 10,
+        "severity": "error"
+      },
+      {
+        "detail": "Unparseable date: '31/02/2025'.",
+        "field": "submittedAt",
+        "issueType": "invalid_date",
+        "row": 11,
+        "severity": "error"
+      },
+      {
+        "detail": "No product name or id.",
+        "field": "productName",
+        "issueType": "missing_product",
+        "row": 12,
+        "severity": "error"
+      },
+      {
+        "detail": "Derived id GEN_b6bbcdb9 from product name.",
+        "field": "productId",
+        "issueType": "missing_product_id",
+        "row": 13,
+        "severity": "warning"
+      },
+      {
+        "detail": "Retailer blank; set to Unknown Retailer.",
+        "field": "retailerName",
+        "issueType": "empty_retailer",
+        "row": 13,
+        "severity": "warning"
+      },
+      {
+        "detail": "Status 'cancelled' excluded from demand.",
+        "field": "status",
+        "issueType": "non_demand_status",
+        "row": 13,
+        "severity": "warning"
+      },
+      {
+        "detail": "Derived id GEN_b6bbcdb9 from product name.",
+        "field": "productId",
+        "issueType": "missing_product_id",
+        "row": 14,
+        "severity": "warning"
+      },
+      {
+        "detail": "Retailer blank; set to Unknown Retailer.",
+        "field": "retailerName",
+        "issueType": "empty_retailer",
+        "row": 14,
+        "severity": "warning"
+      },
+      {
+        "detail": "Unusable price 'free' treated as 0.",
+        "field": "unitPrice",
+        "issueType": "invalid_price",
+        "row": 14,
+        "severity": "warning"
+      },
+      {
+        "detail": "Negative line total -10.0 recomputed.",
+        "field": "lineTotal",
+        "issueType": "negative_line_total",
+        "row": 14,
+        "severity": "warning"
+      },
+      {
+        "detail": "Derived id GEN_804b456c from product name.",
+        "field": "productId",
+        "issueType": "missing_product_id",
+        "row": 15,
+        "severity": "warning"
+      },
+      {
+        "detail": "Status 'void' excluded from demand.",
+        "field": "status",
+        "issueType": "non_demand_status",
+        "row": 15,
+        "severity": "warning"
+      },
+      {
+        "detail": "Quantity must be finite: '1e309'.",
+        "field": "quantity",
+        "issueType": "invalid_quantity",
+        "row": 16,
+        "severity": "error"
+      },
+      {
+        "detail": "Derived id GEN_804b456c from product name.",
+        "field": "productId",
+        "issueType": "missing_product_id",
+        "row": 17,
+        "severity": "warning"
+      }
+    ],
+    "monthsCovered": [
+      "2025-03",
+      "2025-04"
+    ],
+    "products": 5,
+    "retailers": 4,
+    "sourceFile": "malaysian_export_mixed.input.csv",
+    "totalRows": 16,
+    "unmappedRequired": [],
+    "validRows": 5,
+    "warningRows": 16,
+    "writtenToRaw": true
+  }
+}

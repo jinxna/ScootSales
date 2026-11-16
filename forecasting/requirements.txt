@@ -1,0 +1,33 @@
+# Forecast/AI service dependencies.
+#
+# Each pin is a range: the lower bound is the minimum tested API, and the upper
+# bound caps the next MAJOR version so a surprise major release cannot silently
+# break the demo environment between installs. This keeps the no-paid-cloud demo
+# reproducible without freezing the full transitive tree here.
+#
+# To refresh intentionally: raise a bound, then on Python 3.11 run
+#   pip install -r requirements-dev.txt && python -m pytest
+# and commit the reviewed change. The runner image uses a fully pinned lock
+# (requirements-ai-runner.txt); follow the same review discipline here.
+
+# Shared operational SARIMA core and legacy monthly research scripts
+pandas>=2.0,<3.0
+numpy>=1.24,<3.0
+statsmodels>=0.14,<1.0
+
+# Excel import (service/excel_importer.py)
+openpyxl>=3.1,<4.0
+
+# Local forecasting API (service/app.py)
+fastapi>=0.110,<1.0
+uvicorn>=0.27,<1.0
+python-multipart>=0.0.9,<1.0
+
+# Optional: mirror forecast events to Firestore (dashboard_notifications,
+# forecast_runs, ...). The service degrades gracefully if this is absent.
+firebase-admin>=6.5,<8.0
+# Directly used for credential-free Firebase ID-token signature verification.
+# Already installed transitively by firebase-admin; this records the contract.
+google-auth>=2.29,<3.0
+requests>=2.31,<3.0
+CacheControl>=0.14,<1.0

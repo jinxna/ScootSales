@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly demand forecast, Monday morning Kuching time
+
+[Timer]
+OnCalendar=Mon *-*-* 06:00:00 Asia/Kuching
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

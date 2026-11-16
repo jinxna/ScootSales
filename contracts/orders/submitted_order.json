@@ -1,0 +1,208 @@
+{
+  "description": "A normal submitted order from the mobile app (personal planner, no GPS fix). Two products, one with shelf batches.",
+  "salesman": {
+    "uid": "ct-order-sales",
+    "userDoc": {
+      "uid": "ct-order-sales",
+      "email": "ct-order-sales@contracts.test",
+      "role": "salesman",
+      "user_group": "salesman",
+      "status": "active",
+      "employeeCode": "S201",
+      "branchId": "B1"
+    },
+    "access": {
+      "accessVersion": 2,
+      "uid": "ct-order-sales",
+      "userDocId": "ct-order-sales@contracts.test",
+      "employeeCode": "S201",
+      "userId": "S201",
+      "email": "ct-order-sales@contracts.test",
+      "role": "salesman",
+      "user_group": "salesman",
+      "status": "active",
+      "isActive": true,
+      "branchId": "B1",
+      "branch_id": "B1",
+      "supervisorId": "SV01",
+      "supervisor_id": "SV01",
+      "supervisorUid": "ct-sup-1",
+      "seatClass": "salesperson",
+      "assignedSalesmanCodes": {
+        "$sentinel": "delete"
+      },
+      "updatedAt": {
+        "$sentinel": "serverTimestamp"
+      }
+    }
+  },
+  "builder": {
+    "orderId": "ORD-CT-1001",
+    "visitId": "",
+    "personalPlanner": true,
+    "guidedVisitFields": null,
+    "retailerId": "ct-retailer-1",
+    "retailerName": "Kedai Maju",
+    "identityFields": {
+      "uid": "ct-order-sales",
+      "userUid": "ct-order-sales",
+      "salesmanUid": "ct-order-sales",
+      "salesmanEmail": "ct-order-sales@contracts.test",
+      "salesmanId": "S201",
+      "salesmanName": "Sales Two",
+      "submittedByUid": "ct-order-sales",
+      "createdByUid": "ct-order-sales",
+      "branchId": "B1",
+      "supervisorId": "SV01"
+    },
+    "locationFields": {
+      "locationEvidence": {
+        "mode": "not_verified",
+        "failureCode": "unavailable"
+      }
+    },
+    "items": [
+      {
+        "productName": "Orange Juice",
+        "productId": "P-001",
+        "barcode": "9551000000015",
+        "packingSize": "12 x 1L",
+        "unitPrice": 10.0,
+        "orderQty": 2,
+        "orderedExpiry": "2027-01-31",
+        "department": "Beverage",
+        "shelfBatches": [
+          {
+            "qty": 3,
+            "expiry": "2026-12-01"
+          },
+          {
+            "qty": 0,
+            "expiry": "2026-12-02"
+          }
+        ],
+        "remarks": ""
+      },
+      {
+        "productName": "Mineral Water 1.5L",
+        "productId": "P_002",
+        "barcode": "",
+        "packingSize": "12 x 1L",
+        "unitPrice": 2.5,
+        "orderQty": 4,
+        "orderedExpiry": "2027-01-31",
+        "department": "Beverage",
+        "shelfBatches": [],
+        "remarks": ""
+      }
+    ],
+    "signatureTimestamps": {
+      "Beverage": "2026-10-05 10:15"
+    }
+  },
+  "order": {
+    "orderId": "ORD-CT-1001",
+    "visitSource": "personal_planner",
+    "retailerId": "ct-retailer-1",
+    "retailerName": "Kedai Maju",
+    "outlet": "Kedai Maju",
+    "uid": "ct-order-sales",
+    "userUid": "ct-order-sales",
+    "salesmanUid": "ct-order-sales",
+    "salesmanEmail": "ct-order-sales@contracts.test",
+    "salesmanId": "S201",
+    "salesmanName": "Sales Two",
+    "submittedByUid": "ct-order-sales",
+    "createdByUid": "ct-order-sales",
+    "branchId": "B1",
+    "supervisorId": "SV01",
+    "locationEvidence": {
+      "mode": "not_verified",
+      "failureCode": "unavailable"
+    },
+    "totalProducts": 2,
+    "totalBoxes": 6,
+    "totalPrice": 30.0,
+    "submittedAt": {
+      "$sentinel": "serverTimestamp"
+    },
+    "createdAt": {
+      "$sentinel": "serverTimestamp"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    },
+    "status": "submitted",
+    "items": [
+      {
+        "name": "Orange Juice",
+        "productName": "Orange Juice",
+        "productId": "P-001",
+        "barcode": "9551000000015",
+        "packingSize": "12 x 1L",
+        "price": 10.0,
+        "qty": 2,
+        "expiry": "2027-01-31",
+        "department": "Beverage",
+        "departmentName": "Beverage",
+        "shelfBatches": [
+          {
+            "qty": 3,
+            "expiry": "2026-12-01"
+          }
+        ],
+        "remarks": ""
+      },
+      {
+        "name": "Mineral Water 1.5L",
+        "productName": "Mineral Water 1.5L",
+        "productId": "P_002",
+        "packingSize": "12 x 1L",
+        "price": 2.5,
+        "qty": 4,
+        "expiry": "2027-01-31",
+        "department": "Beverage",
+        "departmentName": "Beverage",
+        "shelfBatches": [],
+        "remarks": ""
+      }
+    ],
+    "commercialSchemaVersion": 1,
+    "commercialLines": [
+      "P-001~T3JhbmdlIEp1aWNl~2~1000",
+      "P_002~TWluZXJhbCBXYXRlciAxLjVM~4~250"
+    ],
+    "signatureTimestamps": {
+      "Beverage": "2026-10-05 10:15"
+    }
+  },
+  "expect": {
+    "rulesSalesmanCreate": "allow",
+    "dashboard": {
+      "status": "submitted",
+      "isSubmittedOrApproved": true,
+      "isPendingApproval": true,
+      "revenue": 30.0,
+      "quantity": 6,
+      "itemCount": 2,
+      "salesmanName": "Sales Two",
+      "retailerName": "Kedai Maju",
+      "items": [
+        {
+          "name": "Orange Juice",
+          "productId": "P-001",
+          "qty": 2,
+          "price": 10.0,
+          "department": "Beverage"
+        },
+        {
+          "name": "Mineral Water 1.5L",
+          "productId": "P_002",
+          "qty": 4,
+          "price": 2.5,
+          "department": "Beverage"
+        }
+      ]
+    }
+  }
+}

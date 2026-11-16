@@ -1,0 +1,186 @@
+{
+  "data_quality": {
+    "itemsInvalidAmount": 0,
+    "itemsInvalidQuantity": 0,
+    "itemsMissingPrice": 0,
+    "itemsScanned": 9,
+    "itemsUnresolvedProduct": 0,
+    "missingPricePairs": [],
+    "ordersMissingDate": 2,
+    "ordersMissingRetailer": 1,
+    "ordersScanned": 15,
+    "ordersSkippedStatus": 2,
+    "retailersMissingCoordinates": [
+      "R-MYR-0003",
+      "ai-1-R1"
+    ]
+  },
+  "products": {
+    "P-100PLUS-500": {
+      "is_demo": false,
+      "packing_size": "",
+      "product_id": "P-100PLUS-500",
+      "product_name": "100PLUS Original 500ml",
+      "unit_of_measure": "",
+      "unit_price_rm": 2.5
+    },
+    "demo-P-1": {
+      "is_demo": true,
+      "packing_size": "",
+      "product_id": "demo-P-1",
+      "product_name": "Demo Biscuit",
+      "unit_of_measure": "",
+      "unit_price_rm": 1.0
+    }
+  },
+  "retailers": {
+    "R-MYR-0003": {
+      "branch_id": "MYR-01",
+      "has_coordinates": false,
+      "is_demo": false,
+      "is_retired": false,
+      "latitude": null,
+      "longitude": null,
+      "retailer_id": "R-MYR-0003",
+      "retailer_name": "Sin Hup Hin Sdn Bhd",
+      "salesman_code": "S004",
+      "salesman_uid": ""
+    },
+    "ai-1-R1": {
+      "branch_id": "",
+      "has_coordinates": false,
+      "is_demo": true,
+      "is_retired": false,
+      "latitude": null,
+      "longitude": null,
+      "retailer_id": "ai-1-R1",
+      "retailer_name": "Demo Retailer",
+      "salesman_code": "",
+      "salesman_uid": ""
+    }
+  },
+  "series": [
+    {
+      "branch_id": "MYR-01",
+      "coverage_weeks": 8,
+      "observations": [
+        {
+          "order_count": 1,
+          "quantity": 10.0,
+          "revenue_rm": 25.0,
+          "week_start": "2026-01-26"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-16"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-23"
+        },
+        {
+          "order_count": 1,
+          "quantity": 6.0,
+          "revenue_rm": 15.0,
+          "week_start": "2026-03-02"
+        },
+        {
+          "order_count": 2,
+          "quantity": 5.0,
+          "revenue_rm": 12.5,
+          "week_start": "2026-03-09"
+        },
+        {
+          "order_count": 1,
+          "quantity": 4.0,
+          "revenue_rm": 10.0,
+          "week_start": "2026-03-16"
+        }
+      ],
+      "product_id": "P-100PLUS-500",
+      "product_name": "100PLUS Original 500ml",
+      "retailer_id": "R-MYR-0003",
+      "retailer_name": "Sin Hup Hin Sdn Bhd",
+      "salesman_code": "S004",
+      "salesman_uid": "",
+      "unit_price_rm": 2.5
+    },
+    {
+      "branch_id": "",
+      "coverage_weeks": 8,
+      "observations": [
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-01-26"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-16"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-02-23"
+        },
+        {
+          "order_count": 1,
+          "quantity": 3.0,
+          "revenue_rm": 3.0,
+          "week_start": "2026-03-02"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-09"
+        },
+        {
+          "order_count": 0,
+          "quantity": 0.0,
+          "revenue_rm": 0.0,
+          "week_start": "2026-03-16"
+        }
+      ],
+      "product_id": "demo-P-1",
+      "product_name": "Demo Biscuit",
+      "retailer_id": "ai-1-R1",
+      "retailer_name": "Demo Retailer",
+      "salesman_code": "",
+      "salesman_uid": "",
+      "unit_price_rm": 1.0
+    }
+  ]
+}

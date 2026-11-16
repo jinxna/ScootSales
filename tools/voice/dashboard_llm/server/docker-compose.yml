@@ -1,0 +1,31 @@
+# Copilot server behind Caddy (automatic HTTPS). Settings come from .env (see env.example).
+services:
+  copilot:
+    build: .
+    restart: unless-stopped
+    environment:
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      PLATFORM_PUBLIC_KEYS: ${PLATFORM_PUBLIC_KEYS:-}
+      PLATFORM_PROJECT_ID: ${PLATFORM_PROJECT_ID:-}
+      COPILOT_THRESHOLD: ${COPILOT_THRESHOLD}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+    expose:
+      - "8080"
+    mem_limit: 3g
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      COPILOT_DOMAIN: ${COPILOT_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - copilot
+volumes:
+  caddy_data:

@@ -1,0 +1,43 @@
+{
+  "description": "accessVersion 1 never existed: rules deny the write and readers reject the record (only 2 is valid).",
+  "uid": "ct-v1",
+  "userDoc": {
+    "uid": "ct-v1",
+    "email": "ct-v1@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "employeeCode": "S111",
+    "branchId": "B1"
+  },
+  "access": {
+    "accessVersion": 1,
+    "uid": "ct-v1",
+    "userDocId": "ct-v1@contracts.test",
+    "employeeCode": "S111",
+    "userId": "S111",
+    "email": "ct-v1@contracts.test",
+    "role": "salesman",
+    "user_group": "salesman",
+    "status": "active",
+    "isActive": true,
+    "branchId": "B1",
+    "branch_id": "B1",
+    "supervisorId": "",
+    "supervisor_id": "",
+    "supervisorUid": "",
+    "seatClass": "salesperson",
+    "assignedSalesmanCodes": {
+      "$sentinel": "delete"
+    },
+    "updatedAt": {
+      "$sentinel": "serverTimestamp"
+    }
+  },
+  "expect": {
+    "rulesAdminWrite": "deny",
+    "mobileIdentity": "rejected",
+    "pythonIdentity": "rejected",
+    "pythonAdminAccess": "deny"
+  }
+}

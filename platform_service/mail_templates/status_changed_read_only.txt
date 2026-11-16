@@ -1,0 +1,8 @@
+The account for {{ params.companyName }} is now read-only.
+
+Administrators can read data but cannot change it. Other users cannot sign in.
+
+Contact the Scoot Sales team to restore the account.
+
+Scoot Sales
+This is an automatic message.
