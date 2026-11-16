@@ -16,7 +16,7 @@ const knownBugs = [];
 
 const OTHER_RUNNERS = {
   signin: ['cc_signin', 'control_centre_tour', 'first_use_empty', 'p1_billing', 'solo_owner', 'v4_control_centre', 'onboarding_new_company', 'onboarding_byo_company'],
-  'tenant-routing': ['company_api_central'],
+  'tenant-routing': ['company_api_central', 'hardware_adoption', 'scout_company_record'],
 };
 const RUNNER = process.env.E2E_RUNNER || (process.env.E2E_TENANT_ROUTING === '1' ? 'tenant-routing' : 'default');
 
