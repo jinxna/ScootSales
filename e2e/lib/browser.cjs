@@ -141,8 +141,54 @@ async function openApp(page, url) {
   await enableSemantics(page);
 }
 
+async function startTypingTrace(page) {
+  await page.evaluate(() => {
+    const started = performance.now();
+    const ids = new WeakMap();
+    let nextId = 1;
+    const idOf = (node) => {
+      if (!node || typeof node !== 'object') return 0;
+      if (!ids.has(node)) ids.set(node, nextId++);
+      return ids.get(node);
+    };
+    const deepActive = () => {
+      let active = document.activeElement;
+      while (active && active.shadowRoot && active.shadowRoot.activeElement) active = active.shadowRoot.activeElement;
+      return active;
+    };
+    const events = [];
+    const record = (event) => {
+      const target = event.composedPath()[0];
+      events.push({
+        ms: Math.round(performance.now() - started),
+        type: event.type,
+        el: idOf(target),
+        tag: target && target.tagName ? target.tagName.toLowerCase() : String(target && target.nodeName),
+        active: idOf(deepActive()),
+        length: target && typeof target.value === 'string' ? target.value.length : null,
+        key: typeof event.key === 'string' ? (event.key.length === 1 ? 'char' : event.key) : undefined,
+        inputType: event.inputType,
+      });
+    };
+    const types = ['focusin', 'focusout', 'keydown', 'beforeinput', 'input', 'pointerdown'];
+    for (const type of types) document.addEventListener(type, record, true);
+    window.__typingTrace = { events, stop: () => types.forEach((type) => document.removeEventListener(type, record, true)) };
+  });
+}
+
+async function stopTypingTrace(page) {
+  return page.evaluate(() => {
+    const trace = window.__typingTrace;
+    delete window.__typingTrace;
+    if (!trace) return [];
+    trace.stop();
+    return trace.events;
+  });
+}
+
 async function fillField(page, locator, value) {
   const seen = [];
+  await startTypingTrace(page);
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await locator.click();
     await page.keyboard.press('Control+A');
@@ -150,11 +196,15 @@ async function fillField(page, locator, value) {
     const leftAfterClear = (await locator.inputValue()).length;
     await page.keyboard.type(value, { delay: 20 });
     const typed = await locator.inputValue();
-    if (typed === value) return;
+    if (typed === value) {
+      await stopTypingTrace(page);
+      return;
+    }
     seen.push({ leftAfterClear, length: typed.length, missingStart: value.endsWith(typed), missingEnd: value.startsWith(typed) });
     await page.waitForTimeout(400);
   }
-  throw new Error(`could not enter text into the field reliably: wanted ${value.length} characters, each try gave ${JSON.stringify(seen)}`);
+  const trace = await stopTypingTrace(page);
+  throw new Error(`could not enter text into the field reliably: wanted ${value.length} characters, each try gave ${JSON.stringify(seen)}; events ${JSON.stringify(trace.slice(0, 120))}`);
 }
 
 async function focusedValue(locator, { timeout = 5000 } = {}) {
