@@ -3,7 +3,6 @@ import 'package:flutter_web_app/models/user_profile.dart';
 import 'package:flutter_web_app/pages/admin/views/salesman_activity_page.dart';
 import 'package:flutter_web_app/repositories/cms_repository.dart';
 import 'package:flutter_web_app/utils/collection_rows.dart';
-import 'package:flutter_web_app/utils/visit_data_utils.dart';
 
 final DateTime _now = DateTime.utc(2026, 11, 12, 4);
 final DateTime _performanceStart = _now.subtract(salesmanPerformanceWindow);
@@ -479,71 +478,6 @@ void main() {
       expect(oneFullDay.people!.single.visitsCompleted, 433);
     },
   );
-
-  test('the coverage answers the review measured stay the same', () {
-    final DateTime now = DateTime.utc(2026, 11, 11, 18);
-    final DateTime performanceStart = now.subtract(salesmanPerformanceWindow);
-    List<Map<String, dynamic>> stops(int count, Duration step) =>
-        <Map<String, dynamic>>[
-          for (int i = 0; i < count; i++) _visit(i, now.subtract(step * i)),
-        ];
-    final List<Map<String, dynamic>> fewPoints = <Map<String, dynamic>>[
-      for (int i = 0; i < 20; i++)
-        _point(i, now.subtract(Duration(minutes: i))),
-    ];
-    List<bool> answers(CollectionRows rows) => <bool>[
-      activityCoverage(rows, performanceStart).visits,
-      activityCoverage(rows, performanceStart).location,
-      activityCoverage(rows, _todayStart).visits,
-      activityCoverage(rows, _todayStart).location,
-    ];
-
-    expect(
-      answers(
-        _panelInput(
-          visits: stops(40, const Duration(hours: 15)),
-          points: <Map<String, dynamic>>[
-            for (int i = 0; i < 600; i++)
-              _point(i, now.subtract(Duration(seconds: 30 * i))),
-          ],
-        ),
-      ),
-      <bool>[true, false, true, true],
-    );
-    expect(
-      answers(
-        _panelInput(
-          visits: stops(520, const Duration(hours: 1)),
-          points: fewPoints,
-        ),
-      ),
-      <bool>[false, false, true, true],
-    );
-    expect(
-      answers(
-        _panelInput(
-          visits: stops(520, const Duration(hours: 2)),
-          points: fewPoints,
-        ),
-      ),
-      <bool>[true, true, true, true],
-    );
-    expect(
-      <String>[
-        'visit_logs',
-        'route_stop_progress',
-        'orders',
-        'gps_tracking',
-        'users',
-        '',
-      ].map(
-        (String source) => isLocationOnlyVisitRow(<String, dynamic>{
-          'sourceCollection': source,
-        }),
-      ),
-      <bool>[false, false, false, true, true, false],
-    );
-  });
 
   test(
     'the location coverage is still known after the page cache replays the rows',

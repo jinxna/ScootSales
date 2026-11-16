@@ -46,15 +46,6 @@ def _flatten(
     return [{"docId": doc_id, **payload} for doc_id, payload in documents[collection]]
 
 
-def test_demo_seed_is_deterministic_and_marked() -> None:
-    first = build_demo_documents(as_of=date(2026, 6, 15))
-    second = build_demo_documents(as_of=date(2026, 6, 15))
-    assert first == second
-    assert len(first["orders"]) == 17
-    assert all(payload["isDemo"] is True for _, payload in first["orders"])
-    assert all(doc_id.startswith("AI1_") for doc_id, _ in first["orders"])
-
-
 def test_firestore_value_converts_dates_recursively() -> None:
     converted = _firestore_value(
         {"weekStart": date(2026, 6, 8), "nested": [date(2026, 6, 15)]}

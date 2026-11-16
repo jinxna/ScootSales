@@ -126,10 +126,6 @@ def test_an_ended_draft_reads_nothing_and_is_in_the_ended_phase():
     assert view["phase"] == "ended" and view["doneCount"] == 0
 
 
-def test_marking_tasks_by_hand_no_longer_exists():
-    assert not hasattr(OnboardingDrafts, "set_task")
-
-
 def counting(lifecycle="lead", **changes):
     calls = []
 

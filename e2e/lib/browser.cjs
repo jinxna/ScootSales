@@ -142,15 +142,19 @@ async function openApp(page, url) {
 }
 
 async function fillField(page, locator, value) {
+  const seen = [];
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await locator.click();
     await page.keyboard.press('Control+A');
     await page.keyboard.press('Backspace');
+    const leftAfterClear = (await locator.inputValue()).length;
     await page.keyboard.type(value, { delay: 20 });
-    if ((await locator.inputValue()) === value) return;
+    const typed = await locator.inputValue();
+    if (typed === value) return;
+    seen.push({ leftAfterClear, length: typed.length, missingStart: value.endsWith(typed), missingEnd: value.startsWith(typed) });
     await page.waitForTimeout(400);
   }
-  throw new Error('could not enter text into the field reliably');
+  throw new Error(`could not enter text into the field reliably: wanted ${value.length} characters, each try gave ${JSON.stringify(seen)}`);
 }
 
 async function focusedValue(locator, { timeout = 5000 } = {}) {

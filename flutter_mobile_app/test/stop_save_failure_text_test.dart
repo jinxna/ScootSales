@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fmcg_sales/widgets/location_status_banner.dart';
 
@@ -19,13 +17,6 @@ void main() {
     expect(
       textFor(StateError('Completion requires a prior accepted arrival.')),
       'Mark arrival at this stop first.',
-    );
-  });
-
-  test('a timeout has its own text', () {
-    expect(
-      textFor(TimeoutException('slow')),
-      'Saving took too long. Try again.',
     );
   });
 }

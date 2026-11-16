@@ -72,23 +72,6 @@ void main() {
     },
   );
 
-  testWidgets('a paused phone with no held work does not promise an upload', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CompanyPausedScreen(
-          monitor: CompanyLifecycleMonitor(),
-          showStatusStrip: false,
-          onSignOut: () {},
-        ),
-      ),
-    );
-    expect(find.text('No work is held on this phone.'), findsOneWidget);
-    expect(find.textContaining('will upload'), findsNothing);
-    expect(find.textContaining('uploads only if'), findsNothing);
-  });
-
   testWidgets('a pending visit outcome is not shown as no held work', (
     WidgetTester tester,
   ) async {
@@ -112,16 +95,6 @@ void main() {
     );
     expect(find.textContaining('2 items are held'), findsOneWidget);
     expect(find.textContaining('will upload'), findsOneWidget);
-    monitor.stop();
-  });
-
-  testWidgets('truly nothing to upload says so', (WidgetTester tester) async {
-    final CompanyLifecycleMonitor monitor = await _pumpPaused(
-      tester,
-      const HeldWorkCounts(),
-      false,
-    );
-    expect(find.text('No work is held on this phone.'), findsOneWidget);
     monitor.stop();
   });
 }

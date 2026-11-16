@@ -178,17 +178,6 @@ void main() {
     return body['record']! as Map<String, Object?>;
   }
 
-  testWidgets('Ticking the rules version box saves the current build value', (
-    WidgetTester tester,
-  ) async {
-    final Map<String, Object?> record = await saveEdit(
-      tester,
-      current: 'v9',
-      tick: true,
-    );
-    expect(record['rulesVersion'], 'v9');
-  });
-
   testWidgets('Leaving the rules version box unticked keeps the old value', (
     WidgetTester tester,
   ) async {

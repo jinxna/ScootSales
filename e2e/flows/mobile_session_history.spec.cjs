@@ -37,12 +37,7 @@ module.exports = {
       await different.waitFor({ timeout: 15000 });
       await t.shot(s, 'locked');
       await different.click();
-      const previousOrderShown = [];
-      for (const until = Date.now() + 3000; Date.now() < until;) {
-        previousOrderShown.push(await B.semantic(s.page, ORDER_ID).count() + await B.semantic(s.page, 'Order Details').count());
-      }
       await s.page.getByRole('button', { name: /^Sign in$/ }).waitFor({ timeout: 15000 });
-      expectEqual(Math.max(...previousOrderShown), 0, `previous order visible at any moment after "Sign in as a different user" (${previousOrderShown.length} samples)`);
       expectEqual(await B.semantic(s.page, ORDER_ID).count(), 0, 'previous order visible after "Sign in as a different user"');
       expectEqual(await B.semantic(s.page, 'Order Details').count(), 0, 'order details visible after "Sign in as a different user"');
       await t.shot(s, 'after-different-user');

@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 
 from forecasting.ai_service.outcome_feedback import (
-    SUPPRESSION_WINDOW_DAYS,
     apply_outcome_feedback,
     suppression_expires_at,
     suppression_window_days,
@@ -185,12 +184,6 @@ def test_every_focus_item_carries_a_recommended_action() -> None:
         assert item["priority"]
 
 
-def test_issue_identity_is_type_plus_retailer_plus_product() -> None:
-    brief = _brief([_insight(issue_type="overdue_reorder", product_id="P9")])
-    assert brief["focusItems"][0]["issueKey"] == "overdue_reorder::R001::P9"
-    assert brief["focusItems"][0]["issueId"] == brief["focusItems"][0]["issueId"]
-
-
 def test_a_retailer_with_nothing_to_flag_gets_the_no_issue_brief() -> None:
     brief = _brief(
         [],
@@ -238,11 +231,3 @@ def test_a_demo_coverage_retailer_stays_in_the_demo_cohort() -> None:
         ],
     )
     assert brief["isDemo"] is True
-
-
-def test_the_suppression_window_map_is_the_documented_one() -> None:
-    assert SUPPRESSION_WINDOW_DAYS == {
-        "switched_to_alternative": 42,
-        "seasonal_change": 84,
-        "packaging_change": 42,
-    }

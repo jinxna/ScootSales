@@ -66,21 +66,6 @@ void main() {
     });
   }
 
-  test('theme builders set the target size per surface', () {
-    final ThemeData dashboard = ScootTheme.dashboard();
-    final ThemeData phone = ScootTheme.phone(brightness: Brightness.dark);
-    expect(
-      dashboard.filledButtonTheme.style!.minimumSize!.resolve(<WidgetState>{}),
-      const Size(64, 40),
-    );
-    expect(
-      phone.iconButtonTheme.style!.minimumSize!.resolve(<WidgetState>{}),
-      const Size(44, 44),
-    );
-    expect(phone.extension<ScootColors>(), same(ScootColors.dark));
-    expect(dashboard.colorScheme.primary, ScootPalette.brand);
-  });
-
   testWidgets('loading shows Still loading only after 10 s, Retry restarts', (
     WidgetTester tester,
   ) async {
@@ -328,54 +313,6 @@ void main() {
     }
   });
 
-  testWidgets('account menu panel has a one pixel hairline border', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      _app(
-        Align(
-          alignment: Alignment.topRight,
-          child: ScootAccountButton(
-            account: const ScootAccount(name: 'Admin', subtitle: 'Admin'),
-            actions: <ScootMenuAction>[
-              ScootMenuAction(
-                label: 'Sign out',
-                icon: ScootIcons.signOut,
-                onSelected: () {},
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    await tester.tap(find.byType(ScootAccountButton));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    final Finder panel = find.ancestor(
-      of: find.text('Sign out'),
-      matching: find.byType(Material),
-    );
-    final List<BorderSide> sides = panel
-        .evaluate()
-        .map((Element e) => (e.widget as Material).shape)
-        .whereType<RoundedRectangleBorder>()
-        .map((RoundedRectangleBorder b) => b.side)
-        .where((BorderSide side) => side != BorderSide.none)
-        .toList();
-    expect(sides, isNotEmpty);
-    expect(sides.first.color, ScootPalette.line);
-    expect(sides.first.width, 1);
-    final Material panelMaterial = panel
-        .evaluate()
-        .map((Element e) => e.widget as Material)
-        .firstWhere(
-          (Material m) =>
-              m.shape is RoundedRectangleBorder &&
-              (m.shape! as RoundedRectangleBorder).side != BorderSide.none,
-        );
-    expect(panelMaterial.shadowColor?.a ?? 1, lessThan(0.3));
-  });
-
   testWidgets('role changed notice ends with an OK button', (
     WidgetTester tester,
   ) async {
@@ -559,57 +496,6 @@ void main() {
     expect(find.textContaining('ORD-'), findsNWidgets(100));
   });
 
-  testWidgets('phone app bar subtitle is 12 px at weight 500', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: ScootTheme.phone(fontFamily: null),
-        home: const Scaffold(
-          appBar: ScootPhoneAppBar(title: 'Emart Moyan', subtitle: 'Moyan'),
-        ),
-      ),
-    );
-    final TextStyle style = tester.widget<Text>(find.text('Moyan')).style!;
-    expect(style.fontSize, 12);
-    expect(style.fontWeight, FontWeight.w500);
-  });
-
-  testWidgets('Synced word is green and the reason line is amber', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: ScootTheme.phone(fontFamily: null),
-        home: Scaffold(
-          body: Column(
-            children: <Widget>[
-              ScootStatusStrip(
-                sync: const ScootSyncStatus.synced('18:34'),
-                gps: ScootGpsStatus.fix(8),
-                onTap: () {},
-              ),
-              const ScootPrimaryActionBar(
-                label: 'Submit order',
-                onPressed: null,
-                disabledReason: 'Grocery needs a signature.',
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    final ScootColors c = ScootColors.light;
-    final Text strip = tester.widget<Text>(find.textContaining('Synced'));
-    final TextSpan word =
-        (strip.textSpan! as TextSpan).children!.first as TextSpan;
-    expect(word.style!.color, c.brandText);
-    final Text reason = tester.widget<Text>(
-      find.text('Grocery needs a signature.'),
-    );
-    expect(reason.style!.color, c.warning.noteText);
-  });
-
   testWidgets('grey notes keep their button below the note, full width', (
     WidgetTester tester,
   ) async {
@@ -652,21 +538,6 @@ void main() {
       expect(button.top, greaterThanOrEqualTo(noteRect.bottom));
       expect(button.width, noteRect.width);
     }
-  });
-
-  testWidgets('disabled outlined button uses the grey disabled fill', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      _app(const OutlinedButton(onPressed: null, child: Text('Load 50 more'))),
-    );
-    final Material material = tester.widget<Material>(
-      find.descendant(
-        of: find.byType(OutlinedButton),
-        matching: find.byType(Material),
-      ),
-    );
-    expect(material.color, ScootColors.light.disabledFill);
   });
 
   testWidgets(

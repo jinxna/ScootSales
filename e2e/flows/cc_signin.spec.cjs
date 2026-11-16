@@ -119,7 +119,9 @@ module.exports = {
     const watchCsp = (page) => page.on('console', (message) => {
       const text = message.text();
       if (!text.includes('Content Security Policy')) return;
-      if (/Connecting to 'https:\/\/apis\.google\.com\/js\/gen_204\?/.test(text) && /directive: "connect-src /.test(text)) {
+      const googlePingBlocked = (/Connecting to 'https:\/\/apis\.google\.com\/js\/gen_204\?/.test(text) && /directive: "connect-src /.test(text))
+        || /^Fetch API cannot load https:\/\/apis\.google\.com\/js\/gen_204\?\S*\. Refused to connect because it violates the document's Content Security Policy\.$/.test(text);
+      if (googlePingBlocked) {
         note('blocked Google sign-in telemetry ping apis.google.com/js/gen_204 (expected: connect-src does not allow it)');
         return;
       }
