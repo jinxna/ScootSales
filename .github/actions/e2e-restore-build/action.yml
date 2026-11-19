@@ -37,7 +37,7 @@ runs:
         FINGERPRINT: ${{ inputs.fingerprint }}
         ADMIN_HASH: ${{ hashFiles('admin_dashboard/lib/**', 'admin_dashboard/web/**', 'admin_dashboard/assets/**', 'admin_dashboard/pubspec.yaml', 'admin_dashboard/pubspec.lock') }}
         MOBILE_HASH: ${{ hashFiles('flutter_mobile_app/lib/**', 'flutter_mobile_app/web/**', 'flutter_mobile_app/assets/**', 'flutter_mobile_app/pubspec.yaml', 'flutter_mobile_app/pubspec.lock') }}
-        COMMON_HASH: ${{ hashFiles('packages/**', 'e2e/build.cjs', 'e2e/lib/platform.cjs', 'e2e/lib/lane.cjs', 'scripts/release_manifest.py', '.github/actions/e2e-setup/action.yml', '.github/actions/e2e-restore-build/action.yml') }}
+        COMMON_HASH: ${{ hashFiles('packages/**', 'e2e/build.cjs', 'e2e/lib/platform.cjs', 'e2e/lib/lane.cjs', 'scripts/release_manifest.py', '.github/actions/e2e-setup/action.yml', '.github/actions/e2e-restore-build/action.yml', '.github/workflows/verify.yml') }}
       run: |
         case "${BUILD}" in
           admin)        app_hash="${ADMIN_HASH}";  path="admin_dashboard/build/web_e2e" ;;
@@ -59,4 +59,4 @@ runs:
         path: ${{ steps.plan.outputs.path }}
         key: ${{ steps.plan.outputs.key }}
         lookup-only: ${{ inputs.lookup-only }}
-        fail-on-miss: ${{ inputs.fail-on-miss }}
+        fail-on-cache-miss: ${{ inputs.fail-on-miss }}

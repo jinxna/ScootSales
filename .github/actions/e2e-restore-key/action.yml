@@ -14,7 +14,7 @@ runs:
       with:
         path: e2e/.keys/e2e-1.json
         key: e2e-signing-key-v1
-        fail-on-miss: true
+        fail-on-cache-miss: true
 
     - name: Check the key is the one the builds were keyed on
       shell: bash

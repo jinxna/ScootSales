@@ -484,6 +484,18 @@ jobs:
           path: e2e/.keys/e2e-1.json
           key: e2e-signing-key-v1
 
+      - name: Remove the local key so the saved key is the one used
+        if: steps.restore.outputs.cache-hit != 'true'
+        run: rm e2e/.keys/e2e-1.json
+
+      - name: Read back the saved signing key
+        if: steps.restore.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
+        with:
+          path: e2e/.keys/e2e-1.json
+          key: e2e-signing-key-v1
+          fail-on-cache-miss: true
+
       - name: Print the public key fingerprint
         id: fingerprint
         run: echo "value=$(jq -r .publicKey e2e/.keys/e2e-1.json | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
