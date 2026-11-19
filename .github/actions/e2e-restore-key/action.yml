@@ -1,0 +1,28 @@
+name: End-to-end restore signing key
+description: Restore the E2E signing key and check it is the key the web builds were keyed on.
+
+inputs:
+  fingerprint:
+    description: Fingerprint printed by the e2e-key job.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Restore the signing key
+      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
+      with:
+        path: e2e/.keys/e2e-1.json
+        key: e2e-signing-key-v1
+        fail-on-miss: true
+
+    - name: Check the key is the one the builds were keyed on
+      shell: bash
+      env:
+        EXPECTED: ${{ inputs.fingerprint }}
+      run: |
+        actual="$(jq -r .publicKey e2e/.keys/e2e-1.json | sha256sum | cut -c1-16)"
+        if [ "${actual}" != "${EXPECTED}" ]; then
+          echo "::error::The signing key in the cache (${actual}) is not the key the builds were keyed on (${EXPECTED}). Re-run the workflow."
+          exit 1
+        fi
