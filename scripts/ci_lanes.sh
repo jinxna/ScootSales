@@ -36,6 +36,21 @@ for (const b of buckets) console.log(b.f.join(","));
 echo "Download the Firestore emulator before any lane has its own network"
 npx --no-install firebase setup:emulators:firestore
 
+sdk_ready() {
+  compgen -G "${root}/e2e/.cache/firebase-*/package/firebase-app.js" > /dev/null
+}
+
+wait_for_sdk() {
+  local lane1_pid="$1" waited=0
+  until sdk_ready; do
+    kill -0 "${lane1_pid}" 2>/dev/null || { echo "lane 1 stopped before the Firebase web SDK was packed" >&2; return 1; }
+    [ "${waited}" -lt 300 ] || { echo "the Firebase web SDK was not packed within 300 s" >&2; return 1; }
+    sleep 2
+    waited=$((waited + 2))
+  done
+  echo "Firebase web SDK packed by lane 1 after ${waited} s"
+}
+
 run_lane() {
   local k="$1" list="$2" lane_tmp
   lane_tmp="$(mktemp -d)"
@@ -54,6 +69,9 @@ for ((k = 1; k <= lanes; k++)); do
   echo "lane ${k}: ${lane_flows[k-1]}"
   run_lane "${k}" "${lane_flows[k-1]}" > "${out}/lane${k}.log" 2>&1 &
   pids+=("$!")
+  if [ "${k}" = "1" ] && [ "${lanes}" -gt 1 ]; then
+    wait_for_sdk "${pids[0]}"
+  fi
 done
 
 trap 'kill "${pids[@]}" 2>/dev/null || true' INT TERM
