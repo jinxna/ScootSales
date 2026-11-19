@@ -148,13 +148,12 @@ class FollowUpService {
         .get()
         .timeout(_readTimeout);
     if (snapshot.metadata.isFromCache) {
-      final QuerySnapshot<Map<String, dynamic>> cached = await own
-          .orderBy('followUpDate')
-          .limit(_readLimit)
-          .get(const GetOptions(source: Source.cache));
       return <Map<String, dynamic>>[
-        ...await _saved(uid),
-        ..._promiseRows(cached),
+        ...await Future.wait(<Future<Map<String, dynamic>>>[
+          for (final Map<String, dynamic> row in await _saved(uid))
+            _cachedState(row),
+        ]),
+        ..._promiseRows(snapshot),
       ];
     }
     final List<Map<String, dynamic>> read = _promiseRows(snapshot);
@@ -164,6 +163,29 @@ class FollowUpService {
     ];
     await _save(uid, open);
     return open;
+  }
+
+  Future<Map<String, dynamic>> _cachedState(Map<String, dynamic> saved) async {
+    final String outcomeId = '${saved['outcomeId'] ?? ''}'.trim();
+    if (outcomeId.isEmpty) return saved;
+    final DocumentSnapshot<Map<String, dynamic>> doc;
+    try {
+      doc = await _db
+          .collection('conversation_outcomes')
+          .doc(outcomeId)
+          .get(const GetOptions(source: Source.cache))
+          .timeout(_readTimeout);
+    } on FirebaseException catch (error) {
+      if (error.code == 'unavailable') return saved;
+      rethrow;
+    }
+    final Map<String, dynamic>? data = doc.data();
+    if (data == null) return saved;
+    return FollowUpPromise.fromOutcome(<String, dynamic>{
+          ...data,
+          'outcomeId': doc.id,
+        })?.toMap() ??
+        saved;
   }
 
   static List<Map<String, dynamic>> _promiseRows(
