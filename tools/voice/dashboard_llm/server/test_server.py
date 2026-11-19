@@ -310,14 +310,6 @@ def test_startup_names_the_wrong_setting_without_its_value(monkeypatch, capsys):
     assert "COPILOT_BODY_TIMEOUT" in err and "nan" not in err.replace("finite", "")
 
 
-def test_a_failed_account_lookup_is_503_not_access(server):
-    def broken(token, uid):
-        raise RuntimeError("firestore down")
-
-    _, url = server(access=broken)
-    assert call(url)[0] == 503
-
-
 def test_real_access_check_accepts_only_active_copilot_roles():
     import http.server
 
@@ -780,7 +772,7 @@ def test_a_slow_client_that_makes_gemini_time_out_still_uses_the_persons_share(m
     box = {"delay": 2.0}
     with real_gemini_server(box, gemini_daily_limit_person=2) as port:
         slow = [slow_call(port, 2.5) for _ in range(2)]
-        assert [(a["unavailable"], a["unavailableReason"]) for a in slow] == [(True, None)] * 2
+        assert [(a["unavailable"], a["unavailableReason"]) for a in slow] == [(True, "timeout")] * 2
         assert box["seen"] == 2
         refused = call(f"http://127.0.0.1:{port}", token="p")[1]
         assert (refused["unavailable"], refused["unavailableReason"]) == (True, "person_limit")

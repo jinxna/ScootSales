@@ -4,12 +4,15 @@ const B = require('../lib/browser.cjs');
 const mobile = require('../lib/mobile.cjs');
 const admin = require('../lib/admin.cjs');
 const { PRODUCTS, RETAILERS } = require('../lib/seed.cjs');
+const { double } = require('../lib/emulator.cjs');
 
 const RETAILER = RETAILERS[1];
 const ORDERED = [PRODUCTS[0], PRODUCTS[2]];
 const DEPARTMENT = 'GROCERY';
 const ALTERED_ORDER_ID = 'ORD-E2E-PRICE-MISMATCH';
 const DAY_MS = 24 * 60 * 60 * 1000;
+const PHONE_ORDER_ID = 'ORD-E2E-PHONE-WHOLE-PRICE';
+const WHOLE_PRICE = 100;
 
 module.exports = {
   name: 'order_approve',
@@ -198,6 +201,46 @@ module.exports = {
       expectEqual(order.rejectionRemark, 'Prices differ from the price list', 'rejectionRemark');
       expectEqual(order.serverPriceCheck.status, 'mismatch', 'the stamp survives the decision');
       await t.shot(adminS, 'price-mismatch-rejected');
+    });
+
+    const phone = {};
+    await t.step('an order stored as the phone app stores it, with a whole-number price held as a double, waits for approval', async () => {
+      const lines = submitted.commercialLines.map((line) => line.split('~'));
+      lines[0][3] = String(WHOLE_PRICE * 100);
+      phone.productId = lines[0][0];
+      phone.quantity = Number(lines[0][2]);
+      const totalSen = lines.reduce((sum, [, , quantity, unit]) => sum + Number(quantity) * Number(unit), 0);
+      const { serverPriceCheck: _serverPriceCheck, ...clean } = submitted;
+      await db.put('orders', PHONE_ORDER_ID, {
+        ...clean,
+        orderId: PHONE_ORDER_ID,
+        status: 'submitted',
+        totalPrice: double(totalSen / 100),
+        commercialLines: lines.map((parts) => parts.join('~')),
+        items: submitted.items.map((item) => ({ ...item, price: double(item.productId === phone.productId ? WHOLE_PRICE : item.price) })),
+      });
+      await db.waitForDoc('orders', PHONE_ORDER_ID, (o) => o.serverPriceCheck, { timeout: 60000, label: 'serverPriceCheck stamp on the phone-typed order' });
+      const res = await fetch(`${db.firestoreBase}/orders/${PHONE_ORDER_ID}`, { headers: { Authorization: 'Bearer owner' } });
+      if (!res.ok) throw new Error(`raw read of ${PHONE_ORDER_ID} -> ${res.status}`);
+      const prices = (await res.json()).fields.items.arrayValue.values.map((v) => v.mapValue.fields.price);
+      expectEqual(prices.some((p) => p.doubleValue === WHOLE_PRICE && !('integerValue' in p)), true, `the stored price ${WHOLE_PRICE} is a double, as the phone app writes it`);
+    });
+
+    await t.step('admin approves the phone-typed order; its purchase order has no copied lines and the Purchase Orders page shows them', async () => {
+      await admin.goToPage(adminS.page, 'All Orders');
+      await B.fillField(adminS.page, adminS.page.getByRole('textbox').first(), PHONE_ORDER_ID);
+      await admin.waitForOrderRow(adminS.page, PHONE_ORDER_ID);
+      await admin.openOrder(adminS.page, PHONE_ORDER_ID);
+      await admin.approveOpenOrder(adminS.page);
+      const order = await db.waitForDoc('orders', PHONE_ORDER_ID, (o) => o.status === 'approved', { label: 'phone-typed order approved' });
+      expectEqual(order.approvedByUid, seed.uids.admin, 'approvedByUid on the phone-typed order');
+      const po = await db.waitForDoc('purchase_orders', PHONE_ORDER_ID, (p) => p.status === 'issued', { label: 'purchase order of the phone-typed order' });
+      expectEqual('lines' in po, false, 'the purchase order carries no copy of the order lines');
+      await t.shot(adminS, 'phone-typed-order-approved');
+      await admin.goToPage(adminS.page, 'Purchase Orders');
+      await adminS.page.getByRole('button', { name: `Purchase order ${po.poNumber}` }).click();
+      await B.see(adminS.page, `${phone.quantity} × RM ${WHOLE_PRICE.toFixed(2)}`, { timeout: 30000 });
+      await t.shot(adminS, 'purchase-order-lines-from-the-order');
     });
   },
 };

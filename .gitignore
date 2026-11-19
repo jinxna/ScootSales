@@ -228,6 +228,8 @@ presentation_output/
 qa_artifacts/
 # E2E flow evidence (the scripts in e2e/ are tracked; their output is not).
 e2e/output/
+/e2e/lane*/
+/firebase.e2e.lane*.json
 .voice_working/
 logs/
 

@@ -935,7 +935,7 @@ match /documents {
   match /purchase_orders/{poId} {
     function canReadPurchaseOrder(data) { return managesScope(caller(), routeSalesmanCode(data), routeBranchId(data)); }
     function purchaseOrderKeys() {
-      return [ 'poNumber', 'orderId', 'retailerId', 'retailerName', 'salesmanCode', 'salesmanUid', 'branchId', 'totalPrice', 'lines', 'status', 'issuedAt',
+      return [ 'poNumber', 'orderId', 'retailerId', 'retailerName', 'salesmanCode', 'salesmanUid', 'branchId', 'totalPrice', 'status', 'issuedAt',
           'issuedByUid', 'issuedByRole' ];
     }
     function validPurchaseOrderCreate(poId, po) {
@@ -948,7 +948,7 @@ match /documents {
           po.issuedByUid == request.auth.uid && po.issuedByRole == role && po.salesmanCode == scopedSalesmanCode(order) &&
           po.salesmanUid == text(order, 'salesmanUid', 'salesman_uid') && po.branchId == routeBranchId(order) &&
           po.retailerId == text(order, 'retailerId', 'retailer_id') && po.retailerName == text(order, 'retailerName', 'retailer_name') &&
-          po.totalPrice == order.get('totalPrice', 0) && po.lines == order.get('items', []);
+          po.totalPrice == order.get('totalPrice', 0);
     }
     function validPurchaseOrderStatusChange() {
       let next = request.resource.data;
@@ -1176,7 +1176,7 @@ match /documents {
       let uid = routeSalesmanUid(route);
       return uid != '' && !exists(/databases/$(database)/documents/route_plan_progress/$(planId + '_' + uid));
     }
-    allow delete: if signedIn() && isAdminProfile();
+    allow delete: if signedIn() && isAdminProfile() && resource.data.get('status', '') == 'draft';
     function validPublicationKeyLink() {
       let keyId = request.resource.data.get('publicationKeyId', '');
       let key = keyId is string && keyId != '' && existsAfter(publicationKeyPath(keyId)) ? getAfter(publicationKeyPath(keyId)).data : {};

@@ -245,7 +245,7 @@ for (const [who, user] of [['admin', U.admin], ['supervisor', U.supervisor]]) {
     { name: `purchase_orders create (${who})`, actor: user,
       prep: (env) => admin(env, async (db) => { await setDoc(doc(db, 'orders', 'ORD-PO'), { ...p2Order('ORD-PO'), status: 'approved', submittedAt: now(), createdAt: now(), updatedAt: now() }); await deleteDoc(doc(db, 'purchase_orders', 'ORD-PO')); }),
       run: (db) => setDoc(doc(db, 'purchase_orders', 'ORD-PO'), { poNumber: 'PO-20260615-ORD-PO', orderId: 'ORD-PO', retailerId: 'retailer-1', retailerName: 'Retailer One', salesmanCode: 'S001', salesmanUid: S,
-        branchId: 'B1', totalPrice: 10, lines: [p2OrderItem()], status: 'issued', issuedAt: serverTimestamp(), issuedByUid: user.uid, issuedByRole: user.profile.role }) },
+        branchId: 'B1', totalPrice: 10, status: 'issued', issuedAt: serverTimestamp(), issuedByUid: user.uid, issuedByRole: user.profile.role }) },
     { name: `special_requests update approve (${who})`, actor: user,
       prep: (env) => admin(env, (db) => setDoc(doc(db, 'special_requests', 'sr-appr'), H.specialRequest())),
       run: (db) => updateDoc(doc(db, 'special_requests', 'sr-appr'), { status: 'approved', approvalStep: 'Approved', updatedAt: serverTimestamp(), lastActorUid: user.uid, lastActorRole: user.profile.role, lastActionAt: serverTimestamp() }) },

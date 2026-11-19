@@ -307,10 +307,11 @@ class _OrderCartScreenState extends State<OrderCartScreen> {
         merged.add(saved);
         continue;
       }
-      final suggestedReorderQty = ReplenishmentPrefill.take(
+      final int? suggestedReorderQty = await ReplenishmentPrefill.take(
         retailerId: widget.retailerId,
         productId: productId,
       );
+      final int productLimit = maxQtyFor(data);
 
       merged.add({
         "retailerName": widget.retailerName,
@@ -327,7 +328,11 @@ class _OrderCartScreenState extends State<OrderCartScreen> {
         if (uomOf(data) != null) "uom": uomOf(data),
         "maxOrderQty": maxQtyFor(data),
 
-        "qty": 1,
+        "qty": suggestedReorderQty == null
+            ? 1
+            : suggestedReorderQty > productLimit
+            ? productLimit
+            : suggestedReorderQty,
         "stock": 0,
 
         "expiry": '',

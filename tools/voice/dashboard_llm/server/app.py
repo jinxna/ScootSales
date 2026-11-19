@@ -33,6 +33,7 @@ GEMINI_DAILY_LIMIT_SALESMAN = 200
 GEMINI_DAILY_LIMIT_PERSON = 25
 TAKEN, PERSON_FULL, COMPANY_FULL, SALESPERSON_FULL, BUDGET_UNKNOWN = (
     "taken", "person_limit", "company_limit", "salesperson_limit", "unknown")
+TIMEOUT = "timeout"
 GEMINI_MAX_SECONDS = 6.0
 GEMINI_DEADLINE_MARGIN = 0.5
 GEMINI_MIN_SECONDS = 2.0
@@ -431,6 +432,11 @@ def _check_deadline(deadline: Optional[float]) -> None:
         raise Rejected(504, "request deadline exceeded")
 
 
+def _log_model_call(outcome: str, started: float, detail: str) -> None:
+    latency = int((time.monotonic() - started) * 1000)
+    print(f"Scout model call: outcome={outcome} latency_ms={latency} {detail}".rstrip(), file=sys.stderr, flush=True)
+
+
 def _ask_fallback(state: State, uid: str, text: str, pages: "list[dict[str, Any]]", actions: "list[str]",
                   deadline: Optional[float], company: str = "",
                   salesman: bool = False) -> "tuple[Optional[schema.Call], bool, Optional[str]]":
@@ -450,16 +456,28 @@ def _ask_fallback(state: State, uid: str, text: str, pages: "list[dict[str, Any]
         taken = state.take_gemini_call(salesman, company, day, uid)
         if taken != TAKEN:
             return None, True, taken if taken in (PERSON_FULL, COMPANY_FULL, SALESPERSON_FULL) else None
+        started = time.monotonic()
         try:
             if timed:
                 output = state.fallback(text, pages, actions, deadline=limit)[0]
             else:
                 output = state.fallback(text, pages, actions)[0]
-        except RuntimeError:
+        except RuntimeError as error:
+            _log_model_call("error", started, str(error))
             state.give_back_gemini_call(salesman, company, day, uid)
             raise
+        except TimeoutError as error:
+            _log_model_call(TIMEOUT, started, str(error))
+            raise
+        except Exception as error:
+            _log_model_call("error", started, type(error).__name__)
+            raise
+        _log_model_call("answered", started, "")
     except Rejected:
         raise
+    except TimeoutError:
+        _check_deadline(deadline)
+        return None, True, TIMEOUT
     except Exception:
         _check_deadline(deadline)
         return None, True, None

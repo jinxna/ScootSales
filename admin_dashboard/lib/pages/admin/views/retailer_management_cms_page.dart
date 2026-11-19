@@ -30,6 +30,7 @@ import '../../../utils/user_facing_error.dart';
 import '../../../widgets/cms_feedback.dart';
 import '../../../widgets/ai_freshness_chip.dart';
 import '../../../widgets/confirm_destructive_dialog.dart';
+import '../../../widgets/shop_panel.dart';
 import '../../../widgets/catalogue/catalogue_drawer.dart';
 import '../../../widgets/catalogue/catalogue_workspace.dart';
 import '../../../widgets/retailer_bulk_assign_list.dart';
@@ -680,12 +681,26 @@ class _RetailerManagementCmsPageState extends State<RetailerManagementCmsPage> {
     RetailerSalesmanField salesmanField,
     List<DropdownMenuItem<String>> salesmanItems,
   ) {
-    return CmsPanel(
+    return CatalogueDrawer(
       title: _editingId == null ? 'Add Retailer' : 'Edit Retailer',
-      child: Form(
+      dirty: _dirty,
+      onClose: _clearForm,
+      footer: <Widget>[
+        PrimaryCmsButton(
+          label: _editingId == null ? 'Save Retailer' : 'Update Retailer',
+          isPending: _saving,
+          onTap: _saveRetailer,
+        ),
+        const SizedBox(width: 10),
+        OutlinedButton(
+          onPressed: _saving ? null : () => _clearForm(openDrawer: true),
+          child: const Text('Reset'),
+        ),
+      ],
+      body: Form(
         key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             _field(_nameController, 'Retailer Name', required: true),
             const SizedBox(height: 16),
@@ -767,26 +782,6 @@ class _RetailerManagementCmsPageState extends State<RetailerManagementCmsPage> {
               onChanged: (String? value) =>
                   setState(() => _status = value ?? 'Display'),
               width: double.infinity,
-            ),
-            const SizedBox(height: 24),
-            Wrap(
-              spacing: 10,
-              runSpacing: 8,
-              children: <Widget>[
-                PrimaryCmsButton(
-                  label: _editingId == null
-                      ? 'Save Retailer'
-                      : 'Update Retailer',
-                  isPending: _saving,
-                  onTap: _saveRetailer,
-                ),
-                OutlinedButton(
-                  onPressed: _saving
-                      ? null
-                      : () => _clearForm(openDrawer: true),
-                  child: const Text('Reset'),
-                ),
-              ],
             ),
           ],
         ),
@@ -1020,6 +1015,16 @@ class _RetailerManagementCmsPageState extends State<RetailerManagementCmsPage> {
     );
     final List<Widget> actions = <Widget>[
       if (!isBasicEdition) ...<Widget>[
+        _rowAction(
+          'Shop panel',
+          name,
+          () => showShopPanel(
+            context,
+            currentUser: widget.currentUser,
+            retailerId: id,
+            retailerName: name,
+          ),
+        ),
         _rowAction(
           'Memory',
           name,

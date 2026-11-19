@@ -15,6 +15,7 @@ MAX_POSITION = 50
 PERIODS = ("today", "yesterday", "this_week", "last_week", "this_month", "last_month")
 ORDER_STATUSES = ("submitted", "approved", "rejected")
 ITEM_STATUSES = ("in_review", "resolved", "ignored")
+WEEKS = ("this_week", "next_week")
 
 ACTION_SPECS: dict[str, dict[str, Any]] = {
     "search_orders": {
@@ -58,8 +59,53 @@ ACTION_SPECS: dict[str, dict[str, Any]] = {
         "params": {"retailer": {"type": "string", "description": "Retailer or shop name as spoken"}},
         "required": [],
     },
+    "route_why": {
+        "description": (
+            "Explain why one retailer is on a salesperson's route. "
+            "Omit a name when the user means the last one discussed."
+        ),
+        "params": {
+            "retailer": {"type": "string", "description": "Retailer or shop name as spoken"},
+            "salesperson": {"type": "string", "description": "Salesperson name as spoken"},
+        },
+        "required": [],
+    },
+    "salesperson_visits": {
+        "description": (
+            "Say which retailers a salesperson should visit, from the weekly ranking. "
+            "Omit the name when the user means the last salesperson discussed."
+        ),
+        "params": {
+            "salesperson": {"type": "string", "description": "Salesperson name as spoken"},
+            "week": {"type": "string", "description": "Week", "enum": list(WEEKS)},
+        },
+        "required": [],
+    },
+    "due_overview": {
+        "description": "List the retailers that are due a visit or have stopped buying, by salesperson.",
+        "params": {},
+        "required": [],
+    },
+    "open_planner": {
+        "description": (
+            "Open the route planner for one salesperson and one week. "
+            "Omit the name when the user means the last salesperson discussed."
+        ),
+        "params": {
+            "salesperson": {"type": "string", "description": "Salesperson name as spoken"},
+            "week": {"type": "string", "description": "Week", "enum": list(WEEKS)},
+        },
+        "required": [],
+    },
+    "no_route": {
+        "description": "Name the salespeople who have no published route for a week, by plan status.",
+        "params": {"week": {"type": "string", "description": "Week", "enum": list(WEEKS)}},
+        "required": [],
+    },
 }
 ACTION_ORDER = tuple(ACTION_SPECS)
+HOSTED_ONLY_ACTIONS = ("route_why", "salesperson_visits", "due_overview", "open_planner", "no_route")
+TRAINED_ACTION_ORDER = tuple(a for a in ACTION_ORDER if a not in HOSTED_ONLY_ACTIONS)
 
 _KEY = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _CALL = re.compile(r"call:\s*([a-z_][a-z0-9_]*)\{([^{}]*)\}" + re.escape(END_CALL))

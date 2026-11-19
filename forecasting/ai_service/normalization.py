@@ -121,6 +121,20 @@ def _moment(value: Any) -> datetime | None:
         return None
 
 
+def order_moment(order: Mapping[str, Any]) -> datetime | None:
+    return _moment(
+        order.get("submittedAt") or order.get("orderDate") or order.get("createdAt")
+    )
+
+
+def order_retailer_id(order: Mapping[str, Any]) -> str:
+    return _first_text(order, ("retailerId", "retailer_id", "retailerCode"))
+
+
+def is_demand_order(order: Mapping[str, Any]) -> bool:
+    return _text(order.get("status")).lower() not in NON_DEMAND_ORDER_STATUSES
+
+
 def earliest_order_date(orders: Iterable[Mapping[str, Any]]) -> date | None:
     earliest: date | None = None
     for order in orders:

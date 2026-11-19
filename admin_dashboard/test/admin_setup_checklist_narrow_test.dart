@@ -56,7 +56,7 @@ void main() {
       expect(tester.takeException(), isNull);
       for (final String title in <String>[
         'Publish a first route',
-        'Prepare AI data',
+        'Prepare weekly insights',
       ]) {
         final Size size = tester.getSize(find.text(title));
         expect(size.width, greaterThan(100), reason: '$title is squeezed');

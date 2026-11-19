@@ -40,34 +40,56 @@ async function screenText(page) {
   return page.evaluate(() => document.body.innerText + '\n' + [...document.querySelectorAll('flt-semantics')].map((n) => n.getAttribute('aria-label') || '').join('\n'));
 }
 
-function derive(plan) {
+function permutations(items) {
+  if (items.length <= 1) return [items];
+  const out = [];
+  items.forEach((item, i) => {
+    for (const rest of permutations([...items.slice(0, i), ...items.slice(i + 1)])) out.push([item, ...rest]);
+  });
+  return out;
+}
+
+function orderKm(order, position, start) {
+  let km = 0;
+  if (start && order.length) km += haversineKm(start, position[order[0]]);
+  for (let i = 1; i < order.length; i += 1) km += haversineKm(position[order[i - 1]], position[order[i]]);
+  if (start && order.length) km += haversineKm(position[order[order.length - 1]], start);
+  return km;
+}
+
+function derive(plan, start) {
   const position = Object.fromEntries(ALL.map((r) => [r.id, { lat: r.lat, lng: r.lng }]));
   const stops = plan.days.flatMap((d) => d.stops);
   check(stops.length === ALL.length, `stops in plan: expected ${ALL.length}, got ${stops.length}`);
   check(JSON.stringify(stops.map((s) => s.retailerId).sort()) === JSON.stringify(ALL.map((r) => r.id).sort()), 'plan stops are not the seeded retailers');
-  const anchor = {
-    lat: ALL.reduce((sum, r) => sum + r.lat, 0) / ALL.length,
-    lng: ALL.reduce((sum, r) => sum + r.lng, 0) / ALL.length,
-  };
   const legs = [];
   const days = [];
   for (const day of plan.days) {
     const ordered = [...day.stops].sort((a, b) => a.sequence - b.sequence);
-    let previous = anchor;
-    const remaining = ordered.map((s) => s.retailerId);
+    const storedOrder = ordered.map((s) => s.retailerId);
+    if (ordered.length) {
+      check(ordered.length <= 8, `${day.dayLabel}: ${ordered.length} stops, the exact order is only promised up to 8`);
+      check(day.orderMethod === 'exact-v1', `${day.dayLabel}: orderMethod ${day.orderMethod}, expected exact-v1 for ${ordered.length} stops`);
+      const minimum = Math.min(...permutations(storedOrder).map((order) => orderKm(order, position, start)));
+      const storedKm = orderKm(storedOrder, position, start);
+      check(storedKm <= minimum + 0.001 + minimum * 0.001, `${day.dayLabel}: stored order totals ${storedKm.toFixed(3)} km, the shortest order of these stops totals ${minimum.toFixed(3)} km`);
+    }
+    let previous = start;
     let dayKm = 0;
     for (const stop of ordered) {
-      const nearest = Math.min(...remaining.map((id) => haversineKm(previous, position[id])));
-      const km = haversineKm(previous, position[stop.retailerId]);
-      check(km <= nearest + DISTANCE_TOLERANCE_KM, `${day.dayLabel}: stop ${stop.sequence} is not the nearest remaining stop`);
-      remaining.splice(remaining.indexOf(stop.retailerId), 1);
+      const km = previous ? haversineKm(previous, position[stop.retailerId]) : 0;
       legs.push({ km, minutes: travelMinutes(km), stop });
       dayKm += km;
       previous = position[stop.retailerId];
     }
-    days.push({ km: dayKm, stops: ordered.length });
+    if (ordered.length && !start) {
+      check(ordered[0].legDistanceKm === 0 && ordered[0].travelMinutesFromPrevious === 0, `${day.dayLabel}: first stop has a leg of ${ordered[0].legDistanceKm} km and ${ordered[0].travelMinutesFromPrevious} min although the day has no start point`);
+    }
+    const returnKm = start && ordered.length ? haversineKm(previous, start) : 0;
+    const returnMinutes = start && ordered.length ? travelMinutes(returnKm) : 0;
+    days.push({ km: dayKm + returnKm, returnKm, returnMinutes, stops: ordered.length });
   }
-  return { legs, days, totalKm: days.reduce((s, d) => s + d.km, 0), totalMinutes: legs.reduce((s, l) => s + l.minutes, 0) };
+  return { legs, days, totalKm: days.reduce((s, d) => s + d.km, 0), totalMinutes: legs.reduce((s, l) => s + l.minutes, 0) + days.reduce((s, d) => s + d.returnMinutes, 0) };
 }
 
 module.exports = {
@@ -106,7 +128,9 @@ module.exports = {
       await s.page.waitForTimeout(1500);
       await t.shot(s, 'after-generate');
       const text = await screenText(s.page);
-      check(/Haversine estimate/.test(text), 'the estimate chip does not say "Haversine estimate"');
+      check(/Distances are straight-line estimates\./.test(text), 'the day does not say "Distances are straight-line estimates."');
+      check(!/Try again/.test(text), 'a "Try again" is offered although road routing is not set up in this build');
+      check(!/Geoapify|OSRM|Haversine/.test(text), 'a routing provider name is shown in the planner');
       check(!/Road estimate|Road \(|Geoapify road travel times|OSRM road travel times|Geoapify road routing|Road distances|Road route(?! unavailable)/.test(text), 'a road label is shown although road routing is unavailable');
     });
 
@@ -114,7 +138,8 @@ module.exports = {
       await s.page.getByRole('button', { name: 'Save draft' }).click();
       const found = await db.waitForQuery('route_plans', (p) => p.salesmanCode === accounts.salesman.code, { label: 'route_plans' });
       planDoc = await db.get('route_plans', found.id);
-      expected = derive({ days: planDoc.days.map((d) => ({ dayLabel: d.dayLabel, stops: d.stops })) });
+      const start = planDoc.startPoint ? { lat: planDoc.startPoint.lat, lng: planDoc.startPoint.lng } : null;
+      expected = derive({ days: planDoc.days.map((d) => ({ dayLabel: d.dayLabel, orderMethod: d.orderMethod, stops: d.stops })) }, start);
     });
 
     await t.step('the KPI strip shows distance, travel, service and stops from the formula', async () => {
@@ -150,6 +175,8 @@ module.exports = {
         storedSum += day.totalDistanceKm;
         check(day.estimatedServiceMinutes === want.stops * SERVICE_MINUTES, `${day.dayLabel}: service minutes ${day.estimatedServiceMinutes}, expected ${want.stops * SERVICE_MINUTES}`);
         if (want.stops) check(withinKm(day.totalDistanceKm, want.km), `${day.dayLabel}: stored km ${day.totalDistanceKm}, expected about ${want.km.toFixed(2)}`);
+        check(withinKm(day.returnLegDistanceKm || 0, want.returnKm), `${day.dayLabel}: stored return leg ${day.returnLegDistanceKm} km, expected about ${want.returnKm.toFixed(2)}`);
+        check(Math.abs((day.returnTravelMinutes || 0) - want.returnMinutes) <= 1, `${day.dayLabel}: stored return travel ${day.returnTravelMinutes} min, expected about ${want.returnMinutes}`);
         let clock = START_MINUTES;
         for (const stop of [...day.stops].sort((a, b) => a.sequence - b.sequence)) {
           const leg = expected.legs.find((l) => l.stop.retailerId === stop.retailerId);

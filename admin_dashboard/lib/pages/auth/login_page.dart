@@ -30,6 +30,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final FocusNode _passwordFocus = FocusNode();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   bool _isLoading = false;
@@ -48,6 +49,7 @@ class _LoginPageState extends State<LoginPage> {
     _lockTicker?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
@@ -677,170 +679,188 @@ class _LoginPageState extends State<LoginPage> {
       );
     }
     final ScootColors c = ScootColors.of(context);
-    return Form(
-      key: _formKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          _formHeading(
-            'Sign in',
-            'Use the email your administrator registered.',
-          ),
-          const SizedBox(height: 22),
-          if (!AppRuntime.firebaseReady && !_checkingCompany) ...<Widget>[
-            const ScootNotice(
-              tone: ScootTone.warning,
-              message: _notConnected,
-              liveRegion: true,
+    return FocusTraversalGroup(
+      policy: OrderedTraversalPolicy(),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _formHeading(
+              'Sign in',
+              'Use the email your administrator registered.',
             ),
-            const SizedBox(height: 16),
-          ],
-          _field(
-            'Email',
-            TextFormField(
-              controller: _emailController,
-              enabled: !_formBusy,
-              onChanged: (_) {
-                _lockTicker?.cancel();
-                setState(() {
-                  _lockedUntil = null;
-                  _lockedEmail = null;
-                  _adminNotified = false;
-                  _notificationMessage = null;
-                });
-              },
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              autofillHints: const <String>[
-                AutofillHints.username,
-                AutofillHints.email,
-              ],
-              decoration: const InputDecoration(hintText: 'name@company.com'),
-              validator: (String? value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter email';
-                }
-                if (!RegExp(
-                  r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
-                ).hasMatch(value.trim())) {
-                  return 'Enter a valid email';
-                }
-                return null;
-              },
-            ),
-          ),
-          const SizedBox(height: 14),
-          _field(
-            'Password',
-            trailing: TextButton(
-              onPressed: _formBusy ? null : _showForgotPassword,
-              child: const Text('Forgot password?'),
-            ),
-            TextFormField(
-              controller: _passwordController,
-              enabled: !_formBusy,
-              obscureText: _obscurePassword,
-              textInputAction: TextInputAction.done,
-              autofillHints: const <String>[AutofillHints.password],
-              onFieldSubmitted: (_) {
-                if (!_formBusy) _signIn();
-              },
-              decoration: InputDecoration(
-                suffixIcon: IconButton(
-                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                  icon: Icon(
-                    _obscurePassword
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
-                  ),
-                  onPressed: () =>
-                      setState(() => _obscurePassword = !_obscurePassword),
-                ),
+            const SizedBox(height: 22),
+            if (!AppRuntime.firebaseReady && !_checkingCompany) ...<Widget>[
+              const ScootNotice(
+                tone: ScootTone.warning,
+                message: _notConnected,
+                liveRegion: true,
               ),
-              validator: (String? value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter password';
-                }
-                return null;
-              },
-            ),
-          ),
-          if (_isLocked) ...<Widget>[
-            const SizedBox(height: 14),
-            _lockoutBanner(),
-          ],
-          if (_errorMessage != null) ...<Widget>[
-            const SizedBox(height: 14),
-            ScootNotice(
-              tone: ScootTone.danger,
-              message: _errorMessage!,
-              liveRegion: true,
-              onDismiss: _isLoading
-                  ? null
-                  : () => setState(() => _errorMessage = null),
-            ),
-          ],
-          const SizedBox(height: 18),
-          SizedBox(
-            height: 48,
-            child: FilledButton(
-              onPressed: _formBusy ? null : _signIn,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  if (_isLoading) ...<Widget>[
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                  ],
-                  Text(
-                    _isLocked
-                        ? 'Check unlock and sign in'
-                        : (_isLoading ? 'Signing in...' : 'Sign In'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: <Widget>[
-              Expanded(child: Divider(color: c.line)),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  'or',
-                  style: ScootType.small.copyWith(color: c.muted),
-                ),
-              ),
-              Expanded(child: Divider(color: c.line)),
+              const SizedBox(height: 16),
             ],
-          ),
-          const SizedBox(height: 14),
-          GoogleSignInButton(
-            onPressed: (_formBusy || !AppRuntime.firebaseReady)
-                ? null
-                : _signInWithGoogle,
-          ),
-          if (WorkspaceRuntime.current != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: TextButton(
-                onPressed: _formBusy
-                    ? null
-                    : () => setState(() => _redeeming = true),
-                child: const Text('Have an invitation code?'),
+            _field(
+              'Email',
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(1),
+                child: TextFormField(
+                  controller: _emailController,
+                  enabled: !_formBusy,
+                  onEditingComplete: _passwordFocus.requestFocus,
+                  onChanged: (_) {
+                    _lockTicker?.cancel();
+                    setState(() {
+                      _lockedUntil = null;
+                      _lockedEmail = null;
+                      _adminNotified = false;
+                      _notificationMessage = null;
+                    });
+                  },
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const <String>[
+                    AutofillHints.username,
+                    AutofillHints.email,
+                  ],
+                  decoration: const InputDecoration(
+                    hintText: 'name@company.com',
+                  ),
+                  validator: (String? value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter email';
+                    }
+                    if (!RegExp(
+                      r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+                    ).hasMatch(value.trim())) {
+                      return 'Enter a valid email';
+                    }
+                    return null;
+                  },
+                ),
               ),
             ),
-          _buildDevQuickSignIn(),
-        ],
+            const SizedBox(height: 14),
+            _field(
+              'Password',
+              trailing: TextButton(
+                onPressed: _formBusy ? null : _showForgotPassword,
+                child: const Text('Forgot password?'),
+              ),
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(2),
+                child: TextFormField(
+                  controller: _passwordController,
+                  focusNode: _passwordFocus,
+                  enabled: !_formBusy,
+                  obscureText: _obscurePassword,
+                  textInputAction: TextInputAction.done,
+                  autofillHints: const <String>[AutofillHints.password],
+                  onFieldSubmitted: (_) {
+                    if (!_formBusy) _signIn();
+                  },
+                  decoration: InputDecoration(
+                    suffixIcon: IconButton(
+                      tooltip: _obscurePassword
+                          ? 'Show password'
+                          : 'Hide password',
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                      onPressed: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                  ),
+                  validator: (String? value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter password';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+            ),
+            if (_isLocked) ...<Widget>[
+              const SizedBox(height: 14),
+              _lockoutBanner(),
+            ],
+            if (_errorMessage != null) ...<Widget>[
+              const SizedBox(height: 14),
+              ScootNotice(
+                tone: ScootTone.danger,
+                message: _errorMessage!,
+                liveRegion: true,
+                onDismiss: _isLoading
+                    ? null
+                    : () => setState(() => _errorMessage = null),
+              ),
+            ],
+            const SizedBox(height: 18),
+            SizedBox(
+              height: 48,
+              child: FocusTraversalOrder(
+                order: const NumericFocusOrder(3),
+                child: FilledButton(
+                  onPressed: _formBusy ? null : _signIn,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      if (_isLoading) ...<Widget>[
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      Text(
+                        _isLocked
+                            ? 'Check unlock and sign in'
+                            : (_isLoading ? 'Signing in...' : 'Sign In'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: <Widget>[
+                Expanded(child: Divider(color: c.line)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'or',
+                    style: ScootType.small.copyWith(color: c.muted),
+                  ),
+                ),
+                Expanded(child: Divider(color: c.line)),
+              ],
+            ),
+            const SizedBox(height: 14),
+            GoogleSignInButton(
+              onPressed: (_formBusy || !AppRuntime.firebaseReady)
+                  ? null
+                  : _signInWithGoogle,
+            ),
+            if (WorkspaceRuntime.current != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: TextButton(
+                  onPressed: _formBusy
+                      ? null
+                      : () => setState(() => _redeeming = true),
+                  child: const Text('Have an invitation code?'),
+                ),
+              ),
+            _buildDevQuickSignIn(),
+          ],
+        ),
       ),
     );
   }

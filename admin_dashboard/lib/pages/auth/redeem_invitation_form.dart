@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/invite_link.dart';
 import '../../app/workspace_runtime.dart';
@@ -236,6 +237,9 @@ class _RedeemInvitationFormState extends State<RedeemInvitationForm> {
               enabled: !_busy,
               autocorrect: false,
               textCapitalization: TextCapitalization.characters,
+              inputFormatters: const <TextInputFormatter>[
+                InvitationCodeFormatter(),
+              ],
               decoration: const InputDecoration(hintText: 'XXXX-XXXX-XXXX'),
               validator: (String? value) =>
                   normalizeInvitationCode(value ?? '').length == 12

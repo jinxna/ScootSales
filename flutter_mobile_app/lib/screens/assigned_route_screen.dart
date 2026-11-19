@@ -13,6 +13,7 @@ import '../copilot/mobile_copilot_commands.dart';
 import '../copilot/mobile_copilot_page.dart';
 import '../edition.dart';
 import '../models/assigned_route_plan.dart';
+import '../models/follow_up_promise.dart';
 import '../models/user_model.dart';
 import '../models/visit_brief.dart';
 import '../providers/auth_provider.dart';
@@ -26,6 +27,7 @@ import '../theme/app_theme.dart';
 import '../utils/assigned_route_lifecycle.dart';
 import '../utils/nearby_retailer.dart';
 import '../utils/location_evidence.dart';
+import '../widgets/follow_up_chips.dart';
 import '../widgets/todays_focus.dart';
 import '../widgets/assigned_route_map.dart';
 import '../widgets/arrival_verification_flow.dart';
@@ -33,6 +35,9 @@ import '../widgets/replenishment_suggestions.dart';
 import '../widgets/retailer_memory_panel.dart';
 import '../widgets/phone_status_strip.dart';
 import '../models/guided_visit_context.dart';
+import '../models/stop_brief_view.dart';
+import '../utils/retailer_memory.dart' show RetailerMemory;
+import 'brief_page.dart';
 import 'guided_visit_screen.dart';
 import 'overview_screen.dart' show AppBottomNav;
 import 'package:scoot_design/scoot_design.dart';
@@ -2041,7 +2046,7 @@ class _RouteStopTile extends StatelessWidget {
           if (stop.priorityReason.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
-              'Reason when planned: ${stop.priorityReason}',
+              'Why this stop: ${plainStopReason(stop.priorityReason)}',
               style: const TextStyle(fontSize: 12, color: AppColors.textGrey),
             ),
           ],
@@ -2108,11 +2113,20 @@ class _RouteStopTile extends StatelessWidget {
           if (brief != null &&
               (brief!.hasFieldGuidance || hasEmbeddedMemory)) ...[
             const SizedBox(height: 12),
-            _SalesVisitCopilotCard(
+            StopBriefBuilder(
+              key: ValueKey<String>('brief:${user.uid}:${stop.retailerId}'),
               brief: brief!,
-              stopStatus: status,
-              onRecordOutcome: (insight) =>
-                  _recordOutcome(context, brief!, insight),
+              stopReason: stop.priorityReason,
+              salesmanUid: user.uid,
+              builder: (BuildContext _, StopBriefView view) =>
+                  _SalesVisitCopilotCard(
+                    view: view,
+                    stopStatus: status,
+                    onRecordOutcome: (insight) =>
+                        _recordOutcome(context, brief!, insight),
+                    onOpenFullBrief: () => _openFullBrief(context),
+                    onMarkFollowUpDone: _markFollowUpDone,
+                  ),
             ),
           ],
           if (!kBasicEdition) ...[
@@ -2124,18 +2138,41 @@ class _RouteStopTile extends StatelessWidget {
               identity: '${user.uid}\u0000${stop.retailerId}',
               deferInitialLoad: hasEmbeddedMemory,
               hasEmbeddedSnapshot: hasEmbeddedMemory,
-              loadMemory: ({required bool refresh}) =>
-                  copilotService.loadRetailerMemory(
-                    user: user,
-                    retailerId: stop.retailerId,
-                    forceRefresh: refresh,
-                  ),
+              loadMemory: _loadMemory,
+              productNames: brief == null
+                  ? const <String, String>{}
+                  : StopBriefView.productNamesOf(brief!),
             ),
           ],
         ],
       ),
     );
   }
+
+  Future<RetailerMemory?> _loadMemory({required bool refresh}) =>
+      copilotService.loadRetailerMemory(
+        user: user,
+        retailerId: stop.retailerId,
+        forceRefresh: refresh,
+      );
+
+  Future<void> _openFullBrief(BuildContext context) {
+    final VisitBrief shown = brief!;
+    return BriefPage.open(
+      context,
+      brief: shown,
+      stopReason: stop.priorityReason,
+      salesmanUid: user.uid,
+      canRecord: status == 'arrived' || status == 'completed',
+      onRecordOutcome: (BuildContext pageContext, VisitBriefInsight insight) =>
+          _recordOutcome(pageContext, shown, insight),
+      loadMemory: _loadMemory,
+      onMarkFollowUpDone: _markFollowUpDone,
+    );
+  }
+
+  Future<void> _markFollowUpDone(FollowUpPromise promise) => copilotService
+      .markFollowUpDone(user: user, promise: promise, isOnline: isOnline);
 
   Future<void> _selectStop(BuildContext context) async {
     try {
@@ -2245,6 +2282,10 @@ class _RouteStopTile extends StatelessWidget {
           service: service,
           copilotService: copilotService,
           brief: brief,
+          onRecordOutcome: brief == null
+              ? null
+              : (VisitBriefInsight insight) =>
+                    _recordOutcome(context, brief!, insight),
         ),
       ),
     );
@@ -2255,7 +2296,11 @@ class _RouteStopTile extends StatelessWidget {
     VisitBrief brief,
     VisitBriefInsight insight,
   ) async {
-    final draft = await _showOutcomeDialog(context, insight);
+    final draft = await _showOutcomeDialog(
+      context,
+      insight,
+      nextVisit: nextVisitDay(plan, stop.retailerId, DateTime.now()),
+    );
     if (draft == null || !context.mounted) return;
     try {
       final result = await copilotService.queueOutcome(
@@ -2269,6 +2314,7 @@ class _RouteStopTile extends StatelessWidget {
         note: draft.note,
         replacementProductId: draft.replacementProductId,
         isOnline: isOnline,
+        followUpOn: draft.followUpOn,
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2739,124 +2785,103 @@ class _RouteAttentionSuggestion extends StatelessWidget {
 
 class _SalesVisitCopilotCard extends StatelessWidget {
   const _SalesVisitCopilotCard({
-    required this.brief,
+    required this.view,
     required this.stopStatus,
     required this.onRecordOutcome,
+    required this.onOpenFullBrief,
+    required this.onMarkFollowUpDone,
   });
 
-  final VisitBrief brief;
+  final StopBriefView view;
   final String stopStatus;
   final ValueChanged<VisitBriefInsight> onRecordOutcome;
+  final VoidCallback onOpenFullBrief;
+  final MarkFollowUpDone onMarkFollowUpDone;
 
   @override
   Widget build(BuildContext context) {
     final canRecord = stopStatus == 'arrived' || stopStatus == 'completed';
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F3FF),
+    final VisitBrief brief = view.brief;
+    return Material(
+      color: const Color(0xFFF5F3FF),
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFDDD6FE)),
+        side: const BorderSide(color: Color(0xFFDDD6FE)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        excludeFromSemantics: true,
+        onTap: onOpenFullBrief,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
-                Icons.psychology_alt_outlined,
-                color: Color(0xFF6D28D9),
-              ),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Sales Visit Scout',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF4C1D95),
-                  ),
-                ),
-              ),
-              if (brief.highPriorityCount > 0)
-                _Badge('${brief.highPriorityCount} high'),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Suggested questions based on recent structured sales signals. Verify with the retailer.',
-            style: TextStyle(fontSize: 12, color: Colors.deepPurple.shade700),
-          ),
-          const SizedBox(height: 10),
-          TodaysFocusCard(brief: brief),
-          const SizedBox(height: 8),
-          if (brief.retailerMemory case final memory? when memory.isActive) ...[
-            RetailerMemorySnapshotCard(memory: memory),
-            const SizedBox(height: 8),
-          ],
-          if (brief.replenishment.isNotEmpty) ...[
-            ReplenishmentSuggestionsCard(
-              retailerId: brief.retailerId,
-              suggestions: brief.replenishment,
-              productNames: <String, String>{
-                for (final insight in brief.topInsights)
-                  if (insight.productId.isNotEmpty)
-                    insight.productId: insight.productName,
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-          for (final insight in brief.topInsights) ...[
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  Text(
-                    insight.productName,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  const Icon(
+                    Icons.psychology_alt_outlined,
+                    color: Color(0xFF6D28D9),
                   ),
-                  if (insight.reason.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      insight.reason,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textGrey,
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Sales Visit Scout',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF4C1D95),
                       ),
                     ),
-                  ],
-                  for (final question in insight.questions) ...[
-                    const SizedBox(height: 5),
-                    Text('• $question', style: const TextStyle(fontSize: 12)),
-                  ],
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: canRecord
-                          ? () => onRecordOutcome(insight)
-                          : null,
-                      icon: const Icon(Icons.fact_check_outlined, size: 17),
-                      label: const Text('Record outcome'),
-                    ),
                   ),
+                  if (brief.highPriorityCount > 0)
+                    _Badge('${brief.highPriorityCount} high'),
                 ],
               ),
-            ),
-          ],
-          if (!canRecord)
-            const Text(
-              'Mark this stop arrived before recording the conversation outcome.',
-              style: TextStyle(fontSize: 11, color: AppColors.textGrey),
-            ),
-        ],
+              if (view.freshnessLine.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                BriefFreshnessLine(view: view),
+              ],
+              const SizedBox(height: 6),
+              Text(
+                'Questions to ask. Check the answers with the shop.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.deepPurple.shade700,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (view.hasFocusSection) ...[
+                TodaysFocusCard(
+                  view: view,
+                  canRecord: canRecord,
+                  onRecordOutcome: onRecordOutcome,
+                ),
+                const SizedBox(height: 8),
+              ],
+              BriefOrderFacts(view: view),
+              BriefFollowUpLine(view: view, onMarkDone: onMarkFollowUpDone),
+              if (view.shopFacts.isNotEmpty) ...[
+                RetailerMemorySnapshotCard(facts: view.shopFacts),
+                const SizedBox(height: 8),
+              ],
+              if (view.reorders.isNotEmpty) ...[
+                ReplenishmentSuggestionsCard(
+                  retailerId: brief.retailerId,
+                  reorders: view.reorders,
+                ),
+                const SizedBox(height: 8),
+              ],
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: onOpenFullBrief,
+                  icon: const Icon(Icons.article_outlined, size: 17),
+                  label: const Text(BriefPage.linkLabel),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2867,19 +2892,23 @@ class _OutcomeDraft {
     required this.reasonCode,
     required this.note,
     required this.replacementProductId,
+    required this.followUpOn,
   });
 
   final String reasonCode;
   final String note;
   final String replacementProductId;
+  final DateTime? followUpOn;
 }
 
 Future<_OutcomeDraft?> _showOutcomeDialog(
   BuildContext context,
-  VisitBriefInsight insight,
-) async {
+  VisitBriefInsight insight, {
+  required DateTime? nextVisit,
+}) async {
   final noteController = TextEditingController();
   final replacementController = TextEditingController();
+  DateTime? followUpOn;
   var selectedReasonCode = '';
   var showNoteField = false;
   var validationMessage = '';
@@ -2909,7 +2938,14 @@ Future<_OutcomeDraft?> _showOutcomeDialog(
                       fontSize: 16,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
+                  FollowUpChips(
+                    nextVisit: nextVisit,
+                    value: followUpOn,
+                    onChanged: (DateTime? day) =>
+                        setState(() => followUpOn = day),
+                  ),
+                  const SizedBox(height: 8),
                   if (!showNoteField &&
                       selectedReasonCode != 'other' &&
                       selectedReasonCode != 'switched_to_alternative')
@@ -2954,6 +2990,7 @@ Future<_OutcomeDraft?> _showOutcomeDialog(
                                 reasonCode: reasonCode,
                                 note: note,
                                 replacementProductId: '',
+                                followUpOn: followUpOn,
                               ),
                             );
                             return;
@@ -3020,6 +3057,7 @@ Future<_OutcomeDraft?> _showOutcomeDialog(
                             reasonCode: selectedReasonCode,
                             note: note,
                             replacementProductId: replacement,
+                            followUpOn: followUpOn,
                           ),
                         );
                       },

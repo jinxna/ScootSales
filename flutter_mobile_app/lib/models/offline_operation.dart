@@ -1,3 +1,39 @@
+class PendingFollowUp {
+  const PendingFollowUp({
+    required this.date,
+    required this.status,
+    this.outcomeSent = false,
+  });
+
+  final String date;
+  final String status;
+  final bool outcomeSent;
+
+  PendingFollowUp get afterOutcomeSent =>
+      PendingFollowUp(date: date, status: status, outcomeSent: true);
+
+  PendingFollowUp withStatus(String next) =>
+      PendingFollowUp(date: date, status: next, outcomeSent: outcomeSent);
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'date': date,
+    'status': status,
+    'outcomeSent': outcomeSent,
+  };
+
+  static PendingFollowUp? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final String date = _text(json['date']);
+    final String status = _text(json['status']);
+    if (date.isEmpty || status.isEmpty) return null;
+    return PendingFollowUp(
+      date: date,
+      status: status,
+      outcomeSent: json['outcomeSent'] == true,
+    );
+  }
+}
+
 class OfflineOperation {
   const OfflineOperation({
     required this.operationId,
@@ -11,6 +47,7 @@ class OfflineOperation {
     this.targetKind = '',
     this.targetStatus = '',
     this.stopId = '',
+    this.followUp,
   });
 
   final String operationId;
@@ -24,12 +61,14 @@ class OfflineOperation {
   final String targetKind;
   final String targetStatus;
   final String stopId;
+  final PendingFollowUp? followUp;
 
   OfflineOperation copyWith({
     int? attempts,
     DateTime? nextRetryAt,
     String? lastError,
     String? targetStatus,
+    PendingFollowUp? followUp,
   }) {
     return OfflineOperation(
       operationId: operationId,
@@ -43,6 +82,7 @@ class OfflineOperation {
       targetKind: targetKind,
       targetStatus: targetStatus ?? this.targetStatus,
       stopId: stopId,
+      followUp: followUp ?? this.followUp,
     );
   }
 
@@ -58,6 +98,7 @@ class OfflineOperation {
     'targetKind': targetKind,
     'targetStatus': targetStatus,
     'stopId': stopId,
+    if (followUp != null) 'followUp': followUp!.toJson(),
   };
 
   factory OfflineOperation.fromJson(Map<String, dynamic> json) {
@@ -77,6 +118,7 @@ class OfflineOperation {
       targetKind: _text(json['targetKind']),
       targetStatus: _text(json['targetStatus']),
       stopId: _text(json['stopId']),
+      followUp: PendingFollowUp.fromJson(json['followUp']),
     );
   }
 }

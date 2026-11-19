@@ -1,6 +1,7 @@
 'use strict';
 
 const { see, scrollIntoView, fillField, openApp } = require('./browser.cjs');
+const lane = require('./lane.cjs');
 
 const MOBILE_VIEWPORT = { width: 430, height: 900 };
 
@@ -199,9 +200,9 @@ async function savedDrafts(page, project, uid) {
 function backendPorts() {
   const port = (value, fallback) => Number(String(value || '').split(':')[1]) || fallback;
   return [
-    port(process.env.FIRESTORE_EMULATOR_HOST, 8089),
-    port(process.env.FIREBASE_AUTH_EMULATOR_HOST, 9099),
-    Number(process.env.PLATFORM_API_PORT) || 18790,
+    port(process.env.FIRESTORE_EMULATOR_HOST, lane.ports.firestore),
+    port(process.env.FIREBASE_AUTH_EMULATOR_HOST, lane.ports.auth),
+    Number(process.env.PLATFORM_API_PORT) || lane.ports.platformApi,
   ];
 }
 

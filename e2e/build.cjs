@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const platform = require('./lib/platform.cjs');
+const lane = require('./lib/lane.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 const APPS = { admin: 'admin_dashboard', mobile: process.env.E2E_MOBILE_DIR || 'flutter_mobile_app' };
@@ -15,8 +16,8 @@ if (edition !== 'basic' && edition !== 'advanced') {
 }
 const tenantRouting = process.env.E2E_TENANT_ROUTING === '1';
 const adminTarget = process.env.E2E_ADMIN_TARGET;
-const adminBuildDir = process.env.E2E_ADMIN_BUILD || (tenantRouting ? 'web_e2e_v4' : 'web_e2e');
-const editionBuildDir = process.env.E2E_MOBILE_BUILD || `${edition === 'basic' ? 'web_e2e_basic' : 'web_e2e'}${tenantRouting ? '_v4' : ''}`;
+const adminBuildDir = lane.buildFolder(process.env.E2E_ADMIN_BUILD || (tenantRouting ? 'web_e2e_v4' : 'web_e2e'));
+const editionBuildDir = lane.buildFolder(process.env.E2E_MOBILE_BUILD || `${edition === 'basic' ? 'web_e2e_basic' : 'web_e2e'}${tenantRouting ? '_v4' : ''}`);
 
 for (const [key, dir] of Object.entries(APPS)) {
   if (only && only !== key) continue;
@@ -30,8 +31,8 @@ for (const [key, dir] of Object.entries(APPS)) {
   const emulatorDefines = [
     'USE_FIREBASE_EMULATOR=true',
     'FIREBASE_EMULATOR_HOST=127.0.0.1',
-    `FIRESTORE_EMULATOR_PORT=${process.env.FIRESTORE_EMULATOR_PORT || 8089}`,
-    `FIREBASE_AUTH_EMULATOR_PORT=${process.env.FIREBASE_AUTH_EMULATOR_PORT || 9099}`,
+    `FIRESTORE_EMULATOR_PORT=${process.env.FIRESTORE_EMULATOR_PORT || lane.ports.firestore}`,
+    `FIREBASE_AUTH_EMULATOR_PORT=${process.env.FIREBASE_AUTH_EMULATOR_PORT || lane.ports.auth}`,
   ];
   const appDefines = key === 'admin'
     ? [
@@ -39,8 +40,8 @@ for (const [key, dir] of Object.entries(APPS)) {
       `PLATFORM_API_URL=${platform.PLATFORM_API_URL}`,
     ]
     : [
-      'COPILOT_URL=http://127.0.0.1:18765',
-      'FORECAST_API=http://127.0.0.1:18766',
+      `COPILOT_URL=${platform.SERVICES.copilotUrl}`,
+      `FORECAST_API=${platform.SERVICES.forecastingUrl}`,
       `PLATFORM_API_URL=${platform.PLATFORM_API_URL}`,
       `FIREBASE_TARGET=${firebaseTarget}`,
       `EDITION=${edition}`,

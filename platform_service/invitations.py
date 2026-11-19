@@ -63,6 +63,7 @@ RATE_LIMITS = "rate_limits"
 USERS = "users"
 ACCESS = "user_access"
 CLAIMS = "employee_codes"
+BRANCHES = "branches"
 CODE_IN_USE = "That employee code is already in use."
 CODE_RETIRED = "That employee code was used before by someone else. Choose a different code."
 
@@ -77,6 +78,7 @@ ACTION_ROLE = "account.role"
 ACTION_REMOVE = "account.remove"
 ACTION_MOVE = "account.move"
 ACTION_CODE = "account.code"
+ACTION_REMOVE_PROFILE = "profile.remove"
 
 CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 CODE_LENGTH = 12
@@ -92,6 +94,7 @@ CODE_FIELDS = ("employeeCode", "employee_code", "staffId", "staff_id")
 IN_QUERY_LIMIT = 30
 MAX_CASE_LETTERS = 6
 
+EMAIL_IN_USE = "That sign-in email is already in use."
 MSG_INVALID = "The invitation code or check is not valid."
 MSG_EXPIRED = "This invitation has expired. Ask your administrator for a new one."
 MSG_USED = "This invitation was already used."
@@ -120,6 +123,7 @@ _EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,189}$")
 _PHONE = re.compile(r"^[0-9+()\-. ]{4,24}$")
 _BRANCH = re.compile(r"^[^/\x00-\x1f\x7f]{0,64}$")
 _UID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+_PROFILE_ID = re.compile(r"^(?!\.{1,2}$)(?!__.*__$)[^/\x00-\x1f\x7f]{1,256}$")
 _NAME = re.compile(r"^[^\x00-\x1f\x7f]{1,80}$")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
@@ -403,8 +407,8 @@ class InvitationService:
     ) -> dict[str, Any]:
         secret = self._secret()
         op_id = make_operation_id(ACTION_CREATE, key)
-        if self.runner.get(op_id) is None:
-            self._precheck(access, fields, ctx.tenant_id)
+        earlier = self.runner.get(op_id)
+        reused = self._precheck(access, fields, ctx.tenant_id) if earlier is None else None
         code = derive_code(secret, op_id)
         invitation_id = invitation_id_for(code)
         check_value = normalize_check(
@@ -414,7 +418,7 @@ class InvitationService:
             **self._location_params(ctx),
             **fields,
             **extra,
-            "uid": derive_uid(op_id),
+            "uid": earlier["params"]["uid"] if earlier else reused or derive_uid(op_id),
             "createdBy": ctx.uid,
             "checkHash": check_hash(secret, invitation_id, check_value),
         }
@@ -782,16 +786,20 @@ class InvitationService:
             "The invitation could not be created. Start again with a new Idempotency-Key.",
         )
 
-    def _precheck(self, access: CompanyAccess, fields: Mapping[str, Any], tenant_id: str) -> None:
+    def _precheck(self, access: CompanyAccess, fields: Mapping[str, Any], tenant_id: str) -> str | None:
         self._precheck_seat(access, tenant_id, fields["role"])
+        reused = None
         try:
-            access.auth.get_user_by_email(fields["signInId"])
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="That sign-in email is already in use.",
-            )
+            holder = access.auth.get_user_by_email(fields["signInId"])
         except admin_auth.UserNotFoundError:
-            pass
+            holder = None
+        if holder is not None:
+            if not self._is_leftover_account(access, holder, tenant_id):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=EMAIL_IN_USE,
+                )
+            reused = holder.uid
         code = fields["employeeCode"]
         refusal = self._code_refusal(access, code)
         if refusal:
@@ -802,6 +810,20 @@ class InvitationService:
                 _check_supervisor(snapshot, code)
             except InviteProblem as error:
                 raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+        return reused
+
+    def _is_leftover_account(self, access: CompanyAccess, user: Any, tenant_id: str) -> bool:
+        if not user.disabled or (user.custom_claims or {}).get("inviteOp"):
+            return False
+        db = access.db
+        if db.collection(ACCESS).document(user.uid).get().exists:
+            return False
+        for field in ("uid", "userUid"):
+            linked = db.collection(USERS).where(filter=firestore.FieldFilter(field, "==", user.uid)).limit(1)
+            if any(True for _ in linked.stream()):
+                return False
+        params = {"uid": user.uid, "tenantId": tenant_id}
+        return not self._open_invitations(params) and not self._open_created_invitations(params)
 
     def _code_refusal(self, access: CompanyAccess, code: str) -> str | None:
         db = access.db
@@ -887,6 +909,7 @@ class InvitationService:
             ACTION_REACTIVATE: self.reactivate_steps(),
             ACTION_ROLE: self.role_steps(),
             ACTION_REMOVE: self.remove_steps(),
+            ACTION_REMOVE_PROFILE: self.remove_profile_steps(),
             ACTION_MOVE: self.move_steps(),
             ACTION_CODE: self.code_steps(),
         }
@@ -906,7 +929,7 @@ class InvitationService:
                 disabled=True,
             )
         except admin_auth.EmailAlreadyExistsError as error:
-            raise InviteProblem("That sign-in email is already in use.") from error
+            raise InviteProblem(EMAIL_IN_USE) from error
         except admin_auth.UidAlreadyExistsError:
             if access.auth.get_user(uid).email != params["signInId"]:
                 raise InviteProblem("That account ID is already in use.") from None
@@ -1116,16 +1139,17 @@ class InvitationService:
     def discard_provisional(self, op_id: str, params: Mapping[str, Any]) -> None:
         access = self._access(params)
         uid = params["uid"]
-        if uid != derive_uid(op_id):
-            return
+        own_account = uid == derive_uid(op_id)
         try:
             user = access.auth.get_user(uid)
         except admin_auth.UserNotFoundError:
             user = None
         if user is not None and user.disabled:
             claims = user.custom_claims or {}
-            if claims.get("inviteOp") == op_id or not claims:
+            if own_account and (claims.get("inviteOp") == op_id or not claims):
                 access.auth.delete_user(uid)
+            elif not own_account and claims.get("inviteOp") == op_id:
+                access.auth.set_custom_user_claims(uid, None)
         db = access.db
         users = db.collection(USERS).document(params["employeeCode"])
         index_ref = db.collection(ACCESS).document(uid)
@@ -1818,17 +1842,25 @@ class InvitationService:
             return not self._open_invitations(ctx.params) and not self._open_created_invitations(ctx.params)
 
         def disable_apply(ctx: OperationContext) -> dict[str, bool]:
+            access = self._access(ctx.params)
+            sign_in = access.auth
+            uid = ctx.params["uid"]
             try:
-                self._access(ctx.params).auth.update_user(ctx.params["uid"], disabled=True)
+                if ctx.params.get("deleteAuth") is True and not self._has_history(
+                        access.db, uid, [str(code) for code in ctx.params.get("historyCodes") or []]):
+                    sign_in.delete_user(uid)
+                else:
+                    sign_in.update_user(uid, disabled=True)
             except admin_auth.UserNotFoundError:
                 pass
             return {"disabled": True}
 
         def disable_check(ctx: OperationContext) -> bool:
             try:
-                return self._access(ctx.params).auth.get_user(ctx.params["uid"]).disabled
+                user = self._access(ctx.params).auth.get_user(ctx.params["uid"])
             except admin_auth.UserNotFoundError:
                 return True
+            return user.disabled and ctx.params.get("deleteAuth") is not True
 
         def tokens_apply(ctx: OperationContext) -> dict[str, bool]:
             try:
@@ -2279,21 +2311,22 @@ class InvitationService:
         code = str(body.get("employeeCode") or "").strip()
         if not _EMPLOYEE_CODE.fullmatch(code):
             raise _bad("Enter an employee code of 1 to 32 letters, digits, dots, dashes or underscores.")
-        code = code.upper()
         current = access.db.collection(ACCESS).document(uid).get()
         if not current.exists:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown account.")
         old_code = str((current.to_dict() or {}).get("employeeCode") or "")
-        if canonical_code(old_code) != code:
-            if person_has_history(access.db, uid, old_code):
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"The employee code {old_code} cannot change. This person's orders, visits and routes "
-                           "are filed under it, and a new code would hide them from their supervisor. Keep the "
-                           "code. To use another one, remove this person and invite them again.")
-            refusal = self._code_refusal(access, code)
-            if refusal:
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=refusal)
+        if canonical_code(old_code) == canonical_code(code):
+            return {"uid": uid, "employeeCode": old_code}
+        code = code.upper()
+        if person_has_history(access.db, uid, old_code):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"The employee code {old_code} cannot change. This person's orders, visits and routes "
+                       "are filed under it, and a new code would hide them from their supervisor. Keep the "
+                       "code. To use another one, remove this person and invite them again.")
+        refusal = self._code_refusal(access, code)
+        if refusal:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=refusal)
         run_command(
             self.runner,
             key=f"{ctx.workspace}:{idempotency_key}",
@@ -2412,31 +2445,58 @@ class InvitationService:
         self, ctx: TenantContext, uid: str, idempotency_key: str
     ) -> dict[str, str]:
         access = self._target(ctx, uid, own="You cannot remove your own account.")
-        snapshot = access.db.collection(ACCESS).document(uid).get()
-        if not snapshot.exists:
-            try:
-                access.auth.get_user(uid)
-            except admin_auth.UserNotFoundError:
+        key = f"{ctx.workspace}:{idempotency_key}"
+        earlier = self.runner.get(make_operation_id(ACTION_REMOVE, key))
+        if earlier is not None:
+            delete_auth = earlier["params"].get("deleteAuth") is True
+            codes = [str(code) for code in earlier["params"].get("historyCodes") or []]
+        else:
+            snapshot = access.db.collection(ACCESS).document(uid).get()
+            if not snapshot.exists:
+                try:
+                    access.auth.get_user(uid)
+                except admin_auth.UserNotFoundError:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND, detail="Unknown account."
+                    ) from None
+            elif (snapshot.to_dict() or {}).get("assignedSalesmanCodes"):
                 raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail="Unknown account."
-                ) from None
-        elif (snapshot.to_dict() or {}).get("assignedSalesmanCodes"):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="This supervisor still has salespeople. Move them to another supervisor first.",
-            )
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="This supervisor still has salespeople. Move them to another supervisor first.",
+                )
+            own_code = str((snapshot.to_dict() or {}).get("employeeCode") or "").strip()
+            codes = [own_code] if own_code else self._linked_profile_codes(access, uid)
+            delete_auth = not self._has_history(access.db, uid, codes)
         run_command(
             self.runner,
-            key=f"{ctx.workspace}:{idempotency_key}",
+            key=key,
             action=ACTION_REMOVE,
             actor=ctx.uid,
             tenant_id=ctx.tenant_id,
             reason="Account removed",
-            params={**self._command_params(ctx, uid), "revokedBy": ctx.uid},
+            params={**self._command_params(ctx, uid), "revokedBy": ctx.uid, "deleteAuth": delete_auth,
+                    "historyCodes": codes},
             steps=self.remove_steps(),
             fallback="The account could not be removed. Try again.",
         )
         return {"uid": uid, "status": "removed"}
+
+    @staticmethod
+    def _linked_profile_codes(access: CompanyAccess, uid: str) -> list[str]:
+        codes: set[str] = set()
+        for field in ("uid", "userUid"):
+            for snapshot in access.db.collection(USERS).where(filter=firestore.FieldFilter(field, "==", uid)).stream():
+                data = snapshot.to_dict() or {}
+                held = {str(data.get(name) or "").strip() for name in CODE_FIELDS} - {""}
+                codes |= held or {snapshot.id}
+        return sorted(codes)
+
+    @staticmethod
+    def _has_history(db: firestore.Client, uid: str, codes: list[str]) -> bool:
+        retired = db.collection(CLAIMS).where(filter=firestore.FieldFilter("retiredUid", "==", uid)).limit(1)
+        if uid and any(True for _ in retired.stream()):
+            return True
+        return any(person_has_history(db, uid, code) for code in codes or [""])
 
     def remove_steps(self) -> list[Step]:
         def remove_apply(ctx: OperationContext) -> dict[str, bool]:
@@ -2446,8 +2506,9 @@ class InvitationService:
         def remove_check(ctx: OperationContext) -> bool:
             db = self._access(ctx.params).db
             uid = ctx.params["uid"]
-            return (not db.collection(ACCESS).document(uid).get().exists
-                    and not list(db.collection(USERS).where(filter=firestore.FieldFilter("uid", "==", uid)).limit(1).stream()))
+            return not db.collection(ACCESS).document(uid).get().exists and not any(
+                list(db.collection(USERS).where(filter=firestore.FieldFilter(field, "==", uid)).limit(1).stream())
+                for field in ("uid", "userUid"))
 
         return [Step("remove_records", remove_apply, remove_check), *self._lockdown_steps()]
 
@@ -2460,8 +2521,10 @@ class InvitationService:
         linked = access_row.get("userDocId")
         wanted = [users.document(name) for name in {linked, access_row.get("employeeCode")} if name]
         for snapshot in [*(reference.get(transaction=transaction) for reference in wanted),
-                         *transaction.get(users.where(filter=firestore.FieldFilter("uid", "==", uid)))]:
-            if snapshot.exists and ((snapshot.to_dict() or {}).get("uid") == uid or snapshot.id == linked):
+                         *transaction.get(users.where(filter=firestore.FieldFilter("uid", "==", uid))),
+                         *transaction.get(users.where(filter=firestore.FieldFilter("userUid", "==", uid)))]:
+            data = snapshot.to_dict() or {}
+            if snapshot.exists and (uid in (data.get("uid"), data.get("userUid")) or snapshot.id == linked):
                 found[snapshot.id] = snapshot.reference
         return list(found.values())
 
@@ -2477,8 +2540,19 @@ class InvitationService:
             self._transaction_caller(transaction, db, params, data)
             profiles = self._profile_references(transaction, db, params["uid"], data)
             if not index.exists:
+                codes = [str((reference.get(transaction=transaction).to_dict() or {}).get(field) or "")
+                         for reference in profiles for field in CODE_FIELDS]
+                holders = self._rosters_holding(
+                    transaction, db, codes, skip={reference.path for reference in profiles})
+                worked = sorted({
+                    canonical_code(code) for code in codes
+                    if canonical_code(code) and person_has_history(db, params["uid"], code, transaction)
+                })
                 for reference in profiles:
                     transaction.delete(reference)
+                self._drop_from_rosters(transaction, holders, codes)
+                for code in worked:
+                    retire_code(transaction, db, params["uid"], code)
                 return
             pool = self._known_pool(data.get("role"))
             if data.get("assignedSalesmanCodes"):
@@ -2489,6 +2563,13 @@ class InvitationService:
             supervisor_ref = db.collection(ACCESS).document(supervisor_uid) if supervisor_uid else None
             supervisor = supervisor_ref.get(transaction=transaction) if supervisor_ref else None
             supervisor_profile = self._profile_codes(transaction, db, supervisor)
+            named_roster = {index_ref.path, *(reference.path for reference in profiles)}
+            if supervisor is not None and supervisor.exists:
+                named_roster.add(supervisor_ref.path)
+                if (supervisor.to_dict() or {}).get("userDocId"):
+                    named_roster.add(db.collection(USERS).document(supervisor.to_dict()["userDocId"]).path)
+            own_codes = [str(data.get("employeeCode") or "")]
+            holders = self._rosters_holding(transaction, db, own_codes, skip=named_roster)
             retain = person_has_history(db, params["uid"], str(data.get("employeeCode") or ""), transaction)
             move_counts(transaction, db, usage,
                         {pool: -1} if pool and data.get("seatHeld") is True else {}, None,
@@ -2503,8 +2584,145 @@ class InvitationService:
                     transaction, db, supervisor_ref, supervisor,
                     str(data.get("employeeCode") or ""), add=False, profile_codes=supervisor_profile,
                 )
+            self._drop_from_rosters(transaction, holders, own_codes)
 
         commit_when_free(remove, db)
+
+    def remove_profile(self, ctx: TenantContext, doc_id: str, idempotency_key: str) -> dict[str, str]:
+        access = self.access_for(ctx.record["location"])
+        self.require_admin(access, ctx.uid)
+        if not _PROFILE_ID.fullmatch(doc_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown profile.")
+        key = f"{ctx.workspace}:{idempotency_key}"
+        if self.runner.get(make_operation_id(ACTION_REMOVE_PROFILE, key)) is None:
+            snapshot = access.db.collection(USERS).document(doc_id).get()
+            if not snapshot.exists:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown profile.")
+            refusal = self._profile_refusal(access, snapshot)
+            if refusal:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=refusal)
+        run_command(
+            self.runner,
+            key=key,
+            action=ACTION_REMOVE_PROFILE,
+            actor=ctx.uid,
+            tenant_id=ctx.tenant_id,
+            reason="Profile removed",
+            params={**self._location_params(ctx), "docId": doc_id, "requestedBy": ctx.uid},
+            steps=self.remove_profile_steps(),
+            fallback="The profile could not be removed. Try again.",
+        )
+        return {"docId": doc_id, "status": "removed"}
+
+    def remove_profile_steps(self) -> list[Step]:
+        def apply(ctx: OperationContext) -> dict[str, bool]:
+            self._remove_profile_records(ctx.params)
+            return {"removed": True}
+
+        def check(ctx: OperationContext) -> bool:
+            db = self._access(ctx.params).db
+            return not db.collection(USERS).document(ctx.params["docId"]).get().exists
+
+        return [Step("remove_profile", apply, check)]
+
+    def _profile_refusal(
+        self, access: CompanyAccess, snapshot: Any, transaction: firestore.Transaction | None = None,
+        *, check_sign_in: bool = True,
+    ) -> str | None:
+        db = access.db
+        data = snapshot.to_dict() or {}
+        if str(data.get("uid") or "").strip() or str(data.get("userUid") or "").strip():
+            return "This person has a sign-in. Remove them from the accounts list instead."
+        if _roster_codes(data):
+            return "This supervisor still has salespeople. Move them to another supervisor first."
+        wanted = {canonical_code(snapshot.id), *(canonical_code(data.get(field)) for field in CODE_FIELDS)} - {""}
+        variants = sorted({spelling for code in wanted for spelling in (code, code.lower(), *_case_spellings(code))})
+        linked = db.collection(ACCESS).where(filter=firestore.FieldFilter("userDocId", "==", snapshot.id)).limit(1)
+        if any(True for _ in linked.stream(transaction=transaction)):
+            return "A sign-in record still points to this profile. Remove the person from the accounts list instead."
+        for start in range(0, len(variants), IN_QUERY_LIMIT):
+            batch = variants[start:start + IN_QUERY_LIMIT]
+            query = db.collection(ACCESS).where(filter=firestore.FieldFilter("employeeCode", "in", batch)).limit(1)
+            if any(True for _ in query.stream(transaction=transaction)):
+                return "A sign-in record uses this employee code. Remove the person from the accounts list instead."
+        email = str(data.get("email") or "").strip().lower()
+        if check_sign_in and email:
+            try:
+                holder = access.auth.get_user_by_email(email)
+            except admin_auth.UserNotFoundError:
+                return None
+            if db.collection(ACCESS).document(holder.uid).get().exists:
+                return "A sign-in with this email already has an account record. Remove the person from the accounts list instead."
+        return None
+
+    def _remove_profile_records(self, params: Mapping[str, Any]) -> None:
+        access = self._access(params)
+        db = access.db
+        reference = db.collection(USERS).document(params["docId"])
+
+        @firestore.transactional
+        def remove(transaction: firestore.Transaction) -> None:
+            self._transaction_caller(transaction, db, params)
+            snapshot = reference.get(transaction=transaction)
+            if not snapshot.exists:
+                return
+            refusal = self._profile_refusal(access, snapshot, transaction, check_sign_in=False)
+            if refusal:
+                raise CommandProblem(refusal)
+            data = snapshot.to_dict() or {}
+            codes = [snapshot.id, *(str(data.get(field) or "") for field in CODE_FIELDS)]
+            wanted = {canonical_code(code) for code in codes} - {""}
+            holders = self._rosters_holding(transaction, db, codes, skip={reference.path})
+            linked_branches = [
+                branch for branch in db.collection(BRANCHES).stream(transaction=transaction)
+                if canonical_code((branch.to_dict() or {}).get("branchManagerId")) in wanted
+            ]
+            code = str(data.get("employeeCode") or snapshot.id)
+            retain = person_has_history(db, "", code, transaction)
+            transaction.delete(reference)
+            self._drop_from_rosters(transaction, holders, codes)
+            for branch in linked_branches:
+                transaction.update(branch.reference, {"branchManagerId": firestore.DELETE_FIELD})
+            if retain:
+                retire_code(transaction, db, snapshot.id, code)
+
+        commit_when_free(remove, db)
+
+    @staticmethod
+    def _rosters_holding(
+        transaction: firestore.Transaction, db: firestore.Client, codes: list[str], *, skip: set[str]
+    ) -> list[Any]:
+        wanted_codes = {canonical_code(code) for code in codes} - {""}
+        spellings = sorted({
+            spelling
+            for wanted in wanted_codes
+            for spelling in {wanted, wanted.lower(), *_case_spellings(wanted)}
+        })
+        found: dict[str, Any] = {}
+        for start in range(0, len(spellings), IN_QUERY_LIMIT):
+            batch = spellings[start:start + IN_QUERY_LIMIT]
+            for collection in (ACCESS, USERS):
+                query = db.collection(collection).where(
+                    filter=firestore.FieldFilter("assignedSalesmanCodes", "array_contains_any", batch))
+                for snapshot in transaction.get(query):
+                    if snapshot.reference.path not in skip:
+                        found[snapshot.reference.path] = snapshot
+        if any(not _case_spellings(wanted) for wanted in wanted_codes):
+            for collection in (ACCESS, USERS):
+                query = db.collection(collection).where(
+                    filter=firestore.FieldFilter("role", "==", "supervisor"))
+                for snapshot in transaction.get(query):
+                    held = {canonical_code(item) for item in _roster_codes(snapshot.to_dict() or {})}
+                    if snapshot.reference.path not in skip and held & wanted_codes:
+                        found[snapshot.reference.path] = snapshot
+        return list(found.values())
+
+    @staticmethod
+    def _drop_from_rosters(transaction: firestore.Transaction, holders: list[Any], codes: list[str]) -> None:
+        unwanted = {canonical_code(code) for code in codes} - {""}
+        for snapshot in holders:
+            kept = [item for item in _roster_codes(snapshot.to_dict() or {}) if canonical_code(item) not in unwanted]
+            transaction.update(snapshot.reference, {"assignedSalesmanCodes": kept, "updatedAt": firestore.SERVER_TIMESTAMP})
 
     def reconcile(self, ctx: TenantContext) -> dict[str, Any]:
         access = self.access_for(ctx.record["location"])

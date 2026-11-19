@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_web_app/pages/admin/views/purchase_orders_view.dart';
+import 'package:flutter_web_app/utils/order_data_utils.dart';
 import 'package:scoot_design/scoot_design.dart';
 
 Map<String, dynamic> _po(
@@ -38,6 +41,7 @@ Widget _view({
   VoidCallback? onJump,
   Map<String, String> names = const <String, String>{},
   bool? hasAny,
+  Future<List<Map<String, dynamic>>> Function(String)? loadLines,
 }) {
   return MaterialApp(
     theme: ScootTheme.dashboard(),
@@ -58,6 +62,7 @@ Widget _view({
         changing: const <String>{},
         onIssue: onIssue ?? (_) {},
         onChangeStatus: onStatus ?? (_, _) {},
+        loadOrderLines: loadLines ?? (_) async => <Map<String, dynamic>>[],
         salespersonNames: names,
         onJumpToLatest: onJump,
       ),
@@ -131,6 +136,103 @@ void main() {
       expect(rect.left, greaterThanOrEqualTo(0));
       expect(rect.right, lessThanOrEqualTo(390));
     }
+  });
+
+  Future<void> openLazyLines(
+    WidgetTester tester,
+    Future<List<Map<String, dynamic>>> Function(String) loadLines,
+  ) async {
+    await _size(tester);
+    final Map<String, dynamic> po = _po(1)..remove('lines');
+    await tester.pumpWidget(
+      _view(pos: <Map<String, dynamic>>[po], loadLines: loadLines),
+    );
+    await tester.tap(find.text('PO-20261104-ORD-1'));
+    await tester.pump();
+  }
+
+  testWidgets('order lines show a loading line while they are read', (
+    WidgetTester tester,
+  ) async {
+    final Completer<List<Map<String, dynamic>>> never =
+        Completer<List<Map<String, dynamic>>>();
+    await openLazyLines(tester, (_) => never.future);
+    expect(find.text('Loading the order lines.'), findsOneWidget);
+    expect(find.text('Try again'), findsNothing);
+  });
+
+  testWidgets('a failed read of the order lines can be tried again', (
+    WidgetTester tester,
+  ) async {
+    int reads = 0;
+    await openLazyLines(tester, (_) async {
+      reads++;
+      throw StateError('network');
+    });
+    await tester.pump();
+    expect(find.text('The order lines could not be loaded.'), findsOneWidget);
+    await tester.tap(find.text('Try again'));
+    await tester.pump();
+    await tester.pump();
+    expect(reads, 2);
+  });
+
+  testWidgets('a deleted order says its lines are gone and offers no retry', (
+    WidgetTester tester,
+  ) async {
+    await openLazyLines(
+      tester,
+      (_) async => throw const PurchaseOrderSourceGone(),
+    );
+    await tester.pump();
+    expect(
+      find.text('The order was deleted, so its lines are not available.'),
+      findsOneWidget,
+    );
+    expect(find.text('The order lines could not be loaded.'), findsNothing);
+    expect(find.text('Try again'), findsNothing);
+  });
+
+  testWidgets(
+    'a deleted order says its lines are gone even when its read is refused with permission-denied, as the order rule does for a supervisor or branch manager',
+    (WidgetTester tester) async {
+      await openLazyLines(
+        tester,
+        (_) async => authoritativeOrderItems(
+          await readPurchaseOrderSource(
+            () async => throw FirebaseException(
+              plugin: 'cloud_firestore',
+              code: 'permission-denied',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(
+        find.text('The order was deleted, so its lines are not available.'),
+        findsOneWidget,
+      );
+      expect(find.text('Try again'), findsNothing);
+    },
+  );
+
+  testWidgets('an order read that fails for another reason can be tried again', (
+    WidgetTester tester,
+  ) async {
+    await openLazyLines(
+      tester,
+      (_) async => authoritativeOrderItems(
+        await readPurchaseOrderSource(
+          () async => throw FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'unavailable',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('The order lines could not be loaded.'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
   });
 
   testWidgets('below the table width every PO action stays inside the card', (

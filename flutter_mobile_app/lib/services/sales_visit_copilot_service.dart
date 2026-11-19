@@ -4,8 +4,10 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'company_lifecycle_monitor.dart';
+import 'follow_up_service.dart';
 import 'project_local_store.dart';
 
+import '../models/follow_up_promise.dart';
 import '../models/offline_operation.dart';
 import '../models/user_model.dart';
 import '../edition.dart';
@@ -166,7 +168,9 @@ class SalesVisitCopilotService extends ChangeNotifier {
   OfflineQueueLedger get _queue => _owner?.queue ?? OfflineQueueLedger();
   bool get _initialised => _owner?.initialised ?? false;
 
-  static const String needsAttentionStatus = 'needs_attention';
+  static const String needsAttentionStatus = outcomeNeedsAttentionStatus;
+  static const String followUpRefusedMessage =
+      'The server refused the follow-up date. The visit result itself is saved. Remove this one. Set the date again at the next visit.';
 
   int get pendingCount => _store.isActive(_uid)
       ? _queue.ordered.where((OfflineOperation row) => !_isStuck(row)).length
@@ -321,7 +325,7 @@ class SalesVisitCopilotService extends ChangeNotifier {
     await owner.persistTail;
     final encoded = await _store.read(
       uid,
-      'outcomes',
+      outcomeQueueStoreName,
       legacyKey: _queueKeyFor(uid),
     );
     await ProjectLocalStore.refreshRecoveryNotice();
@@ -331,8 +335,10 @@ class SalesVisitCopilotService extends ChangeNotifier {
         operations.addAll(_decodeQueue(encoded, uid));
       } catch (_) {
         operations.clear();
-        await ProjectLocalStore.recoverLegacyKey(_store.key(uid, 'outcomes'));
-        if (await _store.read(uid, 'outcomes') != null) {
+        await ProjectLocalStore.recoverLegacyKey(
+          _store.key(uid, outcomeQueueStoreName),
+        );
+        if (await _store.read(uid, outcomeQueueStoreName) != null) {
           throw StateError(
             'Outcome queue must be recovered before replacement.',
           );
@@ -467,6 +473,7 @@ class SalesVisitCopilotService extends ChangeNotifier {
     required String note,
     required String replacementProductId,
     required bool isOnline,
+    DateTime? followUpOn,
   }) async {
     final current = _store.lease(user.uid);
     if (!current()) {
@@ -537,6 +544,7 @@ class SalesVisitCopilotService extends ChangeNotifier {
     if (cleanReason == 'switched_to_alternative' && cleanReplacement.isEmpty) {
       throw ArgumentError('Replacement product ID is required.');
     }
+    final PendingFollowUp? followUp = _newFollowUp(followUpOn);
 
     final now = DateTime.now().toUtc();
     final outcomeId = _outcomeId(cleanUserUid, cleanIssueId, now);
@@ -571,12 +579,14 @@ class SalesVisitCopilotService extends ChangeNotifier {
       targetKind: insight.type,
       targetStatus: 'pending',
       stopId: cleanStop,
+      followUp: followUp,
     );
     _memoryCache.invalidate(
       uid: '${_store.projectId}|$cleanUserUid',
       retailerId: cleanRetailer,
     );
     await _changeQueue((OfflineQueueLedger ledger) => ledger.put(queued));
+    FollowUpService.noteChanged();
     if (!current()) {
       return OutcomeQueueResult(outcomeId: outcomeId, synced: false);
     }
@@ -605,6 +615,7 @@ class SalesVisitCopilotService extends ChangeNotifier {
     required String note,
     required bool isDemo,
     required bool isOnline,
+    DateTime? followUpOn,
   }) async {
     final current = _store.lease(user.uid);
     if (!current()) {
@@ -640,6 +651,7 @@ class SalesVisitCopilotService extends ChangeNotifier {
     if (cleanReason == 'other' && cleanNote.length < 8) {
       throw ArgumentError('A meaningful note is required for Other.');
     }
+    final PendingFollowUp? followUp = _newFollowUp(followUpOn);
     final now = DateTime.now().toUtc();
     final outcomeId = _outcomeId(cleanUserUid, 'no_order', now);
     final payload = <String, dynamic>{
@@ -669,12 +681,14 @@ class SalesVisitCopilotService extends ChangeNotifier {
       targetKind: 'no_order',
       targetStatus: 'pending',
       stopId: cleanStop,
+      followUp: followUp,
     );
     _memoryCache.invalidate(
       uid: '${_store.projectId}|$cleanUserUid',
       retailerId: cleanRetailer,
     );
     await _changeQueue((OfflineQueueLedger ledger) => ledger.put(queued));
+    FollowUpService.noteChanged();
     if (!current()) {
       return OutcomeQueueResult(outcomeId: outcomeId, synced: false);
     }
@@ -686,6 +700,79 @@ class SalesVisitCopilotService extends ChangeNotifier {
       outcomeId: outcomeId,
       synced: current() && _queue[outcomeId] == null,
     );
+  }
+
+  static PendingFollowUp? _newFollowUp(DateTime? day) {
+    if (day == null) return null;
+    final DateTime now = DateTime.now();
+    final DateTime today = DateTime(now.year, now.month, now.day);
+    final DateTime wanted = DateTime(day.year, day.month, day.day);
+    if (wanted.isBefore(today) ||
+        wanted.isAfter(today.add(const Duration(days: followUpMaxDaysAhead)))) {
+      throw ArgumentError.value(day, 'followUpOn', 'Outside the allowed days');
+    }
+    return PendingFollowUp(
+      date: followUpDateKey(wanted),
+      status: FollowUpStatus.open.name,
+    );
+  }
+
+  Future<void> markFollowUpDone({
+    required UserModel user,
+    required FollowUpPromise promise,
+    required bool isOnline,
+  }) async {
+    final String uid = user.uid.trim();
+    final current = _store.lease(uid);
+    if (!current()) {
+      throw StateError('The signed-in company or account changed.');
+    }
+    await initialiseForUser(uid);
+    if (!current() || !_initialised || _uid != uid) {
+      throw StateError('The signed-in company or account changed.');
+    }
+    final String outcomeId = promise.outcomeId.trim();
+    if (outcomeId.isEmpty) throw ArgumentError('Follow-up has no outcome.');
+    final String done = FollowUpStatus.completed.name;
+    await _changeQueue((OfflineQueueLedger ledger) {
+      final OfflineOperation? held = ledger[outcomeId];
+      final PendingFollowUp? heldFollowUp = held?.followUp;
+      if (held != null) {
+        ledger.put(
+          held.copyWith(
+            followUp:
+                heldFollowUp?.withStatus(done) ??
+                PendingFollowUp(date: promise.dateKey, status: done),
+          ),
+        );
+        return;
+      }
+      ledger.put(
+        OfflineOperation(
+          operationId: outcomeId,
+          type: 'conversation_outcome',
+          documentId: outcomeId,
+          payload: <String, dynamic>{
+            'outcomeId': outcomeId,
+            'salesmanUid': uid,
+            'retailerId': promise.retailerId,
+            'retailerName': promise.shop,
+          },
+          createdAt: DateTime.now().toUtc(),
+          targetKind: 'follow_up',
+          targetStatus: 'pending',
+          followUp: PendingFollowUp(
+            date: promise.dateKey,
+            status: done,
+            outcomeSent: true,
+          ),
+        ),
+      );
+    });
+    FollowUpService.noteChanged();
+    if (!current()) return;
+    _notify();
+    if (isOnline) await flushPending(isOnline: true, force: true);
   }
 
   Future<RetailerMemory?> loadRetailerMemory({
@@ -792,18 +879,60 @@ class SalesVisitCopilotService extends ChangeNotifier {
         if (!force && retryAt != null && retryAt.isAfter(DateTime.now())) {
           continue;
         }
+        bool outcomeSent = operation.followUp?.outcomeSent ?? false;
         try {
           final reference = _db
               .collection('conversation_outcomes')
               .doc(operation.documentId);
-          await reference
-              .set(_firestorePayload(operation.payload))
-              .timeout(const Duration(seconds: 10));
+          if (!outcomeSent) {
+            await reference
+                .set(_firestorePayload(operation.payload))
+                .timeout(const Duration(seconds: 10));
+            if (!current()) return;
+          }
+          PendingFollowUp? sending;
+          await _changeQueue((OfflineQueueLedger ledger) {
+            final OfflineOperation? held = ledger[operation.operationId];
+            final PendingFollowUp? followUp = held?.followUp;
+            if (held == null || followUp == null) {
+              ledger.remove(operation.operationId);
+              return;
+            }
+            sending = followUp.afterOutcomeSent;
+            ledger.put(held.copyWith(followUp: sending));
+          });
+          outcomeSent = true;
           if (!current()) return;
-          await _changeQueue(
-            (OfflineQueueLedger ledger) => ledger.remove(operation.operationId),
-          );
-          if (!current()) return;
+          while (sending != null) {
+            final PendingFollowUp followUp = sending!;
+            await reference
+                .update(<String, dynamic>{
+                  'followUpDate': followUp.date,
+                  'followUpStatus': followUp.status,
+                })
+                .timeout(const Duration(seconds: 10));
+            if (!current()) return;
+            sending = null;
+            await _changeQueue((OfflineQueueLedger ledger) {
+              final PendingFollowUp? latest =
+                  ledger[operation.operationId]?.followUp;
+              if (latest != null && latest.status != followUp.status) {
+                sending = latest;
+                return;
+              }
+              ledger.remove(operation.operationId);
+            });
+            await FollowUpService(
+              firestore: _db,
+              store: _store,
+            ).remember(uid, <String, dynamic>{
+              ...operation.payload,
+              'outcomeId': operation.documentId,
+              'followUpDate': followUp.date,
+              'followUpStatus': followUp.status,
+            });
+            if (!current()) return;
+          }
           _notify();
         } catch (error) {
           if (!current()) return;
@@ -811,13 +940,15 @@ class SalesVisitCopilotService extends ChangeNotifier {
             await _changeQueue(
               (OfflineQueueLedger ledger) => _putIfHeld(
                 ledger,
-                operation.copyWith(
-                  lastError:
-                      'The server refused this visit result. Sending it again will not help. Record the visit result again, then remove this one.',
+                (ledger[operation.operationId] ?? operation).copyWith(
+                  lastError: outcomeSent
+                      ? followUpRefusedMessage
+                      : 'The server refused this visit result. Sending it again will not help. Record the visit result again, then remove this one.',
                   targetStatus: needsAttentionStatus,
                 ),
               ),
             );
+            FollowUpService.noteChanged();
             if (current()) _notify();
             continue;
           }
@@ -827,7 +958,7 @@ class SalesVisitCopilotService extends ChangeNotifier {
           await _changeQueue(
             (OfflineQueueLedger ledger) => _putIfHeld(
               ledger,
-              operation.copyWith(
+              (ledger[operation.operationId] ?? operation).copyWith(
                 attempts: attempts,
                 nextRetryAt: DateTime.now().add(
                   Duration(seconds: 1 << boundedAttempts),
@@ -867,7 +998,7 @@ class SalesVisitCopilotService extends ChangeNotifier {
     return ProjectLocalStore.locked(_store.key(uid, 'outcome_write'), () async {
       OfflineQueueLedger ledger = owner.queue;
       try {
-        final String? stored = await _store.read(uid, 'outcomes');
+        final String? stored = await _store.read(uid, outcomeQueueStoreName);
         if (stored != null && stored.isNotEmpty) {
           ledger = OfflineQueueLedger(_decodeQueue(stored, uid));
         }
@@ -882,7 +1013,7 @@ class SalesVisitCopilotService extends ChangeNotifier {
             .toList(growable: false),
       );
       final operation = owner.persistTail.then(
-        (_) => _store.write(uid, 'outcomes', encoded),
+        (_) => _store.write(uid, outcomeQueueStoreName, encoded),
       );
       owner.persistTail = operation.catchError((Object _, StackTrace _) {});
       await operation;
@@ -899,7 +1030,8 @@ class SalesVisitCopilotService extends ChangeNotifier {
         Map<String, dynamic>.from(raw),
       );
       if (operation.type == 'conversation_outcome' &&
-          operation.documentId.startsWith('${_safeId(uid)}_') &&
+          (operation.documentId.startsWith('${_safeId(uid)}_') ||
+              (operation.followUp?.outcomeSent ?? false)) &&
           operation.payload['salesmanUid'] == uid) {
         operations.add(operation);
       } else {

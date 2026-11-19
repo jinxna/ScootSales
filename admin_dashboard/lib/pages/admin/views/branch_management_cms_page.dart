@@ -80,6 +80,12 @@ class _BranchManagementCmsPageState extends State<BranchManagementCmsPage> {
   bool _saving = false;
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _branchNameController = TextEditingController();
+  final TextEditingController _routeStartNameController =
+      TextEditingController();
+  final TextEditingController _routeStartLatController =
+      TextEditingController();
+  final TextEditingController _routeStartLngController =
+      TextEditingController();
   String _status = 'active';
   String _branchManagerId = '';
   String? _editingId;
@@ -87,13 +93,51 @@ class _BranchManagementCmsPageState extends State<BranchManagementCmsPage> {
   @override
   void dispose() {
     _branchNameController.dispose();
+    _routeStartNameController.dispose();
+    _routeStartLatController.dispose();
+    _routeStartLngController.dispose();
     super.dispose();
   }
+
+  bool get _routeStartEntered =>
+      _routeStartNameController.text.trim().isNotEmpty ||
+      _routeStartLatController.text.trim().isNotEmpty ||
+      _routeStartLngController.text.trim().isNotEmpty;
+
+  String? _routeStartNameError(String? value) =>
+      _routeStartEntered && (value == null || value.trim().isEmpty)
+      ? 'Enter a name for the start point'
+      : null;
+
+  String? _routeStartCoordinateError(String? value, double limit) {
+    if (!_routeStartEntered) return null;
+    final double? number = double.tryParse((value ?? '').trim());
+    if (number == null || !number.isFinite || number.abs() > limit) {
+      return 'Enter a number from -${limit.toInt()} to ${limit.toInt()}';
+    }
+    final double? latitude = double.tryParse(
+      _routeStartLatController.text.trim(),
+    );
+    final double? longitude = double.tryParse(
+      _routeStartLngController.text.trim(),
+    );
+    if (latitude == 0 && longitude == 0) {
+      return 'Latitude 0 and longitude 0 is not a real place';
+    }
+    return null;
+  }
+
+  static String _coordinateText(Object? value) =>
+      value is num ? value.toString() : '';
 
   void _editBranch(Map<String, dynamic> branch) {
     setState(() {
       _editingId = branch['docId'] as String?;
       _branchNameController.text = branch['branchName'] as String? ?? '';
+      _routeStartNameController.text =
+          branch['routeStartName'] as String? ?? '';
+      _routeStartLatController.text = _coordinateText(branch['routeStartLat']);
+      _routeStartLngController.text = _coordinateText(branch['routeStartLng']);
       _branchManagerId = branch['branchManagerId'] as String? ?? '';
       _status = branch['status'] as String? ?? 'active';
     });
@@ -141,6 +185,15 @@ class _BranchManagementCmsPageState extends State<BranchManagementCmsPage> {
         'branchName': name,
         'branchManagerId': _branchManagerId,
         'status': _status,
+        'routeStartName': _routeStartEntered
+            ? _routeStartNameController.text.trim()
+            : null,
+        'routeStartLat': _routeStartEntered
+            ? double.parse(_routeStartLatController.text.trim())
+            : null,
+        'routeStartLng': _routeStartEntered
+            ? double.parse(_routeStartLngController.text.trim())
+            : null,
       };
       if (creating) {
         await _store.createBranch(docId, data);
@@ -166,6 +219,9 @@ class _BranchManagementCmsPageState extends State<BranchManagementCmsPage> {
     setState(() {
       _editingId = null;
       _branchNameController.clear();
+      _routeStartNameController.clear();
+      _routeStartLatController.clear();
+      _routeStartLngController.clear();
       _branchManagerId = '';
       _status = 'active';
     });
@@ -246,6 +302,60 @@ class _BranchManagementCmsPageState extends State<BranchManagementCmsPage> {
                           onChanged: (String? value) =>
                               setState(() => _status = value ?? 'active'),
                           width: double.infinity,
+                        ),
+                        const SizedBox(height: 16),
+                        const CmsFormLabel(
+                          label: 'Route start and end',
+                          helpText:
+                              'Each route day starts here and returns here. '
+                              'Leave all three empty for no start point.',
+                        ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Expanded(
+                              flex: 2,
+                              child: TextFormField(
+                                controller: _routeStartNameController,
+                                decoration: const InputDecoration(
+                                  hintText: 'Name',
+                                ),
+                                validator: _routeStartNameError,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _routeStartLatController,
+                                decoration: const InputDecoration(
+                                  hintText: 'Latitude',
+                                ),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                      signed: true,
+                                    ),
+                                validator: (String? value) =>
+                                    _routeStartCoordinateError(value, 90),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _routeStartLngController,
+                                decoration: const InputDecoration(
+                                  hintText: 'Longitude',
+                                ),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                      signed: true,
+                                    ),
+                                validator: (String? value) =>
+                                    _routeStartCoordinateError(value, 180),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 24),
                         Row(
@@ -364,7 +474,7 @@ class _BranchManagementCmsPageState extends State<BranchManagementCmsPage> {
                 }
                 return ListView(
                   children: <Widget>[
-                    SizedBox(height: 430, child: form),
+                    SizedBox(height: 560, child: form),
                     const SizedBox(height: 12),
                     SizedBox(height: 430, child: list),
                   ],

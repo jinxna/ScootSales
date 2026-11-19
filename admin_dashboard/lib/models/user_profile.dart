@@ -63,6 +63,19 @@ class UserProfile {
     }
   }
 
+  static String canonicalRole(Object? raw) {
+    if (raw is! String) return '';
+    final String role = raw.toLowerCase().replaceAll(' ', '_');
+    return switch (role) {
+      'administrator' => roleAdmin,
+      'sales_representative' => roleSalesman,
+      _ => role,
+    };
+  }
+
+  static bool isSalesmanRole(Object? raw) =>
+      canonicalRole(raw) == roleSalesman;
+
   static String normalizeRole(Object? raw, {Object? email}) {
     final String value = _readText(
       raw,

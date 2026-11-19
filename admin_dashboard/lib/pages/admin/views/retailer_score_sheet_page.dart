@@ -122,11 +122,6 @@ class _RetailerScoreSheetPageState extends State<RetailerScoreSheetPage> {
       final UserProfile? actor = widget.currentUser;
       final List<_Salesperson> found = <_Salesperson>[];
       for (final Map<String, dynamic> user in users) {
-        final String role = _readText(
-          user,
-          'role',
-          fallbackKeys: <String>['user_group'],
-        ).toLowerCase();
         final String status = _readText(
           user,
           'status',
@@ -137,7 +132,10 @@ class _RetailerScoreSheetPageState extends State<RetailerScoreSheetPage> {
           'employeeCode',
           fallbackKeys: <String>['staffId'],
         );
-        if (role != 'salesman' || code.isEmpty) continue;
+        if (!UserProfile.isSalesmanRole(user['role'] ?? user['user_group']) ||
+            code.isEmpty) {
+          continue;
+        }
         if (status == 'suspended' || status == 'inactive') continue;
         if (actor != null &&
             actor.isSupervisor &&

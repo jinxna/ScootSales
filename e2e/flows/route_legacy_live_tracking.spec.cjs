@@ -169,7 +169,7 @@ module.exports = {
       await bmS.page.getByRole('button', { name: 'Plan', exact: true }).click();
       await B.see(bmS.page, 'View only');
       await B.see(bmS.page, RETAILER.name);
-      for (const label of ['Generate draft route', 'Regenerate draft route', 'Save draft', 'Save changes', 'Approve', 'Publish']) {
+      for (const label of ['Generate draft route', 'Save draft', 'Save changes', 'Approve', 'Publish']) {
         expectEqual(await bmS.page.getByRole('button', { name: label, exact: true }).count(), 0, `"${label}" buttons shown to a branch manager`);
       }
       await t.shot(bmS, 'view-only');

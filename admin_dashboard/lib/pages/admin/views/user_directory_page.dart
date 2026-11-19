@@ -272,7 +272,7 @@ class _UserDirectoryPageState extends State<UserDirectoryPage> {
               label: 'Reports to',
               flex: 2,
               cell: (BuildContext context, Map<String, dynamic> user) => Text(
-                _readRole(user) == 'salesman'
+                _readRole(user) == UserProfile.roleSalesman
                     ? _readText(
                         user['supervisorId'] ?? user['supervisor_id'],
                         fallback: 'Not linked',
@@ -308,8 +308,12 @@ class _UserDirectoryPageState extends State<UserDirectoryPage> {
       ? 'invited'
       : _readText(user['status'], fallback: 'active');
 
-  String _readRole(Map<String, dynamic> user) =>
-      _readText(user['role'] ?? user['user_group'], fallback: 'unknown');
+  String _readRole(Map<String, dynamic> user) {
+    final String role = UserProfile.canonicalRole(
+      user['role'] ?? user['user_group'],
+    );
+    return role.isEmpty ? 'unknown' : role;
+  }
 
   String _roleLabel(String role) {
     switch (role) {

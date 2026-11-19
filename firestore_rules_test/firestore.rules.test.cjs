@@ -8,6 +8,7 @@ const {
 const {
   GeoPoint,
   Timestamp,
+  arrayRemove,
   arrayUnion,
   collection,
   deleteField,
@@ -8090,7 +8091,6 @@ describe('order decisions, view-only branch manager and purchase orders', () => 
     salesmanUid: users.salesman.uid,
     branchId: 'B1',
     totalPrice: 20,
-    lines: [item()],
     status: 'issued',
     issuedAt: serverTimestamp(),
     issuedByUid: actor.uid,
@@ -8239,7 +8239,7 @@ describe('order decisions, view-only branch manager and purchase orders', () => 
       salesman: { salesmanCode: 'S002' },
       retailer: { retailerId: 'retailer-9' },
       total: { totalPrice: 1 },
-      lines: { lines: [item({ price: 1 })] },
+      lines: { lines: [item()] },
       poNumber: { poNumber: 'not a po number' },
       extra: { approvedByAdmin: true },
     };
@@ -8266,7 +8266,7 @@ describe('order decisions, view-only branch manager and purchase orders', () => 
     });
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
-      const base = poFor('ORD-PO-READ', users.admin, 'admin', { issuedAt: stamp });
+      const base = poFor('ORD-PO-READ', users.admin, 'admin', { issuedAt: stamp, lines: [item()] });
       await setDoc(doc(db, 'purchase_orders', 'ORD-PO-READ'), base);
       await setDoc(doc(db, 'purchase_orders', 'ORD-PO-READ-B2'), {
         ...base, orderId: 'ORD-PO-READ-B2', salesmanCode: 'S002', branchId: 'B2',
@@ -8722,6 +8722,51 @@ describe('user_access v2 contract', () => {
       ...currentTeam,
       'S005',
     ]);
+  });
+
+  it('lets only an admin clear an orphan code from a supervisor team on both documents', async () => {
+    const team = ['S001', 'S404'];
+    const supervisorProfileId = `${SUP}@v2c.test`;
+    const supervisorAccess = access(SUP, {
+      role: 'supervisor', branchId: 'B1', employeeCode: 'SV01', assignedSalesmanCodes: team,
+    });
+    const supervisorProfile = { ...mirror(SUP, supervisorAccess), employeeCode: 'SV01', assignedSalesmanCodes: team };
+    const otherSup = access('v2c-sup2', {
+      role: 'supervisor', branchId: 'B1', employeeCode: 'SV02', assignedSalesmanCodes: ['S404'],
+    });
+    const manager = access('v2c-bm', { role: 'branch_manager', branchId: 'B1', employeeCode: 'BM01' });
+    const rep = salesmanAccess('v2c-rep', { employeeCode: 'S001' });
+    await seedRaw([
+      [`users/${supervisorProfileId}`, supervisorProfile],
+      [`user_access/${SUP}`, supervisorAccess],
+      ...[otherSup, manager, rep].flatMap((a) => [[`user_access/${a.uid}`, a], [`users/${a.userDocId}`, mirror(a.uid, a)]]),
+    ]);
+    const removal = (actorUid, extra = {}) => {
+      const db = asUser(actorUid);
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'users', supervisorProfileId), { assignedSalesmanCodes: arrayRemove('S404'), ...extra }, { merge: true });
+      batch.set(doc(db, 'user_access', SUP), {
+        assignedSalesmanCodes: arrayRemove('S404'), updatedAt: serverTimestamp(), ...extra,
+      }, { merge: true });
+      return batch.commit();
+    };
+    for (const actor of ['v2c-sup2', SUP, 'v2c-bm', 'v2c-rep']) await assertFails(removal(actor));
+    await assertFails(removal(ADMIN, { role: 'salesman' }));
+    await assertFails(removal(ADMIN, { employeeCode: 'SV09' }));
+    await assertFails(removal(ADMIN, { status: 'suspended' }));
+    await assertSucceeds(removal(ADMIN));
+    let after;
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      const [profile, index] = await Promise.all([
+        getDoc(doc(db, 'users', supervisorProfileId)), getDoc(doc(db, 'user_access', SUP)),
+      ]);
+      after = { profile: profile.data(), index: index.data() };
+    });
+    assert.deepEqual(after.profile.assignedSalesmanCodes, ['S001']);
+    assert.deepEqual(after.index.assignedSalesmanCodes, ['S001']);
+    assert.equal(after.index.role, 'supervisor');
+    assert.equal(after.index.employeeCode, 'SV01');
   });
 
   it('rejects a v2 record whose display profile disagrees on role or status', async () => {
@@ -9691,6 +9736,62 @@ describe('supervisor route publishing and view-only branch manager', () => {
       updateDoc(planRef, { status: 'approved', updatedAt: serverTimestamp() }),
     );
     await assertSucceeds(publishCommit(db, users.admin));
+  });
+
+  it('lets only an active admin or developer delete a route plan, and only while it is a draft', async () => {
+    const suspendedAdmin = { uid: 'admin-suspended', profile: { role: 'admin', status: 'suspended', isActive: false, branchId: 'B1' } };
+    const developer = { uid: 'developer-1', profile: { role: 'developer', status: 'active', isActive: true, branchId: 'B1' } };
+    const writeStored = (data) => testEnv.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), 'route_plans', PLAN_ID), data));
+    const planStillStored = async () => {
+      let found = null;
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        found = (await getDoc(doc(context.firestore(), 'route_plans', PLAN_ID))).exists();
+      });
+      return found;
+    };
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      for (const user of [suspendedAdmin, developer]) {
+        await setDoc(doc(context.firestore(), 'users', user.uid), user.profile);
+      }
+    });
+    const deleteAs = (user) => deleteDoc(doc(dbFor(user), 'route_plans', PLAN_ID));
+
+    for (const [label, extra] of [
+      ['approved', { status: 'approved' }],
+      ['published', { status: 'published' }],
+      ['archived', { status: 'archived' }],
+      ['replaced', { status: 'archived', replacedAt: Timestamp.fromDate(new Date('2026-09-20T00:00:00Z')) }],
+    ]) {
+      await writeStored({ ...draftFor(users.admin), ...extra });
+      await assertFails(deleteAs(users.admin));
+      await assertFails(deleteAs(developer));
+      assert.equal(await planStillStored(), true, `an admin deleted a ${label} plan`);
+    }
+
+    const noStatus = { ...draftFor(users.admin) };
+    delete noStatus.status;
+    await writeStored(noStatus);
+    await assertFails(deleteAs(users.admin));
+    assert.equal(await planStillStored(), true, 'an admin deleted a plan with no status');
+
+    await seedPlan('draft');
+    for (const user of [users.supervisor, users.branchManager, users.salesman, suspendedAdmin]) {
+      await assertFails(deleteAs(user));
+      assert.equal(await planStillStored(), true, `${user.uid} deleted a draft plan`);
+    }
+    await assertSucceeds(deleteAs(users.admin));
+    assert.equal(await planStillStored(), false, 'the admin delete of a draft left the plan stored');
+
+    await seedPlan('draft');
+    await assertSucceeds(deleteAs(developer));
+    assert.equal(await planStillStored(), false, 'the developer delete of a draft left the plan stored');
+
+    await seedPlan('published');
+    await assertSucceeds(
+      updateDoc(doc(dbFor(users.admin), 'route_plans', PLAN_ID), { status: 'draft', updatedAt: serverTimestamp() }),
+    );
+    await assertSucceeds(deleteAs(users.admin));
+    assert.equal(await planStillStored(), false, 'the admin delete of a withdrawn draft left the plan stored');
   });
 
   it('a branch manager cannot create a retailer; an admin can', async () => {

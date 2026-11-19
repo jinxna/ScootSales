@@ -21,7 +21,7 @@ from .opportunity import (
     RetailerOpportunity,
 )
 
-RETAILER_RANKING_VERSION = "retailer-ranking/1.1.1"
+RETAILER_RANKING_VERSION = "retailer-ranking/1.1.2"
 COVERAGE_BASIS_LAST_ORDER = "last_observed_order"
 COVERAGE_BASIS_VISIT = "last_visit"
 DEFAULT_WEEK_CAPACITY = 36

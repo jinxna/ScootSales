@@ -5,6 +5,69 @@ import 'package:flutter_web_app/security/profile_gate.dart';
 import 'package:flutter_web_app/security/user_management_rules.dart';
 
 void main() {
+  group('employee code to save', () {
+    test('an untouched lower-case code on edit is kept as stored', () {
+      expect(
+        UserManagementRules.employeeCodeToSave(
+          typed: 's0002',
+          storedCode: 's0002',
+        ),
+        's0002',
+      );
+    });
+
+    test('spaces around an untouched code on edit do not change it', () {
+      expect(
+        UserManagementRules.employeeCodeToSave(
+          typed: '  s0002 ',
+          storedCode: 's0002',
+        ),
+        's0002',
+      );
+    });
+
+    test('an emptied code field on edit keeps the stored code', () {
+      expect(
+        UserManagementRules.employeeCodeToSave(typed: '', storedCode: 's0002'),
+        's0002',
+      );
+    });
+
+    test('a code retyped in other letter case on edit keeps the stored code', () {
+      expect(
+        UserManagementRules.employeeCodeToSave(
+          typed: 'S0002',
+          storedCode: 's0002',
+        ),
+        's0002',
+      );
+    });
+
+    test('a different code on edit is saved in capitals', () {
+      expect(
+        UserManagementRules.employeeCodeToSave(
+          typed: 's0009',
+          storedCode: 's0002',
+        ),
+        'S0009',
+      );
+    });
+
+    test('a typed code for a new person is saved in capitals', () {
+      expect(
+        UserManagementRules.employeeCodeToSave(typed: ' s0010 ', storedCode: ''),
+        'S0010',
+      );
+    });
+
+    test('an empty code for a new person asks for a generated code', () {
+      expect(
+        UserManagementRules.employeeCodeToSave(typed: '  ', storedCode: ''),
+        isNull,
+      );
+    });
+  });
+
   group('supervisor cap', () {
     test('blocks a 6th salesman with the agreed message', () {
       final String? message = UserManagementRules.supervisorCapError(

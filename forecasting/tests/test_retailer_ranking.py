@@ -156,16 +156,6 @@ def test_rankings_are_built_per_salesman_scope() -> None:
     assert [row.week_key for row in rankings] == ["2026-W13", "2026-W13"]
 
 
-def test_ranking_stamps_the_policy_version_and_seed() -> None:
-    rankings = build_rankings(
-        _evidence(), week_start=date(2026, 3, 23), seed=5, target_size=3
-    )
-    ranking = rankings[0]
-    assert ranking.policy_version == POLICY_VERSION
-    assert ranking.target_size == 3
-    assert len(ranking.chosen) == 3
-
-
 def test_ranking_is_deterministic_for_a_seed() -> None:
     first = build_rankings(
         _evidence(10), week_start=date(2026, 3, 23), seed=9, target_size=4

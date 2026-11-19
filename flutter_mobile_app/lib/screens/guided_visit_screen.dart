@@ -9,7 +9,9 @@ import '../copilot/mobile_copilot_commands.dart';
 import '../copilot/mobile_copilot_page.dart';
 import '../edition.dart';
 import '../models/assigned_route_plan.dart';
+import '../models/follow_up_promise.dart';
 import '../models/guided_visit_context.dart';
+import '../models/stop_brief_view.dart';
 import '../models/user_model.dart';
 import '../models/visit_brief.dart';
 import '../providers/connectivity_provider.dart';
@@ -24,7 +26,10 @@ import '../theme/app_theme.dart';
 import '../utils/guided_visit_state.dart';
 import '../utils/retailer_memory.dart';
 import '../widgets/replenishment_suggestions.dart';
+import '../widgets/todays_focus.dart';
+import 'brief_page.dart';
 import '../widgets/arrival_verification_flow.dart';
+import '../widgets/follow_up_chips.dart';
 import '../widgets/location_status_banner.dart';
 import '../widgets/no_order_reason_sheet.dart';
 import '../widgets/phone_status_strip.dart';
@@ -51,6 +56,7 @@ class GuidedVisitScreen extends StatefulWidget {
     required this.service,
     required this.copilotService,
     required this.brief,
+    this.onRecordOutcome,
     this.openCartInitially = false,
   });
 
@@ -62,6 +68,7 @@ class GuidedVisitScreen extends StatefulWidget {
   final RoutePlanService service;
   final SalesVisitCopilotService copilotService;
   final VisitBrief? brief;
+  final ValueChanged<VisitBriefInsight>? onRecordOutcome;
   final bool openCartInitially;
 
   @override
@@ -682,12 +689,27 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
 
   Widget _prepare() {
     final VisitBrief? brief = widget.brief;
-    return Column(
+    if (brief == null) return _prepareWith(null);
+    return StopBriefBuilder(
       key: const ValueKey<String>('prepare'),
+      brief: brief,
+      stopReason: widget.stop.priorityReason,
+      salesmanUid: widget.user.uid,
+      builder: (BuildContext _, StopBriefView view) => _prepareWith(view),
+    );
+  }
+
+  Widget _prepareWith(StopBriefView? view) {
+    return Column(
+      key: view == null ? const ValueKey<String>('prepare') : null,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         _VisitHero(stop: widget.stop),
         if (!kBasicEdition) ...<Widget>[
+          if (view != null) ...<Widget>[
+            const SizedBox(height: 12),
+            _SectionCard(title: 'Brief', child: _briefBody(view)),
+          ],
           const SizedBox(height: 12),
           _SectionCard(
             title: 'Retailer memory',
@@ -713,18 +735,13 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          _SectionCard(title: "Today's focus", child: _focusBody(brief)),
+          _SectionCard(title: "Today's focus", child: _focusBody(view)),
         ],
-        if (brief != null && brief.replenishment.isNotEmpty) ...<Widget>[
+        if (view != null && view.reorders.isNotEmpty) ...<Widget>[
           const SizedBox(height: 12),
           ReplenishmentSuggestionsCard(
             retailerId: widget.stop.retailerId,
-            suggestions: brief.replenishment.take(3).toList(growable: false),
-            productNames: <String, String>{
-              for (final VisitBriefInsight insight in brief.topInsights)
-                if (insight.productId.isNotEmpty)
-                  insight.productId: insight.productName,
-            },
+            reorders: view.reorders.take(3).toList(growable: false),
           ),
         ],
       ],
@@ -766,19 +783,20 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
             !_session.orderRecoveryBlocked &&
             !_session.outcomeRecorded) ...<Widget>[
           const SizedBox(height: 12),
-          if (widget.brief?.topInsights.isNotEmpty == true)
-            OutlinedButton.icon(
-              onPressed: _recordNoOrderOutcome,
-              icon: const Icon(Icons.chat_outlined),
-              label: const Text('Record no-order outcome'),
-            )
-          else
-            OutlinedButton.icon(
-              key: const ValueKey<String>('no-order-today'),
-              onPressed: _busy ? null : _recordNoOrderToday,
-              icon: const Icon(Icons.do_not_disturb_on_outlined),
-              label: const Text('No order today'),
+          OutlinedButton.icon(
+            key: const ValueKey<String>('no-order-today'),
+            onPressed: _busy ? null : _recordNoOrderToday,
+            icon: Icon(
+              widget.brief?.topInsights.isNotEmpty == true
+                  ? Icons.chat_outlined
+                  : Icons.do_not_disturb_on_outlined,
             ),
+            label: Text(
+              widget.brief?.topInsights.isNotEmpty == true
+                  ? 'Record no-order outcome'
+                  : 'No order today',
+            ),
+          ),
         ],
       ],
     );
@@ -826,112 +844,75 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
     );
   }
 
-  Widget _focusBody(VisitBrief? brief) {
-    if (brief == null) return const Text('No visit brief for this stop.');
-    final List<VisitFocusItem> items = brief.fieldFocusItems;
-    if (items.isEmpty) {
-      if (brief.hasNoPriorityIssues) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              brief.noPriorityHeadline,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 2),
-            Text(brief.noPriorityBody),
-          ],
-        );
-      }
+  Widget _focusBody(StopBriefView? view) {
+    if (view == null) return const Text('No visit brief for this stop.');
+    if (!view.hasFocusSection) {
       return const Text('No current visit brief issues.');
     }
+    return FocusItemsList(view: view);
+  }
+
+  Widget _briefBody(StopBriefView view) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        for (final VisitFocusItem item in items)
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            title: Text(item.title),
-            subtitle: Text(
-              <String>[
-                if (item.signal.isNotEmpty) item.signal,
-                if (item.action.isNotEmpty) 'Action: ${item.action}',
-                if (item.previousOutcome case final previous?
-                    when !previous.isEmpty)
-                  'Last answer: ${previous.label}',
-              ].join('\n'),
+        BriefFreshnessLine(view: view),
+        if (view.why.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 4),
+          Text('Why this stop: ${view.why}'),
+        ],
+        const SizedBox(height: 4),
+        BriefOrderFacts(view: view),
+        BriefFollowUpLine(view: view),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () => BriefPage.open(
+              context,
+              brief: view.brief,
+              stopReason: widget.stop.priorityReason,
+              salesmanUid: widget.user.uid,
+              canRecord: _stopStatus == 'arrived' || _stopStatus == 'completed',
+              onRecordOutcome: switch (widget.onRecordOutcome) {
+                null => null,
+                final ValueChanged<VisitBriefInsight> record =>
+                  (BuildContext _, VisitBriefInsight insight) =>
+                      record(insight),
+              },
+              loadMemory: ({required bool refresh}) =>
+                  widget.copilotService.loadRetailerMemory(
+                    user: widget.user,
+                    retailerId: widget.stop.retailerId,
+                    forceRefresh: refresh,
+                  ),
+              onMarkFollowUpDone: (FollowUpPromise promise) =>
+                  widget.copilotService.markFollowUpDone(
+                    user: widget.user,
+                    promise: promise,
+                    isOnline: context.read<ConnectivityProvider>().isOnline,
+                  ),
             ),
-            isThreeLine: item.action.isNotEmpty,
-            trailing: _StatusPill(label: item.priority),
+            icon: const Icon(Icons.article_outlined, size: 17),
+            label: const Text(BriefPage.linkLabel),
           ),
+        ),
       ],
     );
   }
 
-  Future<void> _recordNoOrderOutcome() async {
-    final VisitBrief? brief = widget.brief;
-    if (brief == null || brief.topInsights.isEmpty) return;
-    final String? reason = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (BuildContext context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const ListTile(
-              title: Text(
-                'Why was no order placed?',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            for (final String value in const <String>[
-              'low_sell_through',
-              'price_too_high',
-              'retailer_busy',
-              'decision_maker_unavailable',
-            ])
-              ListTile(
-                title: Text(value.replaceAll('_', ' ')),
-                onTap: () => Navigator.pop(context, value),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (reason == null || !mounted) return;
-    setState(() => _busy = true);
-    try {
-      await widget.copilotService.queueOutcome(
-        user: widget.user,
-        branchId: widget.plan.branchId,
-        planId: widget.plan.id,
-        stopId: widget.stop.stopId,
-        brief: brief,
-        insight: brief.topInsights.first,
-        reasonCode: reason,
-        note: '',
-        replacementProductId: '',
-        isOnline: context.read<ConnectivityProvider>().isOnline,
-      );
-      await GuidedVisitSessionStore.markOutcomeRecorded(
-        salesmanUid: widget.user.uid,
-        routePlanId: widget.plan.id,
-        routeStopId: widget.stop.stopId,
-      );
-      await _reloadSession();
-      if (mounted) setState(() => _stage = GuidedVisitStage.close);
-    } catch (_) {
-      _message('Outcome could not be saved. Check the required fields.');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _recordNoOrderToday() async {
-    final NoOrderDraft? draft = await showNoOrderReasonSheet(context);
-    if (draft == null || !mounted) return;
+    if (_busy) return;
     setState(() => _busy = true);
     try {
+      final NoOrderDraft? draft = await showNoOrderReasonSheet(
+        context,
+        nextVisit: nextVisitDay(
+          widget.plan,
+          widget.stop.retailerId,
+          DateTime.now(),
+        ),
+      );
+      if (draft == null || !mounted) return;
       await widget.copilotService.queueNoOrderOutcome(
         user: widget.user,
         branchId: widget.plan.branchId,
@@ -943,6 +924,7 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
         note: draft.note,
         isDemo: widget.plan.isDemo,
         isOnline: context.read<ConnectivityProvider>().isOnline,
+        followUpOn: draft.followUpOn,
       );
       await GuidedVisitSessionStore.markOutcomeRecorded(
         salesmanUid: widget.user.uid,

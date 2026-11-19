@@ -26,6 +26,7 @@ from .visit_briefs import build_visit_briefs
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MAX_ORDERS = 5000
+MAX_SCORECARD_ORDERS = 10000
 MAX_PRODUCTS = 2000
 MAX_RETAILERS = 2000
 MAX_USERS = 1000
@@ -733,6 +734,53 @@ class FirestoreAiRepository:
             ),
         }
 
+    def read_scorecard_enabled(self) -> bool:
+        snapshot = (
+            self.client.collection("system_settings")
+            .document("ai_scorecard")
+            .get()
+        )
+        if not snapshot.exists:
+            return False
+        return (snapshot.to_dict() or {}).get("enabled") is True
+
+    def read_scorecard_orders(
+        self, *, as_of: date, read_weeks: int
+    ) -> list[dict[str, Any]]:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        current_week = week_start(as_of)
+        start_local = datetime.combine(
+            current_week - timedelta(weeks=read_weeks),
+            time.min,
+            tzinfo=ASIA_KUCHING,
+        )
+        end_local = datetime.combine(current_week, time.min, tzinfo=ASIA_KUCHING)
+        orders = _rows(
+            self.client.collection("orders")
+            .where(
+                filter=FieldFilter(
+                    "submittedAt", ">=", start_local.astimezone(timezone.utc)
+                )
+            )
+            .where(
+                filter=FieldFilter(
+                    "submittedAt", "<", end_local.astimezone(timezone.utc)
+                )
+            )
+            .order_by("submittedAt", direction="DESCENDING")
+            .limit(MAX_SCORECARD_ORDERS + 1)
+            .stream()
+        )
+        return _capped(orders, "scorecard orders", MAX_SCORECARD_ORDERS)
+
+    def write_scorecard(
+        self, rows: Iterable[tuple[str, Mapping[str, Any]]]
+    ) -> int:
+        documents = list(rows)
+        self._set_many("weekly_ai_summaries", documents, merge=True)
+        return len(documents)
+
     def write_generation(self, result: GenerationResult) -> dict[str, int]:
         pattern_refs = [
             self.client.collection("retailer_item_patterns").document(
@@ -788,6 +836,8 @@ class FirestoreAiRepository:
             retailer_segments=result.retailer_segments,
             replenishment=result.replenishment,
             coverage_retailers=result.coverage_retailers,
+            order_weekdays=getattr(result, "usual_order_weekdays", None),
+            patterns=result.patterns,
         )
         existing_briefs = _rows(
             self.client.collection("visit_briefs")

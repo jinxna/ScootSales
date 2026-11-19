@@ -20,6 +20,12 @@ from .repository import (
     WindowTooLargeError,
     create_firestore_client,
 )
+from .scorecard import (
+    ScorecardError,
+    build_scorecard,
+    scorecard_blocks,
+    scorecard_read_weeks,
+)
 
 
 class EmptyGenerationError(RuntimeError):
@@ -161,6 +167,37 @@ def _runtime_metadata() -> dict[str, str]:
         for environment_name, output_name in names.items()
         if (value := os.getenv(environment_name, "").strip())
     }
+
+
+def _run_scorecard(
+    repository: FirestoreAiRepository,
+    *,
+    raw: dict[str, list[dict[str, Any]]],
+    result: Any,
+    as_of: date,
+    window: Any,
+    dry_run: bool,
+) -> dict[str, int] | None:
+    try:
+        if not repository.read_scorecard_enabled():
+            return None
+        scorecard = build_scorecard(
+            orders=repository.read_scorecard_orders(
+                as_of=as_of, read_weeks=scorecard_read_weeks(window)
+            ),
+            products=raw["products"],
+            retailers=raw["retailers"],
+            users=raw["users"],
+            outcomes=raw["conversation_outcomes"],
+            as_of=as_of,
+            window=window,
+        )
+        rows = scorecard_blocks(scorecard, result.weekly_summaries)
+        if not dry_run:
+            repository.write_scorecard(rows)
+        return {"scorecardSummaries": len(rows)}
+    except Exception as error:  # noqa: BLE001 - the job reports it by name.
+        raise ScorecardError(error) from error
 
 
 def _merge_demo_preview(
@@ -421,6 +458,16 @@ def main(argv: list[str] | None = None) -> int:
                     "runtime": runtime,
                 },
             )
+        scorecard_counts = _run_scorecard(
+            repository,
+            raw=raw,
+            result=result,
+            as_of=args.as_of,
+            window=window,
+            dry_run=args.dry_run,
+        )
+        if scorecard_counts is not None:
+            write_counts = {**write_counts, **scorecard_counts}
         finished_at = datetime.now(timezone.utc)
         summary = _summary_payload(
             result=result,

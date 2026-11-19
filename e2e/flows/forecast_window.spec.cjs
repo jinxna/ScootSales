@@ -7,7 +7,7 @@ const B = require('../lib/browser.cjs');
 const E = require('../lib/emulator.cjs');
 const admin = require('../lib/admin.cjs');
 
-const PORT = 18766;
+const PORT = require('../lib/lane.cjs').ports.forecast;
 const GRID = [4, 8, 12, 26];
 const LIVE_DEFAULT = 8;
 const OUT = path.join(E.OUTPUT_DIR, 'forecast_window');

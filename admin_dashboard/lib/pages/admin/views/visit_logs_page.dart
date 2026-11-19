@@ -11,8 +11,10 @@ import '../../../utils/app_logger.dart';
 import '../../../utils/collection_rows.dart';
 import '../../../utils/csv_export.dart';
 import '../../../utils/order_data_utils.dart';
+import '../../../utils/person_display_name.dart';
 import '../../../utils/snapshot_load_state.dart';
 import '../../../utils/visit_data_utils.dart';
+import '../../../utils/visit_overdue.dart';
 import '../widgets/filter_chip.dart';
 import 'visit_logs_parts.dart';
 import '../../../security/team_scope.dart';
@@ -119,10 +121,27 @@ class _VisitLogsPageState extends State<VisitLogsPage> {
     _openedTabs.add(index);
   });
 
+  List<Map<String, dynamic>> _people = const <Map<String, dynamic>>[];
+
+  Future<void> _loadPeople() async {
+    try {
+      final List<Map<String, dynamic>> people = await repository
+          .getCollectionOnce('users', limit: 1000);
+      if (mounted) setState(() => _people = people);
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'visit_logs_people_failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _subscribe();
+    unawaited(_loadPeople());
   }
 
   @override
@@ -358,7 +377,10 @@ class _VisitLogsPageState extends State<VisitLogsPage> {
                                     retailer: item.retailerName,
                                     salesperson: item.assignedSalesman.isEmpty
                                         ? '-'
-                                        : item.assignedSalesman,
+                                        : personNameForCode(
+                                            item.assignedSalesman,
+                                            _people,
+                                          ),
                                     lastVisit: _dateLabel(item.lastVisitDate),
                                     lastOrder: _dateLabel(item.lastOrderDate),
                                     reason: item.reason,
@@ -729,13 +751,11 @@ class _VisitLogsPageState extends State<VisitLogsPage> {
     final DateTime now = DateTime.now();
     final List<_RetailerFollowUp> items = <_RetailerFollowUp>[];
     for (final _RetailerVisitSummary summary in summaries) {
-      final int? daysSinceVisit = summary.lastVisitDate == null
-          ? null
-          : now.difference(summary.lastVisitDate!).inDays;
+      final int? daysSinceVisit = visitDaysAgo(summary.lastVisitDate, now);
       final int? daysSinceOrder = summary.lastOrderDate == null
           ? null
           : now.difference(summary.lastOrderDate!).inDays;
-      final bool needsVisit = daysSinceVisit != null && daysSinceVisit >= 14;
+      final bool needsVisit = isVisitOverdue(summary.lastVisitDate, now);
       final bool needsOrderFollowUp =
           daysSinceOrder != null && daysSinceOrder >= 18;
       if (!needsVisit && !needsOrderFollowUp) continue;
@@ -752,7 +772,7 @@ class _VisitLogsPageState extends State<VisitLogsPage> {
               '${daysSinceOrder == null ? 'no recorded order' : 'last order $daysSinceOrder days ago'}.',
           recommendedAction:
               'Schedule a visit this week and confirm restock requirements.',
-          isOverdue: (daysSinceVisit ?? 0) >= 21 || (daysSinceOrder ?? 0) >= 30,
+          isOverdue: needsVisit || (daysSinceOrder ?? 0) >= 30,
         ),
       );
     }
@@ -1514,9 +1534,7 @@ class _RetailerFollowUp {
   final String recommendedAction;
   final bool isOverdue;
 
-  int? get daysSinceVisit => lastVisitDate == null
-      ? null
-      : DateTime.now().difference(lastVisitDate!).inDays;
+  int? get daysSinceVisit => visitDaysAgo(lastVisitDate, DateTime.now());
   int? get daysSinceOrder => lastOrderDate == null
       ? null
       : DateTime.now().difference(lastOrderDate!).inDays;

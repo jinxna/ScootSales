@@ -166,7 +166,8 @@ module.exports = {
       const question = `what did ${OWN_STOP_1.name} order last time`;
       await ask(question);
       await waitForAnswerTo(sales.page, question, new RegExp(`Last order for ${OWN_STOP_1.name} was on`));
-      await B.see(sales.page, `${NEW_ITEM}: 2 boxes`);
+      await B.see(sales.page, new RegExp(`${NEW_ITEM.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: 2(?![0-9]| ?[A-Za-z])`));
+      if ((await countText(sales.page, /: 2 (box|boxes|ctn|pcs|units?)\b/)) !== 0) throw new Error('the last order line shows a unit that the order does not store');
       if ((await countText(sales.page, /REGULAR ROLLED OAT/)) !== 0) throw new Error('the older order was shown as the last order');
       await t.shot(sales, 'last-order');
     });
@@ -197,10 +198,10 @@ module.exports = {
       await t.shot(sales, 'refused-approve');
     });
 
-    await t.step('gibberish -> "server not available", not "no internet" (the phone is online; only the hosted fallback is down)', async () => {
+    await t.step('gibberish -> "server not available", not "needs a signal" (the phone is online; only the hosted fallback is down)', async () => {
       await ask('qwzx plorf blimmo');
       await waitForAnswerTo(sales.page, 'qwzx plorf blimmo', /The Scout server is not available right now/);
-      if ((await countText(sales.page, /No internet connection/)) !== 0) throw new Error('an online phone was told it has no internet');
+      if ((await countText(sales.page, /This question needs a signal/)) !== 0) throw new Error('an online phone was told it has no signal');
       await t.shot(sales, 'not-understood');
     });
 

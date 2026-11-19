@@ -5,15 +5,22 @@ import 'package:flutter/services.dart';
 
 import '../../app/build_flags.dart';
 import '../../models/action_centre_item.dart';
+import '../../models/ai_insight.dart';
+import '../../models/route_plan.dart';
+import '../../repositories/scoped_dashboard_repository.dart';
 import '../../pages/admin/widgets/order_details_dialog.dart';
 import '../../repositories/cms_repository.dart';
 import '../../services/csv_downloader.dart';
-import '../../utils/order_data_utils.dart';
 import '../../utils/order_id_resolver.dart';
 import '../../models/user_profile.dart';
 import '../../services/action_centre_service.dart';
 import '../../services/audit_log_service.dart';
+import '../../services/replenishment_service.dart';
 import '../../services/visit_priority_service.dart';
+import '../../security/order_authorization.dart';
+import '../../utils/order_data_utils.dart' show authoritativeOrderItems;
+import '../../utils/order_limit_warnings.dart';
+import '../../utils/user_facing_error.dart';
 import '../dashboard_voice_engine.dart';
 import '../dashboard_voice_policy.dart';
 import '../dashboard_voice_speech.dart';
@@ -21,10 +28,12 @@ import '../dashboard_voice_types.dart';
 import '../../theme/dso_colors.dart';
 import 'copilot_client.dart';
 import 'copilot_controller.dart';
-import 'copilot_entity_resolver.dart';
+import 'copilot_directory.dart';
 import 'copilot_grammar.dart';
 import 'copilot_order_widgets.dart';
+import 'copilot_page_request.dart';
 import 'copilot_rank_why.dart';
+import 'copilot_scout.dart';
 import 'copilot_status.dart';
 import 'order_search_session.dart';
 import 'copilot_widgets.dart';
@@ -40,6 +49,12 @@ const List<String> kCopilotDashboardActions = <String>[
   'set_item_status',
   'search_orders',
   'export_results',
+  'brief_retailer',
+  'route_why',
+  'salesperson_visits',
+  'due_overview',
+  'open_planner',
+  'no_route',
 ];
 
 List<String> get copilotDashboardActions => isBasicEdition
@@ -57,6 +72,8 @@ class CopilotPanel extends StatefulWidget {
     this.fill = false,
     this.service,
     this.server,
+    this.orders,
+    this.onPlannerRequested,
   });
 
   final UserProfile currentUser;
@@ -71,6 +88,11 @@ class CopilotPanel extends StatefulWidget {
 
   final CopilotServerClient? server;
 
+  final OrderSearchSession? orders;
+
+  final Future<bool> Function(String salesmanUid, DateTime weekStart)?
+  onPlannerRequested;
+
   @override
   State<CopilotPanel> createState() => _CopilotPanelState();
 }
@@ -78,6 +100,23 @@ class CopilotPanel extends StatefulWidget {
 class _CopilotPanelState extends State<CopilotPanel> {
   late final ActionCentreService _service =
       widget.service ?? ActionCentreService();
+  late final CmsRepository _repository = CmsRepository();
+  late final ScoutDirectoryReader _directory = ScoutDirectoryReader(() async {
+    final List<Map<String, dynamic>> users = await _repository
+        .getCollectionOnce('users');
+    List<Map<String, dynamic>>? retailers;
+    try {
+      retailers = await _repository.getCollectionOnce('retailers');
+    } on Object catch (error) {
+      debugPrint('Scout could not read retailers: $error');
+    }
+    return buildScoutDirectory(
+      viewer: widget.currentUser,
+      users: users,
+      retailers: retailers,
+      readAt: DateTime.now(),
+    );
+  });
   late final CopilotController _controller;
   late final DashboardVoiceEngine _engine;
   late final DashboardVoiceSpeechSession _speech;
@@ -112,16 +151,42 @@ class _CopilotPanelState extends State<CopilotPanel> {
     final UserProfile user = widget.currentUser;
     _engine = DashboardVoiceEngine();
     _speech = DashboardVoiceSpeechSession();
+    final OrderSearchSession? orderSession =
+        widget.orders ?? _buildOrderSession(user);
     _controller = CopilotController(
       allowed: user.docId.trim().isNotEmpty && user.isActive,
       memory: widget.status.memory,
-      orders: _buildOrderSession(user),
+      orders: orderSession,
       openOrder: _openOrder,
       openPage: _openKnownPage,
-      explainRank: isBasicEdition ? null : _rankExplainer(user),
+      scout: isBasicEdition ? null : _buildScout(user, orderSession),
+      openPlanner: _openPlannerWith,
       advanced: !isBasicEdition,
       routesViewOnly: user.isBranchManager,
       ordersViewOnly: user.isBranchManager,
+      approvals: user.isBranchManager || !(user.isAdmin || user.isSupervisor)
+          ? null
+          : OrderApprovalActions(
+              canDecide: (Map<String, dynamic> order) =>
+                  OrderAuthorization.canDecideOrder(user, order),
+              limitWarnings: (Map<String, dynamic> order) =>
+                  readOrderLimitWarnings(authoritativeOrderItems(order)),
+              approve: (Map<String, dynamic> order) async {
+                try {
+                  await _repository.approveOrder(
+                    orderDocumentId: OrderIdResolver.resolve(order),
+                    currentUser: user,
+                    order: order,
+                    auditSource: 'assistant',
+                  );
+                  return null;
+                } on OrderDecisionConflictException catch (error) {
+                  return error.message;
+                } on Object catch (error) {
+                  return userFacingError(error, action: 'approve this order');
+                }
+              },
+            ),
       loadItems: () async {
         final ActionCentreLoadResult all = await _service
             .loadAllItemsWithHealth(currentUser: user);
@@ -170,24 +235,11 @@ class _CopilotPanelState extends State<CopilotPanel> {
         user.isBranchManager)) {
       return null;
     }
-    CmsRepository? cached;
-    CmsRepository repository() => cached ??= CmsRepository();
     final Set<String> assigned = <String>{
       for (final String code in user.assignedSalesmanCodes)
         if (code.trim().isNotEmpty) code.trim().toLowerCase(),
     };
     final String branch = user.branchId.trim().toLowerCase();
-    bool inScope(Map<String, dynamic> row) {
-      if (user.isAdmin || user.isDeveloper) return true;
-      if (user.isBranchManager) {
-        return branch.isNotEmpty &&
-            '${row['branchId'] ?? ''}'.trim().toLowerCase() == branch;
-      }
-      final String code = '${row['employeeCode'] ?? row['userId'] ?? ''}'
-          .trim()
-          .toLowerCase();
-      return code.isNotEmpty && assigned.contains(code);
-    }
 
     return OrderSearchSession(
       scopeNote: user.isSupervisor && assigned.isEmpty
@@ -196,7 +248,7 @@ class _CopilotPanelState extends State<CopilotPanel> {
           ? 'Your account has no branch, so there are no orders to search.'
           : null,
       readWindow: (DateTime start, DateTime end) async {
-        final OrderWindowRead read = await repository()
+        final OrderWindowRead read = await _repository
             .getOrdersSubmittedBetween(
               start: start,
               end: end,
@@ -204,18 +256,9 @@ class _CopilotPanelState extends State<CopilotPanel> {
             );
         return OrderWindow(rows: read.rows, truncated: read.truncated);
       },
-      countWaiting: () => repository().countPendingApprovalOrders(),
-      loadSalespeople: () async {
-        final List<Map<String, dynamic>> users = await repository()
-            .getCollectionOnce('users');
-        return <EntityRef>[
-          for (final Map<String, dynamic> row in users)
-            if (!isDemoRow(row) &&
-                '${row['role'] ?? ''}'.toLowerCase() == 'salesman' &&
-                inScope(row))
-              _salespersonRef(row),
-        ];
-      },
+      countWaiting: () => _repository.countPendingApprovalOrders(),
+      readWaiting: () => _repository.getPendingApprovalOrders(),
+      loadSalespeople: () async => (await _directory.read()).people,
       download: (String filename, String csv) =>
           downloadCsv(filename: filename, csv: csv),
       recordExport: (OrderResultSet set, String filename) =>
@@ -243,37 +286,93 @@ class _CopilotPanelState extends State<CopilotPanel> {
     );
   }
 
-  Future<CopilotReply> Function(RankWhyIntent)? _rankExplainer(
-    UserProfile user,
-  ) {
-    if (!(user.isAdmin || user.isSupervisor || user.isBranchManager)) {
+  ScoutEngine? _buildScout(UserProfile user, OrderSearchSession? orders) {
+    if (orders == null ||
+        !(user.isAdmin || user.isSupervisor || user.isBranchManager)) {
       return null;
     }
-    VisitPriorityService? cached;
-    return (RankWhyIntent intent) async {
-      final VisitPriorityService service = cached ??= VisitPriorityService();
-      return explainRetailerRank(intent.name, await service.loadRankings(user));
-    };
+    final VisitPriorityService priority = VisitPriorityService();
+    late final ReplenishmentService replenishment = ReplenishmentService();
+    final ScopedDashboardRepository repository = ScopedDashboardRepository();
+
+    Future<List<Map<String, dynamic>>> read(
+      String collection, {
+      required int limit,
+      required Duration window,
+      Duration ahead = Duration.zero,
+    }) async {
+      final ScopedDashboardReadResult result = await repository.readDocuments(
+        collection: collection,
+        currentUser: user,
+        limit: limit,
+        deadline: kPriorityReadTimeout,
+        includeDocId: true,
+        historyWindow: window + ahead,
+        asOf: DateTime.now().add(ahead),
+      );
+      if (!result.metadata.isComplete) {
+        throw StateError('Incomplete $collection data');
+      }
+      return result.documents;
+    }
+
+    return ScoutEngine(
+      sources: ScoutSources(
+        rankings: () => priority.loadRankings(user),
+        routePlans: () async => <RoutePlan>[
+          for (final Map<String, dynamic> doc in await read(
+            'route_plans',
+            limit: 300,
+            window: const Duration(days: 120),
+            ahead: const Duration(days: 28),
+          ))
+            RoutePlan.fromMap('${doc['docId'] ?? doc['planId'] ?? ''}', doc),
+        ],
+        insights: () async => <AiInsight>[
+          for (final Map<String, dynamic> doc in await read(
+            'ai_insights',
+            limit: kPriorityInsightReadLimit,
+            window: const Duration(days: 60),
+          ))
+            AiInsight.fromMap('${doc['docId'] ?? ''}', doc),
+        ],
+        visitBriefs: () => read(
+          'visit_briefs',
+          limit: kPriorityBriefReadLimit,
+          window: const Duration(days: 180),
+        ),
+        salespeople: orders.salespeople,
+        directory: _directory.read,
+        shopPatterns: (String retailerId) async {
+          final List<String> failed = <String>[];
+          final List<Map<String, dynamic>> rows = await replenishment
+              .loadRetailerItemPatterns(
+                user,
+                retailerId,
+                failedSources: failed,
+              );
+          if (failed.isNotEmpty) {
+            throw StateError('Incomplete retailer_item_patterns data');
+          }
+          return rows;
+        },
+      ),
+    );
   }
 
-  EntityRef _salespersonRef(Map<String, dynamic> row) {
-    String text(Object? v) => '${v ?? ''}'.trim();
-    final String uid = text(row['uid'] ?? row['userUid']);
-    final String code = text(row['employeeCode'] ?? row['userId']);
-    final String staff = text(row['staffId']);
-    final String name = text(row['name']).isEmpty
-        ? text(row['email'])
-        : text(row['name']);
-    return EntityRef(
-      kind: EntityKind.salesperson,
-      id: uid.isEmpty ? text(row['docId']) : uid,
-      name: name,
-      code: code,
-      orderKeys: <String>{
-        for (final String key in <String>[uid, code, staff])
-          if (key.isNotEmpty) key.toLowerCase(),
-      },
-    );
+  Future<PlannerOpen> _openPlannerWith(
+    String salesmanUid,
+    DateTime weekStart,
+  ) async {
+    final Future<bool> Function(String, DateTime)? handler =
+        widget.onPlannerRequested;
+    if (handler != null && await handler(salesmanUid, weekStart)) {
+      _pageOpened = true;
+      return PlannerOpen.withChoice;
+    }
+    return await _openKnownPage('route_planner')
+        ? PlannerOpen.pageOnly
+        : PlannerOpen.unavailable;
   }
 
   void _openOrder(Map<String, dynamic> order) {
@@ -285,6 +384,19 @@ class _CopilotPanelState extends State<CopilotPanel> {
         initialOrder: order,
         currentUser: widget.currentUser,
         showActions: false,
+      ).whenComplete(_refocus),
+    );
+  }
+
+  void _openOrderToDecide(Map<String, dynamic> order) {
+    if (!mounted) return;
+    unawaited(
+      OrderDetailsDialog.show(
+        context,
+        orderDocumentId: OrderIdResolver.resolve(order),
+        initialOrder: order,
+        currentUser: widget.currentUser,
+        showActions: true,
       ).whenComplete(_refocus),
     );
   }
@@ -420,13 +532,9 @@ class _CopilotPanelState extends State<CopilotPanel> {
     if (text.isEmpty || _controller.busy || _asking) return;
     _input.clear();
     try {
-      final CopilotIntent? intent = interpretCopilot(text);
-      if (intent != null) {
-        await _controller.run(intent, text);
-        return;
-      }
+      if (await _controller.handle(text)) return;
       _controller.invalidatePending();
-      if (await _openPage(text)) return;
+      if (!copilotRefusesAnyPage(text) && await _openPage(text)) return;
       await _askModel(text);
     } finally {
       _refocus();
@@ -498,7 +606,8 @@ class _CopilotPanelState extends State<CopilotPanel> {
           'You have used your share of assistant requests for today. It resets at midnight, Malaysia time.',
         'company_limit' =>
           'Your company has used all its assistant requests for today. They reset at midnight, Malaysia time.',
-        _ => 'Assistant is not available now. Try again later.',
+        _ =>
+          'The assistant did not answer this time. Ask again, or try one of these.',
       };
     }
     if (!mounted) return;
@@ -509,12 +618,20 @@ class _CopilotPanelState extends State<CopilotPanel> {
     if (failure != null) return _reply(text, failure);
     if (proposal == null) return _reply(text, lost);
     if (proposal.name == 'navigate_to_page') {
-      final Object? key = proposal.args['page'];
+      final List<String> salespeople = await _controller.salespersonNames();
+      if (!mounted || epoch != _epoch) return;
+      final DashboardVoicePage? asked = copilotModelPage(
+        text,
+        proposal.args['page'],
+        widget.pages,
+        knownNames: salespeople,
+      );
+      if (asked == null) return _reply(text, lost);
       final DashboardVoicePolicyDecision decision =
           const DashboardVoicePolicyGateway().evaluate(
             interpretation: DashboardVoiceInterpretation(
               action: DashboardVoiceActionId.openPage,
-              pageKey: key is String ? key : '',
+              pageKey: asked.key,
               normalizedTranscript: text,
             ),
             pages: widget.pages,
@@ -525,6 +642,9 @@ class _CopilotPanelState extends State<CopilotPanel> {
       if (!decision.isAllowed) return _reply(text, lost);
       await _showPage(decision.page!.key);
       return _reply(text, 'Opened ${decision.page!.label}.');
+    }
+    if (proposal.name == 'open_planner' && !copilotAsksForPlanner(text)) {
+      return _reply(text, lost);
     }
     final CopilotIntent? intent = intentFromCall(proposal.name, proposal.args);
     if (intent == null) {
@@ -626,7 +746,7 @@ class _CopilotPanelState extends State<CopilotPanel> {
               ),
               if (!empty)
                 Padding(
-                  padding: const EdgeInsets.only(top: 6),
+                  padding: const EdgeInsets.only(top: 6, bottom: 8),
                   child: CopilotStatusLine(state: widget.status.value),
                 ),
               if (_controller.shownItems.isNotEmpty ||
@@ -652,7 +772,7 @@ class _CopilotPanelState extends State<CopilotPanel> {
                         child: SelectionArea(
                           child: ListView.separated(
                             controller: _scroll,
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                             itemCount:
                                 shown + (_asking ? 2 : (working ? 1 : 0)),
                             separatorBuilder: (_, _) =>
@@ -732,7 +852,7 @@ class _CopilotPanelState extends State<CopilotPanel> {
 
   Widget _entry(CopilotEntry entry, int index) {
     if (entry.fromUser) return CopilotUserBubble(text: entry.text);
-    final PendingStatusChange? pending = entry.pending;
+    final PendingAction? pending = entry.pending;
     final bool live =
         pending != null && identical(pending, _controller.pending);
     final bool last = index == _controller.entries.length - 1;
@@ -740,7 +860,7 @@ class _CopilotPanelState extends State<CopilotPanel> {
     return CopilotAssistantRow(
       kind: entry.kind,
       children: <Widget>[
-        if (!live)
+        if (!live || pending is PendingOrderApproval)
           switch (entry.kind) {
             CopilotEntryKind.answer => CopilotText(entry.text),
             CopilotEntryKind.refusal => CopilotText(
@@ -765,6 +885,9 @@ class _CopilotPanelState extends State<CopilotPanel> {
             onOpenItem: _openItem,
           ),
         ..._orderCard(entry.card),
+        for (final ScoutChart chart in entry.charts)
+          CopilotChartView(chart: chart),
+        if (entry.dataUsed != null) CopilotDataUsed(entry.dataUsed!),
         if (live)
           CopilotConfirmCard(
             pending: pending,
@@ -791,7 +914,35 @@ class _CopilotPanelState extends State<CopilotPanel> {
         ),
       ];
     }
+    if (card is SkippedOrdersCard) {
+      return <Widget>[
+        CopilotOrderResultsView(
+          card: card.view,
+          onOpen: (int n) => _openOrderToDecide(card.orders[n - 1]),
+          onOpenAllOrders: () async {
+            await _showPage('all_orders');
+            _refocus();
+          },
+        ),
+      ];
+    }
     if (card is RankWhyCard) return <Widget>[CopilotRankWhyView(card: card)];
+    if (card is ScoutCard) {
+      return <Widget>[
+        CopilotScoutView(
+          card: card,
+          enabled: !working,
+          onButton: (ScoutButton b) => _controller.run(
+            OpenPlannerIntent(
+              salesmanUid: b.salesmanUid,
+              personName: b.personName,
+              weekStart: b.weekStart,
+            ),
+            b.label,
+          ),
+        ),
+      ];
+    }
     if (card is ChoiceCard) {
       return <Widget>[
         CopilotChoiceView(

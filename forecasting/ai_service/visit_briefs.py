@@ -1,14 +1,29 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from datetime import date, datetime
 from typing import Any, Iterable, Mapping
 
-from .normalization import is_demo_record
+from forecasting.ai_core.calendar import week_start
+from forecasting.ai_core.order_weekday import (
+    ORDER_WEEKDAY_VERSION,
+    usual_order_weekday,
+)
+
+from .normalization import (
+    is_demand_order,
+    is_demo_record,
+    order_moment,
+    order_retailer_id,
+)
 
 REPLENISHMENT_TOP_N = 5
 
 FOCUS_LIMIT = 3
+
+BRIEF_WEEKLY_VERSION = "brief-weekly/1.0.0"
+BRIEF_WEEKLY_MAX_WEEKS = 8
 
 NO_FOCUS_HEADLINE = "No priority issues today."
 NO_FOCUS_BODY = "Proceed with standard visit."
@@ -35,6 +50,30 @@ def _is_field_actionable(insight: Mapping[str, Any]) -> bool:
     )
 
 
+def usual_order_weekdays(
+    orders: Iterable[Mapping[str, Any]],
+    *,
+    as_of: date,
+) -> dict[str, int]:
+    moments_by_retailer: dict[str, list[datetime]] = {}
+    for order in orders:
+        if not is_demand_order(order):
+            continue
+        retailer_id = order_retailer_id(order)
+        moment = order_moment(order)
+        if not retailer_id or moment is None:
+            continue
+        moments_by_retailer.setdefault(retailer_id, []).append(moment)
+    weekdays: dict[str, int] = {}
+    for retailer_id in sorted(moments_by_retailer):
+        weekday = usual_order_weekday(
+            moments_by_retailer[retailer_id], as_of=as_of
+        )
+        if weekday is not None:
+            weekdays[retailer_id] = weekday
+    return weekdays
+
+
 def build_visit_briefs(
     insights: Iterable[Mapping[str, Any]],
     *,
@@ -45,7 +84,11 @@ def build_visit_briefs(
     retailer_segments: Iterable[Mapping[str, Any]] = (),
     replenishment: Iterable[Mapping[str, Any]] = (),
     coverage_retailers: Iterable[Mapping[str, Any]] = (),
+    order_weekdays: Mapping[str, int] | None = None,
+    patterns: Iterable[Mapping[str, Any]] = (),
 ) -> tuple[dict[str, Any], ...]:
+    order_weekdays = order_weekdays or {}
+    weekly_by_pair = _weekly_by_pair(patterns, as_of=as_of)
     replenishment_by_retailer: dict[str, list[dict[str, Any]]] = {}
     for row in replenishment:
         suggestion_retailer_id = str(row.get("retailerId") or "").strip()
@@ -107,7 +150,11 @@ def build_visit_briefs(
         first = top[0] if top else identity
         memory = memory_by_retailer.get(retailer_id)
         segment = segment_by_retailer.get(retailer_id)
-        focus_items = [_focus_item(row) for row in top]
+        focus_items = [
+            _focus_item(row, weekly_by_pair.get(_pair(retailer_id, row)))
+            for row in top
+        ]
+        order_weekday = order_weekdays.get(retailer_id)
         briefs.append(
             {
                 "briefId": _brief_id(retailer_id),
@@ -146,6 +193,14 @@ def build_visit_briefs(
                 ),
                 "generatedAt": generated_at,
                 "updatedAt": generated_at,
+                **(
+                    {
+                        "usualOrderWeekday": order_weekday,
+                        "usualOrderWeekdayVersion": ORDER_WEEKDAY_VERSION,
+                    }
+                    if order_weekday is not None
+                    else {}
+                ),
             }
         )
     return tuple(briefs)
@@ -167,7 +222,86 @@ def _legacy_insight(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _focus_item(row: Mapping[str, Any]) -> dict[str, Any]:
+def _pair(retailer_id: str, row: Mapping[str, Any]) -> tuple[str, str]:
+    return retailer_id, str(row.get("productId") or "").strip()
+
+
+def _week_date(value: Any) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value.strip()[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def _pattern_weeks(
+    row: Mapping[str, Any], *, current_week: date
+) -> tuple[list[str], list[float]] | None:
+    starts = row.get("weekStarts")
+    quantities = row.get("weeklyQuantities")
+    if not isinstance(starts, (list, tuple)) or not isinstance(
+        quantities, (list, tuple)
+    ):
+        return None
+    if len(starts) != len(quantities):
+        return None
+    weeks: list[tuple[date, float]] = []
+    for raw_start, raw_quantity in zip(starts, quantities):
+        start = _week_date(raw_start)
+        if (
+            start is None
+            or isinstance(raw_quantity, bool)
+            or not isinstance(raw_quantity, (int, float))
+            or not math.isfinite(raw_quantity)
+            or raw_quantity < 0
+        ):
+            return None
+        if start < current_week:
+            weeks.append((start, float(raw_quantity)))
+    if not weeks:
+        return None
+    weeks.sort(key=lambda week: week[0])
+    if len({start for start, _ in weeks}) != len(weeks):
+        return None
+    weeks = weeks[-BRIEF_WEEKLY_MAX_WEEKS:]
+    return (
+        [start.isoformat() for start, _ in weeks],
+        [quantity for _, quantity in weeks],
+    )
+
+
+def _weekly_by_pair(
+    patterns: Iterable[Mapping[str, Any]], *, as_of: date
+) -> dict[tuple[str, str], tuple[list[str], list[float]]]:
+    current_week = week_start(as_of)
+    chosen: dict[tuple[str, str], tuple[list[str], list[float]]] = {}
+    for row in sorted(
+        patterns, key=lambda pattern: str(pattern.get("patternId") or "")
+    ):
+        pair = (
+            str(row.get("retailerId") or "").strip(),
+            str(row.get("productId") or "").strip(),
+        )
+        if not pair[0] or not pair[1]:
+            continue
+        weeks = _pattern_weeks(row, current_week=current_week)
+        if weeks is None:
+            continue
+        known = chosen.get(pair)
+        if known is None or weeks[0][-1] > known[0][-1]:
+            chosen[pair] = weeks
+    return chosen
+
+
+def _focus_item(
+    row: Mapping[str, Any],
+    weekly: tuple[list[str], list[float]] | None = None,
+) -> dict[str, Any]:
     outcome = row.get("latestOutcome")
     previous: dict[str, Any] | None = None
     if isinstance(outcome, Mapping):
@@ -193,6 +327,15 @@ def _focus_item(row: Mapping[str, Any]) -> dict[str, Any]:
         "previousOutcome": previous,
         "occurrenceCount": int(row.get("occurrenceCount") or 1),
         "autoState": str(row.get("autoState") or "active"),
+        **(
+            {
+                "weeklyVersion": BRIEF_WEEKLY_VERSION,
+                "weekStarts": list(weekly[0]),
+                "weeklyQuantities": list(weekly[1]),
+            }
+            if weekly
+            else {}
+        ),
     }
 
 

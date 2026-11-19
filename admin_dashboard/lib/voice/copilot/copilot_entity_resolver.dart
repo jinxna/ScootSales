@@ -62,9 +62,31 @@ const Map<String, String> _tokenVariants = <String, String>{
 };
 
 const Set<String> _dropTokens = <String>{
-  'encik', 'en', 'cik', 'puan', 'pn', 'tuan', 'mr', 'mrs', 'ms', 'bin',
-  'binti', 'bt', 'bte', 'al', 'ap', 'sdn', 'bhd', 'ent', 'enterprise',
-  'trading', 'tdg', 'store', 'stores', 'shop', 'the',
+  'encik',
+  'en',
+  'cik',
+  'puan',
+  'pn',
+  'tuan',
+  'mr',
+  'mrs',
+  'ms',
+  'bin',
+  'binti',
+  'bt',
+  'bte',
+  'al',
+  'ap',
+  'sdn',
+  'bhd',
+  'ent',
+  'enterprise',
+  'trading',
+  'tdg',
+  'store',
+  'stores',
+  'shop',
+  'the',
 };
 
 String normaliseEntityName(String text) {

@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/route_plan.dart';
 import 'route_execution.dart';
+import 'route_stop_order.dart';
 import 'route_travel_time.dart';
 
 const double kRecomputeFallbackSpeedKmh = kRouteFallbackSpeedKmh;
@@ -50,28 +51,138 @@ Map<String, int> buildServiceMinutesByRetailer({
   return result;
 }
 
+({double km, int minutes}) routeLegBetween({
+  required String? fromStopId,
+  required LatLng from,
+  required String? toStopId,
+  required LatLng to,
+  RouteLegTable? legTable,
+}) {
+  if (legTable != null) {
+    return (
+      km: legTable.metersBetween(fromStopId, toStopId) / 1000,
+      minutes: (legTable.secondsBetween(fromStopId, toStopId) / 60).round(),
+    );
+  }
+  final double km = _haversineKm(from, to);
+  return (
+    km: km,
+    minutes: estimateRouteTravelMinutes(
+      km,
+      speedKmh: kRecomputeFallbackSpeedKmh,
+    ),
+  );
+}
+
+RouteLegTable? routeLegTableFor(
+  RouteDay day, {
+  required RouteStartPoint? start,
+  required RouteLegTable? legTable,
+}) {
+  if (legTable == null) return null;
+  final bool usable = legTable.covers(
+    day.stops.map((RouteStop stop) => stop.retailerId),
+    withStart: start != null,
+  );
+  return usable ? legTable : null;
+}
+
+RouteOrderResult shortestRouteDayOrder(
+  RouteDay day, {
+  required RouteStartPoint? start,
+  required RouteLegTable? legTable,
+}) {
+  final RouteLegTable? table = routeLegTableFor(
+    day,
+    start: start,
+    legTable: legTable,
+  );
+  final LatLng? startPosition = start == null
+      ? null
+      : LatLng(start.lat, start.lng);
+  String? idOf(int node) =>
+      node == kRouteStartNode ? null : day.stops[node].retailerId;
+  LatLng positionOf(int node) => node == kRouteStartNode
+      ? startPosition!
+      : LatLng(day.stops[node].lat, day.stops[node].lng);
+  return bestStopOrder(
+    stopCount: day.stops.length,
+    hasStart: start != null,
+    cost: (int from, int to) => table != null
+        ? table.secondsBetween(idOf(from), idOf(to))
+        : _haversineKm(positionOf(from), positionOf(to)),
+  );
+}
+
+int routeDayTravelMinutes(
+  List<RouteStop> stops, {
+  required RouteStartPoint? start,
+  required RouteLegTable? legTable,
+}) {
+  int total = 0;
+  String? previousId;
+  LatLng? previous = start == null ? null : LatLng(start.lat, start.lng);
+  for (final RouteStop stop in stops) {
+    final LatLng position = LatLng(stop.lat, stop.lng);
+    if (previous != null) {
+      total += routeLegBetween(
+        fromStopId: previousId,
+        from: previous,
+        toStopId: stop.retailerId,
+        to: position,
+        legTable: legTable,
+      ).minutes;
+    }
+    previousId = stop.retailerId;
+    previous = position;
+  }
+  if (start != null && stops.isNotEmpty) {
+    total += routeLegBetween(
+      fromStopId: previousId,
+      from: previous!,
+      toStopId: null,
+      to: LatLng(start.lat, start.lng),
+      legTable: legTable,
+    ).minutes;
+  }
+  return total;
+}
+
 RouteDay recomputeRouteDay(
   RouteDay day, {
   int serviceMinutes = 20,
   int workdayStartHour = 9,
   Map<String, ServiceTimeStat> learnedServiceTimes =
       const <String, ServiceTimeStat>{},
+  RouteStartPoint? start,
+  RouteLegTable? legTable,
+  String orderMethod = kRouteOrderManual,
 }) {
+  final RouteLegTable? table = routeLegTableFor(
+    day,
+    start: start,
+    legTable: legTable,
+  );
   int clock = workdayStartHour * 60;
   double totalKm = 0;
   int totalServiceMinutes = 0;
   final List<RouteStop> stops = <RouteStop>[];
-  LatLng? prev;
+  String? previousId;
+  LatLng? previous = start == null ? null : LatLng(start.lat, start.lng);
   for (int i = 0; i < day.stops.length; i++) {
     final RouteStop s = day.stops[i];
     final LatLng pos = LatLng(s.lat, s.lng);
-    final double legKm = prev == null ? 0 : _haversineKm(prev, pos);
-    totalKm += legKm;
-    final int travelMin = estimateRouteTravelMinutes(
-      legKm,
-      speedKmh: kRecomputeFallbackSpeedKmh,
-    );
-    clock += travelMin;
+    final ({double km, int minutes}) leg = previous == null
+        ? (km: 0, minutes: 0)
+        : routeLegBetween(
+            fromStopId: previousId,
+            from: previous,
+            toStopId: s.retailerId,
+            to: pos,
+            legTable: table,
+          );
+    totalKm += leg.km;
+    clock += leg.minutes;
     final String arrival = _hhmm(clock);
     final int stopServiceMinutes = effectiveServiceMinutes(
       defaultServiceMinutes: serviceMinutes,
@@ -85,12 +196,23 @@ RouteDay recomputeRouteDay(
         sequence: i + 1,
         arrival: arrival,
         departure: departure,
-        legDistanceKm: double.parse(legKm.toStringAsFixed(2)),
-        travelMinutesFromPrevious: travelMin,
+        legDistanceKm: double.parse(leg.km.toStringAsFixed(2)),
+        travelMinutesFromPrevious: leg.minutes,
       ),
     );
-    prev = pos;
+    previousId = s.retailerId;
+    previous = pos;
   }
+  final ({double km, int minutes}) back = start == null || stops.isEmpty
+      ? (km: 0, minutes: 0)
+      : routeLegBetween(
+          fromStopId: previousId,
+          from: previous!,
+          toStopId: null,
+          to: LatLng(start.lat, start.lng),
+          legTable: table,
+        );
+  totalKm += back.km;
   return RouteDay(
     dayId: day.dayId,
     dayLabel: day.dayLabel,
@@ -98,6 +220,9 @@ RouteDay recomputeRouteDay(
     stops: stops,
     totalDistanceKm: double.parse(totalKm.toStringAsFixed(2)),
     estimatedServiceMinutes: totalServiceMinutes,
-    estimateSource: 'haversine_fallback',
+    estimateSource: table == null ? 'haversine_fallback' : 'geoapify_matrix',
+    orderMethod: stops.isEmpty ? '' : orderMethod,
+    returnLegDistanceKm: double.parse(back.km.toStringAsFixed(2)),
+    returnTravelMinutes: back.minutes,
   );
 }

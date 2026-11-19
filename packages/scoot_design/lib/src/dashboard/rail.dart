@@ -13,6 +13,7 @@ class ScootNavItem {
     required this.icon,
     this.count,
     this.countLabel,
+    this.countText,
   });
 
   final String id;
@@ -20,6 +21,7 @@ class ScootNavItem {
   final IconData icon;
   final int? count;
   final String? countLabel;
+  final String? countText;
 }
 
 class ScootNavGroup {
@@ -343,6 +345,7 @@ class ScootNavTile extends StatelessWidget {
             if (item.count != null && item.count! > 0)
               ScootCountBadge(
                 count: item.count!,
+                text: item.countText,
                 semanticLabel: item.countLabel ?? '${item.count} waiting',
               ),
           ],

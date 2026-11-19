@@ -151,8 +151,9 @@ List<AdminSetupChecklistStepState> adminSetupChecklistSteps(
     if (!isBasicEdition)
       step(
         id: SetupChecklistStepId.prepareAi,
-        title: 'Prepare AI data (optional)',
-        explanation: 'AI panels read saved Firestore data prepared offline.',
+        title: 'Prepare weekly insights (optional)',
+        explanation:
+            'The insight panels read saved data that the weekly job prepares.',
         navigationKey: 'prediction',
         count: counts.aiRuns,
         isRequired: false,

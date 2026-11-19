@@ -101,7 +101,11 @@ class ForecastOperationalSummary {
           .length,
       rowCount: values.length,
       modelCount: values
-          .map((Map<String, dynamic> row) => _text(row['model']))
+          .where(forecastRowCountsAsForecast)
+          .map(
+            (Map<String, dynamic> row) =>
+                _text(row['model'] ?? row['modelUsed'] ?? row['model_used']),
+          )
           .where((String value) => value.isNotEmpty)
           .toSet()
           .length,
@@ -365,7 +369,44 @@ String forecastFreshnessLabel(List<Map<String, dynamic>> rows) {
     if (newest == null || parsed.isAfter(newest)) newest = parsed;
   }
   if (newest == null) return 'Forecast generation time not recorded.';
-  return 'Forecast generated ${newest.toUtc().toIso8601String()}.';
+  return 'Forecast made ${readableForecastTime(newest)}.';
+}
+
+const List<String> _monthNames = <String>[
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+String readableForecastDate(DateTime day) =>
+    '${day.day} ${_monthNames[day.month - 1]} ${day.year}';
+
+String readableForecastTime(DateTime instant) {
+  final DateTime kl = instant.toUtc().add(const Duration(hours: 8));
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${readableForecastDate(kl)}, ${two(kl.hour)}:${two(kl.minute)}';
+}
+
+String readableForecastTimeText(String raw) {
+  final DateTime? parsed = DateTime.tryParse(raw.trim());
+  return parsed == null ? raw : readableForecastTime(parsed);
+}
+
+String forecastUnitsLabel(Object? value) {
+  final num? parsed = value is num ? value : num.tryParse('${value ?? ''}'.trim());
+  if (parsed == null || !parsed.isFinite) return '${value ?? ''}';
+  return parsed == parsed.roundToDouble()
+      ? parsed.round().toString()
+      : parsed.toStringAsFixed(1);
 }
 
 String _text(Object? value) => value?.toString().trim() ?? '';

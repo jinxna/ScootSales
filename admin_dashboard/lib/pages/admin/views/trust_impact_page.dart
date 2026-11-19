@@ -6,6 +6,7 @@ import '../../../services/trust_impact_service.dart';
 import '../../../utils/trust_impact.dart';
 import '../../../widgets/ai_freshness_chip.dart';
 import '../../../widgets/page_states.dart';
+import '../../../widgets/scorecard_section.dart';
 
 class TrustImpactPage extends StatefulWidget {
   const TrustImpactPage({super.key, required this.currentUser});
@@ -51,6 +52,10 @@ class _TrustImpactPageState extends State<TrustImpactPage> {
                   : null,
               report: result?.report,
               failedSources: result?.failedSources ?? const <String>[],
+              summaries:
+                  result?.latestSummaries ?? const <Map<String, dynamic>>[],
+              salespersonNames:
+                  result?.salespersonNames ?? const <String, String>{},
               onRefresh: () => setState(_reload),
               freshness: result == null
                   ? null
@@ -73,8 +78,13 @@ class TrustImpactView extends StatelessWidget {
     this.error,
     this.report,
     this.failedSources = const <String>[],
+    this.summaries = const <Map<String, dynamic>>[],
+    this.salespersonNames = const <String, String>{},
     this.freshness,
   });
+
+  final List<Map<String, dynamic>> summaries;
+  final Map<String, String> salespersonNames;
 
   final bool loading;
   final Object? error;
@@ -167,6 +177,12 @@ class TrustImpactView extends StatelessWidget {
             ),
             const SizedBox(height: 16),
           ],
+          ScorecardSection(
+            summaries: summaries,
+            salespersonNames: salespersonNames,
+            readFailed: failedSources.contains('weekly_ai_summaries'),
+          ),
+          const SizedBox(height: 8),
           LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {
               final int columns = constraints.maxWidth >= 1100

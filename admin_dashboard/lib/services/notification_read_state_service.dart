@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -54,6 +56,109 @@ class NotificationReadStateService {
               ? NotificationReadState.fromMap(snapshot.data())
               : null,
         );
+  }
+
+  Stream<NotificationReadState?> _savedReadState() {
+    final String uid = _validatedUid(null);
+    if (uid.isEmpty) return Stream<NotificationReadState?>.value(null);
+    return _firestore
+        .collection(collectionName)
+        .doc(uid)
+        .snapshots()
+        .where(
+          (DocumentSnapshot<Map<String, dynamic>> snapshot) =>
+              !snapshot.metadata.hasPendingWrites,
+        )
+        .map(
+          (DocumentSnapshot<Map<String, dynamic>> snapshot) => snapshot.exists
+              ? NotificationReadState.fromMap(snapshot.data())
+              : null,
+        );
+  }
+
+  static const List<String> storedFeedCollections = <String>[
+    'dashboard_notifications',
+    'notification_logs',
+  ];
+
+  static const int newestReadPerFeed = 20;
+
+  static int get unreadBadgeCap =>
+      newestReadPerFeed * storedFeedCollections.length;
+
+  static String unreadBadgeLabel(int count) =>
+      count >= unreadBadgeCap ? 'or more unread' : 'unread';
+
+  static String unreadBadgeText(int count) =>
+      count >= unreadBadgeCap ? '$unreadBadgeCap+' : '$count';
+
+  Stream<int> watchUnreadCount({int newestPerFeed = newestReadPerFeed}) =>
+      unreadCountOf(
+        readState: _savedReadState(),
+        feeds: <Stream<List<Map<String, dynamic>>>>[
+          for (final String name in storedFeedCollections)
+            _firestore
+                .collection(name)
+                .orderBy('createdAt', descending: true)
+                .limit(newestPerFeed)
+                .snapshots()
+                .map(
+                  (QuerySnapshot<Map<String, dynamic>> snapshot) => snapshot
+                      .docs
+                      .map(
+                        (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+                            doc.data(),
+                      )
+                      .toList(growable: false),
+                ),
+        ],
+      );
+
+  static Stream<int> unreadCountOf({
+    required Stream<NotificationReadState?> readState,
+    required List<Stream<List<Map<String, dynamic>>>> feeds,
+  }) {
+    final StreamController<int> controller = StreamController<int>();
+    final List<StreamSubscription<Object?>> subscriptions =
+        <StreamSubscription<Object?>>[];
+    final List<List<Map<String, dynamic>>?> rows =
+        List<List<Map<String, dynamic>>?>.filled(feeds.length, null);
+    bool stateSeen = false;
+    NotificationReadState? state;
+
+    void emit() {
+      if (!stateSeen || rows.contains(null) || controller.isClosed) return;
+      controller.add(
+        unreadNotificationCount(
+          rows.expand((List<Map<String, dynamic>>? feed) => feed!),
+          state,
+        ),
+      );
+    }
+
+    controller.onListen = () {
+      subscriptions.add(
+        readState.listen((NotificationReadState? value) {
+          stateSeen = true;
+          state = value;
+          emit();
+        }, onError: controller.addError),
+      );
+      for (int index = 0; index < feeds.length; index++) {
+        subscriptions.add(
+          feeds[index].listen((List<Map<String, dynamic>> value) {
+            rows[index] = value;
+            emit();
+          }, onError: controller.addError),
+        );
+      }
+    };
+    controller.onCancel = () async {
+      for (final StreamSubscription<Object?> subscription in subscriptions) {
+        await subscription.cancel();
+      }
+    };
+    return controller.stream;
   }
 
   Future<DateTime> markAllRead({

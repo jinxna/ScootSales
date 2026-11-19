@@ -5,17 +5,18 @@ import 'package:flutter/material.dart';
 import 'package:scoot_design/scoot_design.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../utils/firestore_query_utils.dart';
 import '../../../models/user_profile.dart';
 import '../../../repositories/cms_repository.dart';
 import '../../../security/order_authorization.dart';
 import '../../../utils/app_logger.dart';
 import '../../../utils/order_data_utils.dart';
+import '../../../utils/order_limit_warnings.dart';
 import '../../../utils/money_format.dart';
 import '../../../utils/quantity_unit.dart';
 import '../../../utils/server_price_check.dart';
 import '../../../theme/dso_theme.dart';
 import '../../../utils/gps_accuracy.dart';
+import '../../../utils/user_facing_error.dart';
 
 class OrderDetailsDialog extends StatefulWidget {
   const OrderDetailsDialog({
@@ -91,59 +92,7 @@ class _OrderDetailsDialogState extends State<OrderDetailsDialog> {
         .join(',');
     if (_limitWarnings != null && key == _limitKey) return _limitWarnings!;
     _limitKey = key;
-    return _limitWarnings = _readLimitWarnings(items);
-  }
-
-  Future<List<String>> _readLimitWarnings(
-    List<Map<String, dynamic>> items,
-  ) async {
-    try {
-      final Set<String> productIds = <String>{
-        for (final Map<String, dynamic> it in items)
-          if (_text(it['productId'], fallback: '').isNotEmpty &&
-              orderLineQuantity(it) > 0)
-            _text(it['productId'], fallback: ''),
-      };
-      final Map<String, Map<String, dynamic>> products =
-          <String, Map<String, dynamic>>{};
-      final List<QuerySnapshot<Map<String, dynamic>>> reads = await Future.wait(
-        chunkFirestoreWhereIn(productIds).map(
-          (List<String> chunk) => FirebaseFirestore.instance
-              .collection('products')
-              .where(FieldPath.documentId, whereIn: chunk)
-              .get(),
-        ),
-      );
-      for (final QuerySnapshot<Map<String, dynamic>> read in reads) {
-        for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
-            in read.docs) {
-          products[doc.id] = doc.data();
-        }
-      }
-      final List<String?> lines = items
-          .map((Map<String, dynamic> it) {
-            final String productId = _text(it['productId'], fallback: '');
-            final int qty = orderLineQuantity(it);
-            if (productId.isEmpty || qty <= 0) return null;
-            final Map<String, dynamic>? product = products[productId];
-            if (product == null) return null;
-            final int limit = maxQtyFor(product);
-            if (qty <= limit) return null;
-            final String name = _text(
-              it['productName'] ?? it['name'],
-              fallback: productId,
-            );
-            return '$name: ${quantityLabel(qty, uomOf(it) ?? uomOf(product))} '
-                "ordered; this product's limit is $limit.";
-          })
-          .toList(growable: false);
-      return lines.whereType<String>().toList(growable: false);
-    } catch (error) {
-      AppLogger.error('order_details_limit_read', error: error);
-      return const <String>[
-        'Product order limits could not be checked. Check the quantities before approving.',
-      ];
-    }
+    return _limitWarnings = readOrderLimitWarnings(items);
   }
 
   Widget _limitWarningSection(List<Map<String, dynamic>> items) {
@@ -635,14 +584,17 @@ class _OrderDetailsDialogState extends State<OrderDetailsDialog> {
           !trackingFixBelongsToOrder(order, data)) {
         return null;
       }
+      final Object? storedEvidence = data['locationEvidence'];
       return <String, dynamic>{
         'latitude': data['latitude'],
         'longitude': data['longitude'],
         'locationVerification': data['locationVerification'],
-        'locationEvidence': <String, dynamic>{
-          'mode': data['locationVerification'],
-          'accuracyMeters': data['accuracyMeters'],
-        },
+        'locationEvidence': storedEvidence is Map
+            ? Map<String, dynamic>.from(storedEvidence)
+            : <String, dynamic>{
+                'mode': data['locationVerification'],
+                'accuracyMeters': data['accuracyMeters'],
+              },
       };
     } catch (error) {
       AppLogger.error('order_details_tracking_read', error: error);
@@ -693,7 +645,9 @@ class _OrderDetailsDialogState extends State<OrderDetailsDialog> {
         '${accuracy.round()} m accuracy${isLowAccuracy(accuracy) ? ' (low)' : ''}',
       verified
           ? 'at the verified shop location'
-          : 'not at a verified shop location',
+          : failureCode == 'outside_radius'
+          ? 'away from the shop pin'
+          : 'not checked against the shop pin',
       if (distance != null) '${distance.round()} m from the shop',
     ];
     final Color tone = verified
@@ -834,9 +788,14 @@ class _OrderDetailsDialogState extends State<OrderDetailsDialog> {
         },
       );
       if (mounted) {
-        final String message = error is OrderDecisionConflictException
-            ? error.message
-            : 'Unable to complete this action. Please try again.';
+        final String message = switch (error) {
+          OrderDecisionConflictException(message: final String reason) =>
+            reason,
+          FirebaseException(code: 'permission-denied') =>
+            'The database refused this action. The order is unchanged.',
+          StateError(message: final String reason) => reason,
+          _ => userFacingError(error, action: '$kind this order'),
+        };
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(message)));
@@ -1215,10 +1174,6 @@ class OrderItemsTable extends StatelessWidget {
       dataNumberOrNull(item['unitPrice']) ??
       0.0;
 }
-
-int orderLineQuantity(Map<String, dynamic> item) =>
-    (dataNumberOrNull(item['qty']) ?? dataNumberOrNull(item['orderedQty']) ?? 0)
-        .toInt();
 
 class OrderDetailsHeader extends StatelessWidget {
   const OrderDetailsHeader({

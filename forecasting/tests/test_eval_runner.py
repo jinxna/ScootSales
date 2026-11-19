@@ -149,7 +149,10 @@ def test_suppression_violation_is_hard_failure(tmp_path) -> None:
         {
             "retailerId": "R1",
             "lastConfirmedIssues": [
-                {"reasonCode": "switched_to_alternative", "productId": "P1"}
+                {
+                    "reasonCode": "switched_to_alternative",
+                    "issueKey": "stopped_product::R1::P1",
+                }
             ],
         }
     ]
@@ -173,10 +176,10 @@ def test_suppression_violation_is_hard_failure(tmp_path) -> None:
     )
     suppression = payload["pillarA"]["suppressionSafety"]
     md = (out_dir / "eval_report_2026-07-01.md").read_text(encoding="utf-8")
-    if suppression["ok"]:
-        assert "PASS" in md
-    else:
-        assert "HARD FAILURE" in md
+    assert suppression["ok"] is False
+    assert suppression["suppressedPairCount"] == 1
+    assert suppression["violationCount"] == 1
+    assert "HARD FAILURE" in md
 
 
 def test_a_demo_order_inside_a_real_pair_does_not_move_the_forecast_cutoff() -> None:

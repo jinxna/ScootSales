@@ -77,13 +77,8 @@ class AccountRepairAnalysis {
     final Object? raw = data.containsKey('role')
         ? data['role']
         : data['user_group'];
-    if (raw is! String) return '';
-    final String role = raw.toLowerCase().replaceAll(' ', '_');
+    final String role = UserProfile.canonicalRole(raw);
     switch (role) {
-      case 'administrator':
-        return UserProfile.roleAdmin;
-      case 'sales_representative':
-        return UserProfile.roleSalesman;
       case UserProfile.roleAdmin:
       case UserProfile.roleDeveloper:
       case UserProfile.roleBranchManager:

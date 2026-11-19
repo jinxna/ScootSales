@@ -11,16 +11,56 @@ import '../../../../services/geoapify_config.dart';
 import '../../../../theme/dso_colors.dart';
 import '../../../../widgets/geoapify_map_attribution.dart';
 
-List<LatLng> routeDayMapFitPoints(RouteDay day) {
+List<LatLng> routeDayMapFitPoints(RouteDay day, {RouteStartPoint? start}) {
   final List<LatLng> points = day.stops
       .map((RouteStop stop) => LatLng(stop.lat, stop.lng))
       .toList();
-  if (isProviderRoadGeometry(day.geometrySource) && day.geometry.length >= 2) {
-    points.addAll(
-      day.geometry.map((List<double> point) => LatLng(point[0], point[1])),
-    );
+  if (points.isNotEmpty && start != null) {
+    points.add(LatLng(start.lat, start.lng));
   }
+  points.addAll(routeDayRoadLine(day, start: start));
   return points;
+}
+
+List<LatLng> routeDayStraightLine(RouteDay day, {RouteStartPoint? start}) {
+  final LatLng? origin = start == null ? null : LatLng(start.lat, start.lng);
+  if (day.stops.isEmpty) return const <LatLng>[];
+  return <LatLng>[
+    if (origin != null) origin,
+    for (final RouteStop stop in day.stops) LatLng(stop.lat, stop.lng),
+    if (origin != null) origin,
+  ];
+}
+
+List<LatLng> routeDayRoadLine(RouteDay day, {RouteStartPoint? start}) {
+  if (!isProviderRoadGeometry(day.geometrySource) ||
+      day.geometry.length < 2 ||
+      day.stops.isEmpty) {
+    return const <LatLng>[];
+  }
+  final List<LatLng> road = day.geometry
+      .map((List<double> point) => LatLng(point[0], point[1]))
+      .toList(growable: false);
+  if (start != null) return road;
+  if (day.stops.length < 2) return const <LatLng>[];
+  const Distance distance = DistanceHaversine(roundResult: false);
+  int nearestTo(RouteStop stop) {
+    final LatLng target = LatLng(stop.lat, stop.lng);
+    int nearest = 0;
+    double nearestMeters = double.infinity;
+    for (int i = 0; i < road.length; i++) {
+      final double meters = distance.as(LengthUnit.Meter, road[i], target);
+      if (meters < nearestMeters) {
+        nearestMeters = meters;
+        nearest = i;
+      }
+    }
+    return nearest;
+  }
+
+  final int first = nearestTo(day.stops.first);
+  final int last = nearestTo(day.stops.last);
+  return first < last ? road.sublist(first, last + 1) : road;
 }
 
 class RouteDayMapView extends StatefulWidget {
@@ -31,10 +71,12 @@ class RouteDayMapView extends StatefulWidget {
     required this.hoveredSequence,
     required this.onHover,
     required this.onStopTap,
+    this.start,
     this.focusedSequence,
   });
 
   final RouteDay day;
+  final RouteStartPoint? start;
   final Color color;
 
   final ValueListenable<int?> hoveredSequence;
@@ -58,15 +100,11 @@ class _RouteDayMapViewState extends State<RouteDayMapView> {
       .map((RouteStop s) => LatLng(s.lat, s.lng))
       .toList(growable: false);
 
-  List<LatLng> get _fitPoints => routeDayMapFitPoints(widget.day);
+  List<LatLng> get _fitPoints =>
+      routeDayMapFitPoints(widget.day, start: widget.start);
 
   List<LatLng> get _roadPoints =>
-      isProviderRoadGeometry(widget.day.geometrySource) &&
-          widget.day.geometry.length >= 2
-      ? widget.day.geometry
-            .map((List<double> p) => LatLng(p[0], p[1]))
-            .toList(growable: false)
-      : const <LatLng>[];
+      routeDayRoadLine(widget.day, start: widget.start);
 
   @override
   void initState() {
@@ -78,7 +116,7 @@ class _RouteDayMapViewState extends State<RouteDayMapView> {
   void didUpdateWidget(RouteDayMapView old) {
     super.didUpdateWidget(old);
     final bool fitPointsChanged = !listEquals(
-      routeDayMapFitPoints(old.day),
+      routeDayMapFitPoints(old.day, start: old.start),
       _fitPoints,
     );
     final int? seq = widget.focusedSequence;
@@ -207,7 +245,9 @@ class _RouteDayMapViewState extends State<RouteDayMapView> {
     }
     final List<LatLng> roadPoints = _roadPoints;
     final bool roadGeometry = roadPoints.isNotEmpty;
-    final List<LatLng> line = roadGeometry ? roadPoints : points;
+    final List<LatLng> line = roadGeometry
+        ? roadPoints
+        : routeDayStraightLine(widget.day, start: widget.start);
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: Stack(
@@ -219,6 +259,10 @@ class _RouteDayMapViewState extends State<RouteDayMapView> {
                 mapController: _controller,
                 options: MapOptions(
                   onMapReady: _onReady,
+                  interactionOptions: const InteractionOptions(
+                    flags:
+                        InteractiveFlag.all & ~InteractiveFlag.scrollWheelZoom,
+                  ),
                   initialCenter: fitPoints.first,
                   initialZoom: 12,
                   initialCameraFit: fitPoints.length > 1
@@ -260,6 +304,19 @@ class _RouteDayMapViewState extends State<RouteDayMapView> {
                     builder: (BuildContext context, int? hovered, _) {
                       return MarkerLayer(
                         markers: <Marker>[
+                          if (widget.start != null)
+                            Marker(
+                              point: LatLng(
+                                widget.start!.lat,
+                                widget.start!.lng,
+                              ),
+                              width: 44,
+                              height: 44,
+                              child: _StartMarker(
+                                name: widget.start!.name,
+                                color: widget.color,
+                              ),
+                            ),
                           for (final RouteStop s in widget.day.stops)
                             Marker(
                               point: LatLng(s.lat, s.lng),
@@ -292,15 +349,6 @@ class _RouteDayMapViewState extends State<RouteDayMapView> {
               ),
             ),
           if (_ready) ...<Widget>[
-            Positioned(
-              left: 12,
-              top: 12,
-              child: _LegendPill(
-                color: widget.color,
-                solid: roadGeometry,
-                label: roadGeometry ? 'Road route' : 'Straight legs (estimate)',
-              ),
-            ),
             Positioned(
               right: 12,
               top: 12,
@@ -395,6 +443,50 @@ class _StopMarker extends StatelessWidget {
   }
 }
 
+class _StartMarker extends StatelessWidget {
+  const _StartMarker({required this.name, required this.color});
+
+  final String name;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Start and end, $name',
+      child: Tooltip(
+        message: 'Start and end: $name',
+        child: Center(
+          child: Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: color, width: 3),
+              boxShadow: const <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black38,
+                  blurRadius: 5,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Text(
+              'S',
+              style: TextStyle(
+                color: color,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MapButton extends StatelessWidget {
   const _MapButton({
     required this.icon,
@@ -428,85 +520,6 @@ class _MapButton extends StatelessWidget {
       ),
     );
   }
-}
-
-class _LegendPill extends StatelessWidget {
-  const _LegendPill({
-    required this.color,
-    required this.solid,
-    required this.label,
-  });
-
-  final Color color;
-  final bool solid;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final DsoColors dso = context.dso;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: dso.card.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(999),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 1)),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          SizedBox(
-            width: 22,
-            height: 4,
-            child: CustomPaint(painter: _LegendStroke(color, solid)),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              color: dso.ink,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LegendStroke extends CustomPainter {
-  const _LegendStroke(this.color, this.solid);
-  final Color color;
-  final bool solid;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Paint p = Paint()
-      ..color = color
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round;
-    if (solid) {
-      canvas.drawLine(
-        Offset(0, size.height / 2),
-        Offset(size.width, size.height / 2),
-        p,
-      );
-      return;
-    }
-    for (double x = 0; x < size.width; x += 7) {
-      canvas.drawLine(
-        Offset(x, size.height / 2),
-        Offset(x + 4, size.height / 2),
-        p,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_LegendStroke old) =>
-      old.color != color || old.solid != solid;
 }
 
 class _Frame extends StatelessWidget {

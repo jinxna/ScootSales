@@ -9,7 +9,7 @@ const E = require('./emulator.cjs');
 const platform = require('./platform.cjs');
 const directory = require('./platform_api.cjs');
 
-const STAFF_PORT = 18791;
+const STAFF_PORT = require('./lane.cjs').ports.staff;
 const STAFF_ROLE_EMAILS = {
   owner: 'e2e.owner@example.test',
   operator: 'e2e.operator@example.test',

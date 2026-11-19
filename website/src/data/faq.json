@@ -45,9 +45,9 @@
       "topic": "Company status",
       "question": "How long can we get our data after a suspension?",
       "answer": [
-        "You have 30 days from the first stop. A stop is a suspension, an expiry or a cancellation.",
-        "If the company moves from one stopped state to another, the 30 days keep their start date.",
-        "If the company is reactivated and then stopped again, a new 30 days start.",
+        "You have 90 days from the first stop. A stop is a suspension, an expiry or a cancellation.",
+        "If the company moves from one stopped state to another, the 90 days keep their start date.",
+        "If the company is reactivated and then stopped again, a new 90 days start.",
         "In that time, an administrator can download the data export and give support access.",
         "Download the export early. Ask Scoot Sales for the exact end date."
       ]
@@ -55,7 +55,7 @@
     {
       "id": "status-after-window",
       "topic": "Company status",
-      "question": "What happens after the 30 days?",
+      "question": "What happens after the 90 days?",
       "answer": [
         "The data export and support access stop.",
         "The data is not deleted automatically at that moment. Deletion is a separate step."
@@ -94,7 +94,7 @@
         "The ZIP also has a manifest with a checksum for each file.",
         "It does not include sign-in accounts, invoices, the audit log or live tracking positions.",
         "If you signed in more than 5 minutes ago, sign in again first.",
-        "The export works until the 30-day window after a suspension, expiry or cancellation ends."
+        "The export works until the 90-day window after a suspension, expiry or cancellation ends."
       ]
     },
     {

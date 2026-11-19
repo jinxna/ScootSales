@@ -61,11 +61,9 @@ class HeldWorkSync {
     CompanyApi? api,
     FirebaseFirestore? firestore,
     @visibleForTesting Future<void> Function(HeldOrder order)? orderWriter,
-    @visibleForTesting Future<bool> Function(HeldOrder order)? trackingSettler,
   }) : _api = api ?? CompanyApi.instance,
        _firestore = firestore,
-       _orderWriter = orderWriter,
-       _trackingSettler = trackingSettler;
+       _orderWriter = orderWriter;
 
   static const int _itemsPerRequest = 25;
   static const int _bytesPerRequest = 512 * 1024;
@@ -77,7 +75,6 @@ class HeldWorkSync {
   final CompanyApi _api;
   final FirebaseFirestore? _firestore;
   final Future<void> Function(HeldOrder order)? _orderWriter;
-  final Future<bool> Function(HeldOrder order)? _trackingSettler;
 
   FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
   static bool _signedInAs(String uid) =>
@@ -211,13 +208,16 @@ class HeldWorkSync {
     String uid, {
     bool includeNotAccepted = true,
   }) async {
+    if (await _outboxHoldsWork(uid, includeNotAccepted)) return true;
     try {
-      await _db.waitForPendingWrites().timeout(
-        const Duration(milliseconds: 500),
-      );
+      await _db.waitForPendingWrites().timeout(HeldVisits.offlineWait);
     } on TimeoutException {
       return true;
     } catch (_) {}
+    return _outboxHoldsWork(uid, includeNotAccepted);
+  }
+
+  Future<bool> _outboxHoldsWork(String uid, bool includeNotAccepted) async {
     final bool stopsLeft = (await _stops.readForUid(uid)).any(
       (RouteStopLifecycleEvent event) =>
           includeNotAccepted ||
@@ -757,18 +757,6 @@ class HeldWorkSync {
     await _clearDelivered(rows, lifecycle);
   }
 
-  @visibleForTesting
-  Future<bool> settleTrackingForTest(
-    HeldOrder order,
-    CompanyLifecycle lifecycle,
-  ) => _settleTracking(order, lifecycle);
-
-  @visibleForTesting
-  Future<bool> writeOrderDirectly(
-    HeldOrder order,
-    CompanyLifecycle lifecycle,
-  ) => _writeOrderDirectly(order, lifecycle);
-
   Future<bool> _writeOrderDirectly(
     HeldOrder order,
     CompanyLifecycle lifecycle,
@@ -870,8 +858,6 @@ class HeldWorkSync {
     HeldOrder order,
     CompanyLifecycle lifecycle,
   ) async {
-    final Future<bool> Function(HeldOrder order)? settler = _trackingSettler;
-    if (settler != null) return settler(order);
     final Map<String, dynamic>? tracking = order.tracking;
     if (tracking == null) return true;
     final DateTime? retryAfter = order.trackingRetryAfter;

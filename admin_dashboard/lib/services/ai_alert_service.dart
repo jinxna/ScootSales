@@ -68,17 +68,6 @@ class AiAlertService {
     base.limit(limit),
   );
 
-  Stream<int> watchAdminHighPriorityCount({int limit = 100}) {
-    final int safeLimit = limit.clamp(1, 100).toInt();
-    return _openFirst(
-      _firestore.collection('ai_insights').where('priority', isEqualTo: 'high'),
-      safeLimit,
-    ).map(
-      (QuerySnapshot<Map<String, dynamic>> snapshot) =>
-          _activeProductionInsightCount(snapshot),
-    );
-  }
-
   Stream<int> watchSupervisorOverdueCount(
     UserProfile currentUser, {
     int limit = 200,

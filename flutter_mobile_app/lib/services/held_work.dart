@@ -19,6 +19,15 @@ class HeldWorkPolicy {
       ? WriteFailure.held
       : WriteFailure.other;
 
+  static bool pauseIsLanding(CompanyLifecycle? lifecycle) =>
+      lifecycle != null &&
+      lifecycle.isOpen &&
+      const <String>{
+        'suspended',
+        'expired',
+        'cancelled',
+      }.contains(lifecycle.state);
+
   static HeldRoute routeForStopEvent(
     CompanyLifecycle lifecycle, {
     required DateTime sessionStartedAt,

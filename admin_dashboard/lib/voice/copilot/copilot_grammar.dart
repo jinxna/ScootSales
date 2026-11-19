@@ -1,5 +1,7 @@
+import '../../utils/fuzzy_text.dart';
 import 'copilot_dates.dart';
 
+part 'copilot_scout_grammar.dart';
 part 'copilot_search_grammar.dart';
 
 sealed class CopilotIntent {
@@ -69,6 +71,10 @@ final RegExp _briefMe = RegExp(r'^(?:please |tolong )?brief me$');
 final RegExp _explain = RegExp(
   r'\b(explain|why is|why|terangkan|jelaskan|kenapa)\b',
 );
+final RegExp _explainVerb = RegExp(r'\b(explain|terangkan|jelaskan)\b');
+final RegExp _complaint = RegExp(
+  r'\b(slow|slowly|lag|laggy|lagging|broken|stuck|hang|hanging|crash|crashing|buggy|not working|so long|too long|lambat|rosak)\b',
+);
 final RegExp _inReview = RegExp(
   r'\b(in review|under review|for review|dalam semakan|sedang disemak)\b',
 );
@@ -80,9 +86,14 @@ final RegExp _itemWord = RegExp(
 final RegExp _bareIgnore = RegExp(
   r'^(?:please |tolong )?(?:ignore|dismiss|abaikan)$',
 );
+final RegExp _pointerWord = RegExp(r'\b(it|this|that)\b');
+final RegExp _aboutYou = RegExp(r'\b(you|your|youre|u|ur)\b');
+final RegExp _bareWhy = RegExp(r'^(?:but |and |so )?why(?: so| not)?$');
 bool _namesItem(String text) =>
     _bareIgnore.hasMatch(text) ||
-    _itemWord.hasMatch(text) ||
+    (_itemWord.hasMatch(
+      _aboutYou.hasMatch(text) ? text.replaceAll(_pointerWord, ' ') : text,
+    )) ||
     _positions(text).isNotEmpty;
 final RegExp _markVerb = RegExp(r'\b(mark|set|put|tandakan|tetapkan)\b');
 final RegExp _confirm = RegExp(
@@ -107,6 +118,18 @@ String _normalise(String text) => text
     .replaceAll(RegExp(r'\s+'), ' ')
     .trim();
 
+const String _approveVerb = 'approve';
+
+String foldCommandTypos(String text) => text
+    .split(' ')
+    .map(
+      (String token) =>
+          !token.startsWith('approv') && isNearWord(token, _approveVerb)
+          ? _approveVerb
+          : token,
+    )
+    .join(' ');
+
 Set<int> _positions(String text) {
   final Set<int> found = <int>{};
   for (final RegExpMatch m in _itemDigits.allMatches(text)) {
@@ -130,10 +153,13 @@ bool _isStatusCommand(String text, String raw, {required bool review}) =>
 
 CopilotIntent? interpretCopilot(String transcript, {DateTime? now}) {
   final DateTime at = now ?? DateTime.now();
-  final String text = _normalise(transcript);
+  final String text = foldCommandTypos(_normalise(transcript));
   if (text.isEmpty) return null;
   if (_confirm.hasMatch(text)) return const ConfirmIntent();
   if (_cancel.hasMatch(text)) return const CancelIntent();
+
+  final CopilotIntent? scout = interpretScoutCommand(text, transcript, at);
+  if (scout != null) return scout;
 
   final RankWhyIntent? rankWhy = interpretRankWhy(text, transcript);
   if (rankWhy != null) return rankWhy;
@@ -149,7 +175,13 @@ CopilotIntent? interpretCopilot(String transcript, {DateTime? now}) {
 
   final bool wantsBriefing =
       _briefing.hasMatch(text) || _briefMe.hasMatch(_stripTail(text));
-  final bool wantsExplain = _explain.hasMatch(text) && !wantsBriefing;
+  final bool wantsExplain =
+      !wantsBriefing &&
+      (_explainVerb.hasMatch(text) ||
+          _bareWhy.hasMatch(text) ||
+          (_explain.hasMatch(text) &&
+              !_complaint.hasMatch(text) &&
+              _namesItem(text)));
   final bool wantsReview = _inReview.hasMatch(text);
   final bool ignoreWord = _ignore.hasMatch(text);
   final bool wantsIgnore = ignoreWord && _namesItem(text);
@@ -209,6 +241,54 @@ CopilotIntent? intentFromCall(
       return status == 'in_review' || status == 'ignored'
           ? SetStatusIntent(status: status as String, position: n)
           : null;
+    case 'brief_retailer':
+      final Object? retailer = args['retailer'];
+      if (retailer == null) {
+        return const BriefRetailerIntent('', fromMemory: true);
+      }
+      return retailer is String && _modelName(retailer)
+          ? BriefRetailerIntent(retailer.trim())
+          : null;
+    case 'route_why':
+      final String? shop = _modelNameArg(args['retailer']);
+      final String? person = _modelNameArg(args['salesperson']);
+      if (_badName(args['retailer']) || _badName(args['salesperson'])) {
+        return null;
+      }
+      return RouteWhyIntent(shop: shop, person: person);
+    case 'salesperson_visits':
+      if (_badName(args['salesperson'])) return null;
+      return PersonVisitsIntent(
+        person: _modelNameArg(args['salesperson']),
+        week: _modelWeek(args['week'], now),
+      );
+    case 'due_overview':
+      return args.isEmpty ? const DueIntent() : null;
+    case 'open_planner':
+      if (_badName(args['salesperson'])) return null;
+      return PlanWeekIntent(
+        person: _modelNameArg(args['salesperson']),
+        week: _modelWeek(args['week'], now),
+      );
+    case 'no_route':
+      return NoRouteIntent(week: _modelWeek(args['week'], now));
   }
   return null;
 }
+
+bool _modelName(String value) {
+  final String t = value.trim();
+  return t.isNotEmpty && t.length <= 80 && _modelText.hasMatch(t);
+}
+
+bool _badName(Object? value) =>
+    value != null && !(value is String && _modelName(value));
+
+String? _modelNameArg(Object? value) =>
+    value is String && _modelName(value) ? value.trim() : null;
+
+CopilotRange? _modelWeek(Object? value, DateTime? now) => switch (value) {
+  'this_week' => copilotRange(CopilotRangeKind.thisWeek, now ?? DateTime.now()),
+  'next_week' => copilotRange(CopilotRangeKind.nextWeek, now ?? DateTime.now()),
+  _ => null,
+};

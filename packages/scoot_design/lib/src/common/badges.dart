@@ -78,10 +78,12 @@ class ScootCountBadge extends StatelessWidget {
     super.key,
     required this.count,
     required this.semanticLabel,
+    this.text,
   });
 
   final int count;
   final String semanticLabel;
+  final String? text;
 
   @override
   Widget build(BuildContext context) {
@@ -104,7 +106,7 @@ class ScootCountBadge extends StatelessWidget {
             widthFactor: 1,
             heightFactor: 1,
             child: Text(
-              count > 99 ? '99+' : '$count',
+              text ?? (count > 99 ? '99+' : '$count'),
               style: ScootType.caption.copyWith(
                 color: c.countText,
                 fontWeight: FontWeight.w700,
