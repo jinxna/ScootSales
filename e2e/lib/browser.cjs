@@ -193,6 +193,7 @@ async function fillField(page, locator, value) {
     await locator.click();
     await page.keyboard.press('Control+A');
     await page.keyboard.press('Backspace');
+    if (attempt > 0) await page.waitForTimeout(300);
     const leftAfterClear = (await locator.inputValue()).length;
     await page.keyboard.type(value, { delay: 20 });
     const typed = await locator.inputValue();

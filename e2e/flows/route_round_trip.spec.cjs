@@ -86,6 +86,9 @@ module.exports = {
       await B.see(s.page, 'Edit Branch');
       const boxes = s.page.getByRole('textbox');
       await B.fillField(s.page, boxes.nth(1), START.name);
+      await B.fillField(s.page, boxes.nth(2), '1.5');
+      await s.page.getByRole('button', { name: 'Update Branch' }).click();
+      await B.see(s.page, 'Enter a number from -180 to 180');
       await B.fillField(s.page, boxes.nth(2), '0');
       await B.fillField(s.page, boxes.nth(3), '0');
       await s.page.getByRole('button', { name: 'Update Branch' }).click();
@@ -95,10 +98,6 @@ module.exports = {
       await B.fillField(s.page, boxes.nth(3), '110.3');
       await s.page.getByRole('button', { name: 'Update Branch' }).click();
       await B.see(s.page, 'Enter a number from -90 to 90');
-      await B.fillField(s.page, boxes.nth(2), '1.5');
-      await B.fillField(s.page, boxes.nth(3), '');
-      await s.page.getByRole('button', { name: 'Update Branch' }).click();
-      await B.see(s.page, 'Enter a number from -180 to 180');
       const branch = await db.get('branches', BRANCH.id);
       for (const key of ['routeStartName', 'routeStartLat', 'routeStartLng']) {
         if (branch[key] != null) throw new Error(`a refused start was saved: ${key} is ${JSON.stringify(branch[key])}`);

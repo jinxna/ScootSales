@@ -159,27 +159,29 @@ class MobileCopilotAnswers {
             open: CopilotDestination.orders,
           );
         case CopilotIntentKind.openRoute:
-          return _route(intent.thisWeek);
+          return await _route(intent.thisWeek);
         case CopilotIntentKind.nextStop:
-          return _nextStop(after: intent.nextOne ? intent.remembered : null);
+          return await _nextStop(
+            after: intent.nextOne ? intent.remembered : null,
+          );
         case CopilotIntentKind.stopsLeft:
-          return _stopsLeft();
+          return await _stopsLeft();
         case CopilotIntentKind.ordersThisWeek:
-          return _ordersThisWeek();
+          return await _ordersThisWeek();
         case CopilotIntentKind.visitBrief:
         case CopilotIntentKind.lastOrder:
         case CopilotIntentKind.whyStop:
         case CopilotIntentKind.whatToSay:
         case CopilotIntentKind.usualOrderDay:
-          return _shopAnswer(intent);
+          return await _shopAnswer(intent);
         case CopilotIntentKind.followUps:
-          return _followUps();
+          return await _followUps();
         case CopilotIntentKind.followUp:
           return _shopMenu(intent.retailer);
         case CopilotIntentKind.whichShop:
           return kCopilotWhichShop;
         case CopilotIntentKind.sales:
-          return _sales(intent.today);
+          return await _sales(intent.today);
         case CopilotIntentKind.unknown:
           return kCopilotNotUnderstood;
       }

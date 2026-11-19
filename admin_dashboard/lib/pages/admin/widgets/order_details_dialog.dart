@@ -1311,7 +1311,7 @@ String _text(Object? v, {required String fallback}) {
 
 String _formatDateTime(Object? value) {
   if (value is Timestamp) {
-    final d = value.toDate();
+    final d = value.toDate().toUtc().add(const Duration(hours: 8));
     return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year} '
         '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }

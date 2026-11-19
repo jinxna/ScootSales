@@ -856,23 +856,25 @@ class _RetailerManagementCmsPageState extends State<RetailerManagementCmsPage> {
                   child: Text('No operational retailers are available yet.'),
                 );
               } else {
-                content = LayoutBuilder(
-                  builder: (BuildContext context, BoxConstraints box) {
-                    final bool stacked = box.maxWidth < _tableMinWidth;
-                    return RetailerBulkAssignList(
-                      retailers: retailers,
-                      options: _salesmanOptions,
-                      writer: _assignmentWriter,
-                      canEdit: _canWrite,
-                      isRetired: _isRetiredRetailer,
-                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                      rowGap: 0,
-                      header: stacked ? null : _tableHeader(),
-                      cardBuilder:
-                          (BuildContext context, Map<String, dynamic> r) =>
-                              _retailerRow(r, stacked: stacked),
-                    );
-                  },
+                content = SelectionContainer.disabled(
+                  child: LayoutBuilder(
+                    builder: (BuildContext context, BoxConstraints box) {
+                      final bool stacked = box.maxWidth < _tableMinWidth;
+                      return RetailerBulkAssignList(
+                        retailers: retailers,
+                        options: _salesmanOptions,
+                        writer: _assignmentWriter,
+                        canEdit: _canWrite,
+                        isRetired: _isRetiredRetailer,
+                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                        rowGap: 0,
+                        header: stacked ? null : _tableHeader(),
+                        cardBuilder:
+                            (BuildContext context, Map<String, dynamic> r) =>
+                                _retailerRow(r, stacked: stacked),
+                      );
+                    },
+                  ),
                 );
               }
               return CmsPanel(

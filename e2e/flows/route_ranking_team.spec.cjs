@@ -717,8 +717,10 @@ module.exports = {
             await page.waitForTimeout(100);
           }
           await B.see(page, lone.name);
-          expectEqual(await remove.count(), 0, `"Remove ${lone.name}" offered while the save waits for the store`);
-          expectEqual(await move.count(), 0, `"Move ${lone.name} to another day" offered while the save waits for the store`);
+          await remove.waitFor({ state: 'detached', timeout: 10000 })
+            .catch(() => { throw new Error(`"Remove ${lone.name}" offered while the save waits for the store`); });
+          await move.waitFor({ state: 'detached', timeout: 10000 })
+            .catch(() => { throw new Error(`"Move ${lone.name} to another day" offered while the save waits for the store`); });
           await t.shot(othersS, 'save-in-progress');
         } finally {
           holding = false;

@@ -9,7 +9,7 @@ const directory = require('../lib/platform_api.cjs');
 
 const BUILD_PORT = require('../lib/lane.cjs').ports.copilot;
 const RECORD_PORT = require('../lib/lane.cjs').ports.scoutRecord;
-const QUESTION = 'qwzx plorf blimmo';
+const QUESTION = 'where can i look at my past work';
 
 function equal(actual, expected, label) {
   if (actual !== expected) throw new Error(`${label}: ${actual} != ${expected}`);
