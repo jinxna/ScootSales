@@ -58,7 +58,7 @@ run_lane() {
   if [ "${k}" = "1" ]; then
     env "${lane_env[@]}" npm run e2e
   else
-    sudo unshare --net -- bash -c 'ip link set lo up && exec sudo -u "$0" env "$@"' \
+    sudo unshare --net -- bash -c 'ip link set lo up && ip link add lane0 type dummy && ip addr add 10.213.0.1/24 dev lane0 && ip link set lane0 up && ip route add default dev lane0 && exec sudo -u "$0" env "$@"' \
       "${user}" "${lane_env[@]}" npm run e2e
   fi
 }
