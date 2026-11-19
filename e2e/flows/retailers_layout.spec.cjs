@@ -35,7 +35,7 @@ module.exports = {
       await t.shot(s, 'retailers-list');
     });
 
-    const headerBox = async () => (await B.semantic(s.page, 'Salesperson').boundingBox());
+    const headerBox = async () => (await B.semantic(s.page, /^Salesperson$/).boundingBox());
 
     await t.step('the table fills at least 60% of the viewport height', async () => {
       const head = await headerBox();

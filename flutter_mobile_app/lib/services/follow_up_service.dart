@@ -141,6 +141,7 @@ class FollowUpService {
     final QuerySnapshot<Map<String, dynamic>> snapshot = await _db
         .collection('conversation_outcomes')
         .where('salesmanUid', isEqualTo: uid)
+        .where('followUpStatus', isEqualTo: FollowUpStatus.open.name)
         .orderBy('followUpDate')
         .limit(_readLimit)
         .get()
