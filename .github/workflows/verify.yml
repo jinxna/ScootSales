@@ -462,7 +462,7 @@ jobs:
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
         with:
           path: e2e/.keys/e2e-1.json
-          key: e2e-signing-key-v1
+          key: e2e-signing-key-v2
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         if: steps.restore.outputs.cache-hit != 'true'
@@ -482,18 +482,30 @@ jobs:
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25
         with:
           path: e2e/.keys/e2e-1.json
-          key: e2e-signing-key-v1
+          key: e2e-signing-key-v2
 
       - name: Remove the local key so the saved key is the one used
         if: steps.restore.outputs.cache-hit != 'true'
         run: rm e2e/.keys/e2e-1.json
 
       - name: Read back the saved signing key
+        id: readback
         if: steps.restore.outputs.cache-hit != 'true'
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
         with:
           path: e2e/.keys/e2e-1.json
-          key: e2e-signing-key-v1
+          key: e2e-signing-key-v2
+
+      - name: Wait for another run to finish saving the signing key
+        if: steps.restore.outputs.cache-hit != 'true' && steps.readback.outputs.cache-hit != 'true'
+        run: sleep 30
+
+      - name: Read back the signing key another run saved
+        if: steps.restore.outputs.cache-hit != 'true' && steps.readback.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
+        with:
+          path: e2e/.keys/e2e-1.json
+          key: e2e-signing-key-v2
           fail-on-cache-miss: true
 
       - name: Print the public key fingerprint
