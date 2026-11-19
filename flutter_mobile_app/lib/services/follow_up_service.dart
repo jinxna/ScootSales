@@ -138,27 +138,26 @@ class FollowUpService {
   }
 
   Future<List<Map<String, dynamic>>> _readAndSave(String uid) async {
-    final QuerySnapshot<Map<String, dynamic>> snapshot = await _db
+    final Query<Map<String, dynamic>> own = _db
         .collection('conversation_outcomes')
-        .where('salesmanUid', isEqualTo: uid)
+        .where('salesmanUid', isEqualTo: uid);
+    final QuerySnapshot<Map<String, dynamic>> snapshot = await own
         .where('followUpStatus', isEqualTo: FollowUpStatus.open.name)
         .orderBy('followUpDate')
         .limit(_readLimit)
         .get()
         .timeout(_readTimeout);
-    final List<Map<String, dynamic>> read = <Map<String, dynamic>>[
-      for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
-          in snapshot.docs)
-        if (FollowUpPromise.fromOutcome(<String, dynamic>{
-              ...doc.data(),
-              'outcomeId': doc.id,
-            })
-            case final FollowUpPromise promise)
-          promise.toMap(),
-    ];
     if (snapshot.metadata.isFromCache) {
-      return <Map<String, dynamic>>[...await _saved(uid), ...read];
+      final QuerySnapshot<Map<String, dynamic>> cached = await own
+          .orderBy('followUpDate')
+          .limit(_readLimit)
+          .get(const GetOptions(source: Source.cache));
+      return <Map<String, dynamic>>[
+        ...await _saved(uid),
+        ..._promiseRows(cached),
+      ];
     }
+    final List<Map<String, dynamic>> read = _promiseRows(snapshot);
     final List<Map<String, dynamic>> open = <Map<String, dynamic>>[
       for (final Map<String, dynamic> row in read)
         if (row['followUpStatus'] == FollowUpStatus.open.name) row,
@@ -166,6 +165,18 @@ class FollowUpService {
     await _save(uid, open);
     return open;
   }
+
+  static List<Map<String, dynamic>> _promiseRows(
+    QuerySnapshot<Map<String, dynamic>> snapshot,
+  ) => <Map<String, dynamic>>[
+    for (final QueryDocumentSnapshot<Map<String, dynamic>> doc in snapshot.docs)
+      if (FollowUpPromise.fromOutcome(<String, dynamic>{
+            ...doc.data(),
+            'outcomeId': doc.id,
+          })
+          case final FollowUpPromise promise)
+        promise.toMap(),
+  ];
 
   Future<void> _save(String uid, List<Map<String, dynamic>> rows) =>
       _store.write(uid, storeName, jsonEncode(rows));
