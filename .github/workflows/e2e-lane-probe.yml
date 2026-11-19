@@ -1,0 +1,57 @@
+name: E2E lane probe
+
+on:
+  push:
+    branches: [ci-probe]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Lane probe (${{ matrix.lanes }} lanes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        lanes: [1, 2, 3]
+    env:
+      PROBE_FLOWS: v5_mail_delivery,v4_order_sync,complete_answers,idle_workspace_scope,copilot_server,route_correction,order_history_paging,route_plan_visit,v4_suspension,bm_route_view_only,copilot_focus_deeplink,catalogue_import_barcode
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - uses: ./.github/actions/e2e-setup
+
+      - name: Build both web apps against the emulators
+        run: npm run e2e:build
+
+      - name: Run the same flows on ${{ matrix.lanes }} lane(s)
+        run: bash scripts/ci_lanes.sh "${{ matrix.lanes }}" "${PROBE_FLOWS}"
+
+      - name: Show each lane log
+        if: always()
+        run: |
+          for log in e2e/output/lane*.log; do
+            echo "::group::${log}"
+            cat "${log}"
+            echo "::endgroup::"
+          done
+
+      - name: Write the step summary
+        if: always()
+        run: python3 scripts/ci_lane_report.py --summary e2e/output >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the lane results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: lane-probe-${{ matrix.lanes }}
+          path: |
+            e2e/output/wall.json
+            e2e/output/lane*.log
+            e2e/output/**/result.json
+            e2e/output/**/error.txt
+          if-no-files-found: warn
+          retention-days: 14
