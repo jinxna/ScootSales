@@ -47,7 +47,16 @@ function shardOf(files) {
   return shards[index - 1].files.sort();
 }
 
+function namedFlows(names) {
+  return names.split(',').map((name) => {
+    const file = `${name.trim()}.spec.cjs`;
+    if (!fs.existsSync(path.join(FLOWS_DIR, file))) throw new Error('E2E_FLOWS names a flow that does not exist: ' + name);
+    return file;
+  });
+}
+
 function listFlows(filter) {
+  if (process.env.E2E_FLOWS && !filter) return namedFlows(process.env.E2E_FLOWS);
   const files = fs.readdirSync(FLOWS_DIR)
     .filter((f) => f.endsWith('.spec.cjs') && (filter ? f.includes(filter) : runnerOf(f) === RUNNER))
     .sort();

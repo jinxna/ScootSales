@@ -1,6 +1,11 @@
 name: End-to-end setup
 description: Install the toolchain and dependencies the end-to-end flows need.
 
+inputs:
+  flutter:
+    description: Install Flutter. Jobs that restore their web builds do not need it.
+    default: "true"
+
 runs:
   using: composite
   steps:
@@ -25,6 +30,7 @@ runs:
         cache: npm
 
     - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+      if: inputs.flutter == 'true'
       with:
         channel: stable
         flutter-version: "3.41.7"
