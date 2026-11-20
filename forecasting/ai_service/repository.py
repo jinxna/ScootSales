@@ -27,6 +27,7 @@ from .visit_briefs import build_visit_briefs
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MAX_ORDERS = 5000
 MAX_SCORECARD_ORDERS = 10000
+MAX_SCORECARD_OUTCOMES = 10000
 MAX_PRODUCTS = 2000
 MAX_RETAILERS = 2000
 MAX_USERS = 1000
@@ -747,6 +748,22 @@ class FirestoreAiRepository:
     def read_scorecard_orders(
         self, *, as_of: date, read_weeks: int
     ) -> list[dict[str, Any]]:
+        return self._read_scorecard_window(
+            "orders", "scorecard orders", MAX_SCORECARD_ORDERS,
+            as_of=as_of, read_weeks=read_weeks,
+        )
+
+    def read_scorecard_outcomes(
+        self, *, as_of: date, read_weeks: int
+    ) -> list[dict[str, Any]]:
+        return self._read_scorecard_window(
+            "conversation_outcomes", "scorecard outcomes", MAX_SCORECARD_OUTCOMES,
+            as_of=as_of, read_weeks=read_weeks,
+        )
+
+    def _read_scorecard_window(
+        self, collection: str, label: str, cap: int, *, as_of: date, read_weeks: int
+    ) -> list[dict[str, Any]]:
         from google.cloud.firestore_v1.base_query import FieldFilter
 
         current_week = week_start(as_of)
@@ -756,8 +773,8 @@ class FirestoreAiRepository:
             tzinfo=ASIA_KUCHING,
         )
         end_local = datetime.combine(current_week, time.min, tzinfo=ASIA_KUCHING)
-        orders = _rows(
-            self.client.collection("orders")
+        rows = _rows(
+            self.client.collection(collection)
             .where(
                 filter=FieldFilter(
                     "submittedAt", ">=", start_local.astimezone(timezone.utc)
@@ -769,10 +786,10 @@ class FirestoreAiRepository:
                 )
             )
             .order_by("submittedAt", direction="DESCENDING")
-            .limit(MAX_SCORECARD_ORDERS + 1)
+            .limit(cap + 1)
             .stream()
         )
-        return _capped(orders, "scorecard orders", MAX_SCORECARD_ORDERS)
+        return _capped(rows, label, cap)
 
     def write_scorecard(
         self, rows: Iterable[tuple[str, Mapping[str, Any]]]

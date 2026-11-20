@@ -21,6 +21,7 @@ from .repository import (
     create_firestore_client,
 )
 from .scorecard import (
+    SCORECARD_WEEKS,
     ScorecardError,
     build_scorecard,
     scorecard_blocks,
@@ -188,7 +189,9 @@ def _run_scorecard(
             products=raw["products"],
             retailers=raw["retailers"],
             users=raw["users"],
-            outcomes=raw["conversation_outcomes"],
+            outcomes=repository.read_scorecard_outcomes(
+                as_of=as_of, read_weeks=SCORECARD_WEEKS
+            ),
             as_of=as_of,
             window=window,
         )

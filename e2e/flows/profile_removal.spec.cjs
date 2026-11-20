@@ -12,21 +12,17 @@ function expectEqual(actual, expected, what) {
   if (actual !== expected) throw new Error(`${what}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
 }
 
-async function typeCode(page, input, text) {
-  await input.click();
-  await page.keyboard.press('Control+A');
-  await page.keyboard.press('Backspace');
-  await page.keyboard.type(text, { delay: 20 });
+async function typeCode(page, input, text, what) {
+  await B.fillField(page, input, text, { shown: SHOWN }).catch((error) => {
+    throw new Error(`${what}: ${error.message}`);
+  });
 }
 
 async function checkCodeBox(t, s, input, label) {
-  await typeCode(s.page, input, TYPED);
-  expectEqual(await input.inputValue(), SHOWN, `${label}: typed lower case without dashes`);
+  await typeCode(s.page, input, TYPED, `${label}: typed lower case without dashes`);
   await t.shot(s, `${label}-code-typed`);
-  await typeCode(s.page, input, '9xjx-cnqc 6s0a');
-  expectEqual(await input.inputValue(), SHOWN, `${label}: typed with a dash and a space`);
-  await typeCode(s.page, input, `${TYPED}zzzz`);
-  expectEqual(await input.inputValue(), SHOWN, `${label}: longer than 12 characters`);
+  await typeCode(s.page, input, '9xjx-cnqc 6s0a', `${label}: typed with a dash and a space`);
+  await typeCode(s.page, input, `${TYPED}zzzz`, `${label}: longer than 12 characters`);
   await s.page.keyboard.press('Backspace');
   expectEqual(await input.inputValue(), '9XJX-CNQC-6S0', `${label}: one backspace`);
   await s.page.keyboard.press('Backspace');
@@ -47,7 +43,7 @@ async function checkCodeBox(t, s, input, label) {
   expectEqual(await input.inputValue(), '9XJC-NQC6-S0A', `${label}: backspace over a dash in the middle removes the character before it`);
   await s.page.keyboard.type('x', { delay: 20 });
   expectEqual(await input.inputValue(), '9XJX-CNQC-6S0A', `${label}: typing in the middle puts the character at the cursor`);
-  await typeCode(s.page, input, TYPED);
+  await typeCode(s.page, input, TYPED, `${label}: typed again at the end`);
   await t.shot(s, `${label}-code-final`);
 }
 

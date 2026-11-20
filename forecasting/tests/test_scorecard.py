@@ -375,6 +375,7 @@ class _FixedClock(datetime):
 class _Repository:
     enabled = False
     fail_scorecard_read = False
+    input_outcomes = OUTCOMES
     instances: list["_Repository"] = []
 
     def __init__(self, client):
@@ -400,7 +401,7 @@ class _Repository:
                 _orders(), as_of - timedelta(weeks=8), as_of + timedelta(days=1)
             ),
             **INPUTS,
-            "conversation_outcomes": OUTCOMES,
+            "conversation_outcomes": self.input_outcomes,
         }
 
     def write_generation(self, result):
@@ -419,6 +420,10 @@ class _Repository:
         return orders_between(
             _orders(), as_of - timedelta(weeks=read_weeks), as_of
         )
+
+    def read_scorecard_outcomes(self, *, as_of, read_weeks):
+        self.calls.append("read_scorecard_outcomes")
+        return OUTCOMES
 
     def write_scorecard(self, rows):
         self.calls.append("write_scorecard")
@@ -485,6 +490,21 @@ def test_scorecard_on_leaves_rankings_suggestions_and_briefs_identical(
         for _, row in on.scorecard_rows
     } == {("organization", "all"), ("branch", "B1"), ("salesman", "S1")}
     assert all(set(row) == {"scorecard"} for _, row in on.scorecard_rows)
+
+
+def test_scorecard_counts_reasons_from_its_own_window_read(monkeypatch) -> None:
+    _, complete = _run_job(monkeypatch, enabled=True)
+    monkeypatch.setattr(_Repository, "input_outcomes", [])
+    code, truncated = _run_job(monkeypatch, enabled=True)
+
+    assert code == 0
+    reasons = [
+        row["scorecard"].get("noSaleReasons") for _, row in truncated.scorecard_rows
+    ]
+    assert any(reasons)
+    assert reasons == [
+        row["scorecard"].get("noSaleReasons") for _, row in complete.scorecard_rows
+    ]
 
 
 def test_weekday_fact_changes_only_two_brief_fields(monkeypatch) -> None:
