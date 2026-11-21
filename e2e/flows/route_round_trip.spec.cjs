@@ -170,6 +170,11 @@ module.exports = {
         return boxes;
       };
       const inViewport = (box) => box && box.y >= 0 && box.y + box.height <= size.height;
+      await page.mouse.move(size.width / 3, size.height / 2);
+      for (let i = 0; i < 10 && inViewport(await endRow.boundingBox()); i += 1) {
+        await page.mouse.wheel(0, -600);
+        await page.waitForTimeout(250);
+      }
       const endBefore = await endRow.boundingBox();
       if (!endBefore) throw new Error('the end row has no box');
       if (inViewport(endBefore)) throw new Error(`the end row must start below the fold for this check, it is at y=${endBefore.y} of ${size.height}`);
