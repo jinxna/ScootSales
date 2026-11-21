@@ -51,6 +51,7 @@ def test_request_is_forced_and_carries_enums_and_the_key_only_in_a_header(fake):
     assert result["call"] == {"name": "set_item_status", "args": {"position": 2, "status": "in_review"}}
     request = seen["requests"][0]
     assert request["body"]["generationConfig"]["maxOutputTokens"] == gc.MAX_OUTPUT_TOKENS
+    assert request["body"]["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "minimal"}
     assert request["key"] == "secret-key" and "secret-key" not in request["path"]
     assert request["body"]["toolConfig"]["functionCallingConfig"]["mode"] == "ANY"
     declarations = request["body"]["tools"][0]["functionDeclarations"]

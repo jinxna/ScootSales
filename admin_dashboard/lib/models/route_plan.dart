@@ -84,6 +84,9 @@ class RouteStop {
   );
 
   RouteStop copyWith({
+    String? stopId,
+    String? dayId,
+    String? reason,
     int? sequence,
     String? arrival,
     String? departure,
@@ -93,8 +96,8 @@ class RouteStop {
     bool clearRetailerCoordinateSnapshot = false,
   }) {
     return RouteStop(
-      stopId: stopId,
-      dayId: dayId,
+      stopId: stopId ?? this.stopId,
+      dayId: dayId ?? this.dayId,
       retailerId: retailerId,
       retailerName: retailerName,
       address: address,
@@ -106,7 +109,7 @@ class RouteStop {
       legDistanceKm: legDistanceKm ?? this.legDistanceKm,
       travelMinutesFromPrevious:
           travelMinutesFromPrevious ?? this.travelMinutesFromPrevious,
-      reason: reason,
+      reason: reason ?? this.reason,
       score: score,
       status: status,
       retailerCoordinateSnapshot: clearRetailerCoordinateSnapshot
@@ -126,6 +129,97 @@ int _travelMinutesFromMap(Map<String, dynamic> map) {
   return estimateRouteTravelMinutes(_num(map['legDistanceKm']));
 }
 
+class RouteStartPoint {
+  const RouteStartPoint({
+    required this.name,
+    required this.lat,
+    required this.lng,
+  });
+
+  final String name;
+  final double lat;
+  final double lng;
+
+  Map<String, dynamic> toMap() => <String, dynamic>{
+    'name': name,
+    'lat': lat,
+    'lng': lng,
+  };
+
+  static RouteStartPoint? tryParse({
+    required Object? name,
+    required Object? lat,
+    required Object? lng,
+  }) {
+    final double? latitude = _optionalNum(lat);
+    final double? longitude = _optionalNum(lng);
+    if (latitude == null ||
+        longitude == null ||
+        !latitude.isFinite ||
+        !longitude.isFinite ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180 ||
+        (latitude == 0 && longitude == 0)) {
+      return null;
+    }
+    return RouteStartPoint(
+      name: _text(name, fallback: 'Start point'),
+      lat: latitude,
+      lng: longitude,
+    );
+  }
+
+  static RouteStartPoint? fromMap(Object? value) => value is Map
+      ? tryParse(name: value['name'], lat: value['lat'], lng: value['lng'])
+      : null;
+}
+
+class RouteFollowUpNotPlaced {
+  const RouteFollowUpNotPlaced({
+    required this.retailerId,
+    required this.retailerName,
+    required this.followUpDate,
+    this.choice = '',
+  });
+
+  static const String placed = 'placed';
+  static const String leftOut = 'left_out';
+
+  final String retailerId;
+  final String retailerName;
+  final String followUpDate;
+  final String choice;
+
+  RouteFollowUpNotPlaced withChoice(String value) => RouteFollowUpNotPlaced(
+    retailerId: retailerId,
+    retailerName: retailerName,
+    followUpDate: followUpDate,
+    choice: value,
+  );
+
+  Map<String, dynamic> toMap() => <String, dynamic>{
+    'retailerId': retailerId,
+    'retailerName': retailerName,
+    'followUpDate': followUpDate,
+    if (choice.isNotEmpty) 'choice': choice,
+  };
+
+  static List<RouteFollowUpNotPlaced> listFrom(Object? value) => value is List
+      ? <RouteFollowUpNotPlaced>[
+          for (final Object? row in value)
+            if (row is Map && _text(row['retailerId']).isNotEmpty)
+              RouteFollowUpNotPlaced(
+                retailerId: _text(row['retailerId']),
+                retailerName: _text(row['retailerName'], fallback: 'Retailer'),
+                followUpDate: _text(row['followUpDate']),
+                choice: _text(row['choice']),
+              ),
+        ]
+      : const <RouteFollowUpNotPlaced>[];
+}
+
 class RouteDay {
   const RouteDay({
     this.dayId = '',
@@ -137,6 +231,9 @@ class RouteDay {
     this.estimateSource = '',
     this.geometry = const <List<double>>[],
     this.geometrySource = '',
+    this.orderMethod = '',
+    this.returnLegDistanceKm = 0,
+    this.returnTravelMinutes = 0,
   });
 
   final String dayId;
@@ -149,6 +246,17 @@ class RouteDay {
 
   final List<List<double>> geometry;
   final String geometrySource;
+
+  final String orderMethod;
+  final double returnLegDistanceKm;
+  final int returnTravelMinutes;
+
+  int get travelMinutes =>
+      stops.fold<int>(
+        0,
+        (int sum, RouteStop stop) => sum + stop.travelMinutesFromPrevious,
+      ) +
+      returnTravelMinutes;
 
   Map<String, dynamic> toMap() => <String, dynamic>{
     'dayId': dayId,
@@ -163,6 +271,9 @@ class RouteDay {
         .map((List<double> p) => <String, double>{'lat': p[0], 'lng': p[1]})
         .toList(),
     if (geometrySource.isNotEmpty) 'geometrySource': geometrySource,
+    if (orderMethod.isNotEmpty) 'orderMethod': orderMethod,
+    if (returnLegDistanceKm > 0) 'returnLegDistanceKm': returnLegDistanceKm,
+    if (returnTravelMinutes > 0) 'returnTravelMinutes': returnTravelMinutes,
   };
 
   factory RouteDay.fromMap(Map<String, dynamic> map) {
@@ -203,6 +314,9 @@ class RouteDay {
       geometrySource: _text(
         map['geometrySource'] ?? map['routeGeometrySource'],
       ),
+      orderMethod: _text(map['orderMethod']),
+      returnLegDistanceKm: _num(map['returnLegDistanceKm']),
+      returnTravelMinutes: _num(map['returnTravelMinutes']).round(),
     );
   }
 
@@ -212,6 +326,9 @@ class RouteDay {
     String? estimateSource,
     List<List<double>>? geometry,
     String? geometrySource,
+    String? orderMethod,
+    double? returnLegDistanceKm,
+    int? returnTravelMinutes,
   }) {
     return RouteDay(
       dayId: dayId,
@@ -223,6 +340,9 @@ class RouteDay {
       estimateSource: estimateSource ?? this.estimateSource,
       geometry: geometry ?? this.geometry,
       geometrySource: geometrySource ?? this.geometrySource,
+      orderMethod: orderMethod ?? this.orderMethod,
+      returnLegDistanceKm: returnLegDistanceKm ?? this.returnLegDistanceKm,
+      returnTravelMinutes: returnTravelMinutes ?? this.returnTravelMinutes,
     );
   }
 }
@@ -253,6 +373,13 @@ class RoutePlan {
     this.planVersion = 1,
     this.isDemo = false,
     this.roadRouteNotes = const <String>[],
+    this.startPoint,
+    this.selectionMethod = '',
+    this.rankingId = '',
+    this.rankingWeekKey = '',
+    this.followUpsNotPlaced = const <RouteFollowUpNotPlaced>[],
+    this.approvedByUid = '',
+    this.publishedByUid = '',
     this.approvedAt,
     this.publishedAt,
     this.createdAt,
@@ -276,6 +403,19 @@ class RoutePlan {
 
   final String optimisationMethod;
   final List<RouteDay> days;
+  final RouteStartPoint? startPoint;
+  final String selectionMethod;
+  final String rankingId;
+  final String rankingWeekKey;
+  final List<RouteFollowUpNotPlaced> followUpsNotPlaced;
+  final String approvedByUid;
+  final String publishedByUid;
+
+  bool get predatesStartPoints =>
+      startPoint == null &&
+      days.any(
+        (RouteDay day) => day.stops.isNotEmpty && day.orderMethod.isEmpty,
+      );
 
   String get metricSourceMethod =>
       metricSourceMethodForDays(days, fallback: optimisationMethod);
@@ -365,6 +505,15 @@ class RoutePlan {
             },
     },
     'totalDistanceKm': totalDistanceKm,
+    if (startPoint != null) 'startPoint': startPoint!.toMap(),
+    if (selectionMethod.isNotEmpty) 'selectionMethod': selectionMethod,
+    if (rankingId.isNotEmpty) 'rankingId': rankingId,
+    if (rankingWeekKey.isNotEmpty) 'rankingWeekKey': rankingWeekKey,
+    if (followUpsNotPlaced.isNotEmpty)
+      'followUpsNotPlaced': <Map<String, dynamic>>[
+        for (final RouteFollowUpNotPlaced row in followUpsNotPlaced)
+          row.toMap(),
+      ],
     if (approvedAt != null) 'approvedAt': Timestamp.fromDate(approvedAt!),
     if (publishedAt != null) 'publishedAt': Timestamp.fromDate(publishedAt!),
   };
@@ -405,6 +554,15 @@ class RoutePlan {
         fallback: storedMethod,
       ),
       days: days,
+      startPoint: RouteStartPoint.fromMap(map['startPoint']),
+      selectionMethod: _text(map['selectionMethod']),
+      rankingId: _text(map['rankingId']),
+      rankingWeekKey: _text(map['rankingWeekKey']),
+      followUpsNotPlaced: RouteFollowUpNotPlaced.listFrom(
+        map['followUpsNotPlaced'],
+      ),
+      approvedByUid: _text(map['approvedByUid']),
+      publishedByUid: _text(map['publishedByUid']),
       approvedAt: _date(map['approvedAt']),
       publishedAt: _date(map['publishedAt']),
       createdAt: _date(map['createdAt']),
@@ -413,13 +571,15 @@ class RoutePlan {
   }
 
   RoutePlan copyWith({
+    String? id,
     String? status,
     List<RouteDay>? days,
     String? optimisationMethod,
+    List<RouteFollowUpNotPlaced>? followUpsNotPlaced,
   }) {
     final List<RouteDay> nextDays = days ?? this.days;
     return RoutePlan(
-      id: id,
+      id: id ?? this.id,
       weekStart: weekStart,
       weekEnd: weekEnd,
       status: status ?? this.status,
@@ -438,6 +598,13 @@ class RoutePlan {
       ),
       days: nextDays,
       roadRouteNotes: roadRouteNotes,
+      startPoint: startPoint,
+      selectionMethod: selectionMethod,
+      rankingId: rankingId,
+      rankingWeekKey: rankingWeekKey,
+      followUpsNotPlaced: followUpsNotPlaced ?? this.followUpsNotPlaced,
+      approvedByUid: approvedByUid,
+      publishedByUid: publishedByUid,
       approvedAt: approvedAt,
       publishedAt: publishedAt,
       createdAt: createdAt,

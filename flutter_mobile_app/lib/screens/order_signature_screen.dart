@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import 'order_confirmation_screen.dart';
 import 'draft_saved_screen.dart';
 import '../copilot/mobile_copilot_commands.dart';
 import '../copilot/mobile_copilot_page.dart';
+import '../models/assigned_route_plan.dart' show RetailerCoordinateSnapshot;
 import '../models/guided_visit_context.dart';
 import '../providers/auth_provider.dart';
 import '../providers/gps_provider.dart';
@@ -102,6 +104,50 @@ class SignatureOrderItem {
   });
 
   double get subtotal => orderQty * unitPrice;
+}
+
+Map<String, dynamic> submittedOrderLine(SignatureOrderItem item) =>
+    <String, dynamic>{
+      'name': item.productName,
+      'productName': item.productName,
+      if (item.productId.isNotEmpty) 'productId': item.productId,
+      if (item.barcode.isNotEmpty) 'barcode': item.barcode,
+      'packingSize': item.packingSize,
+      if (item.uom != null) 'uom': item.uom,
+      'maxOrderQty': item.maxOrderQty,
+      'price': item.unitPrice,
+      if (item.priceSource.isNotEmpty) 'priceSource': item.priceSource,
+      'qty': item.orderQty,
+      'expiry': item.orderedExpiry,
+      'department': item.department,
+      'departmentName': item.department,
+      'shelfBatches': item.shelfBatches
+          .where((batch) => (batch['qty'] as int? ?? 0) > 0)
+          .map((b) => {'qty': b['qty'], 'expiry': b['expiry']})
+          .toList(),
+      'remarks': item.remarks.trimRight(),
+    };
+
+const Set<String> submittedFieldsTheShopDoesNotSign = <String>{
+  'maxOrderQty',
+  'priceSource',
+};
+
+String signedLinesRecord(Iterable<SignatureOrderItem> departmentItems) {
+  final List<String> lines = <String>[
+    for (final SignatureOrderItem item in departmentItems)
+      if (item.orderQty > 0)
+        jsonEncode(<String, dynamic>{
+          for (final MapEntry<String, dynamic> field in submittedOrderLine(
+            item,
+          ).entries)
+            if (!submittedFieldsTheShopDoesNotSign.contains(field.key))
+              field.key: field.key == 'price'
+                  ? unitPriceCents(item.unitPrice)
+                  : field.value,
+        }),
+  ]..sort();
+  return jsonEncode(lines);
 }
 
 bool isOfflineFailure(Object error) =>
@@ -207,6 +253,8 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
   late final Map<String, List<Offset?>> _deptPoints;
   late final Map<String, bool> _deptSigned;
   late final Map<String, DateTime?> _deptSignedAt;
+  late final Map<String, String?> _deptSignedLines;
+  final Set<String> _deptChangedAfterSigning = <String>{};
 
   late final List<SignatureOrderItem> _orderItems;
   late final List<String> _activeDepartments;
@@ -241,6 +289,26 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
   DateTime? _limitsConfirmedAt;
   List<_PriceChange> _priceChanges = <_PriceChange>[];
 
+  RetailerCoordinateSnapshot? _plannerShopPin;
+
+  Future<void> _loadPlannerShopPin() async {
+    try {
+      final DocumentSnapshot<Map<String, dynamic>> retailer =
+          await FirebaseFirestore.instance
+              .collection('retailers')
+              .doc(_retailerId)
+              .get()
+              .timeout(const Duration(seconds: 6));
+      final Map<String, dynamic>? data = retailer.data();
+      if (data == null) return;
+      final RetailerCoordinateSnapshot? snapshot =
+          RetailerCoordinateSnapshot.fromRetailerRecord(_retailerId, data);
+      if (snapshot != null && snapshot.isVerified) _plannerShopPin = snapshot;
+    } catch (error) {
+      debugPrint('order_shop_pin_read failed: $error');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -254,6 +322,9 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
           savedSpecialRequest['selectedProductId']?.toString() ?? '';
     }
     _buildItems();
+    if (widget.guidedVisitContext == null && _retailerId.isNotEmpty) {
+      unawaited(_loadPlannerShopPin());
+    }
     _productLimitsRefresh = _refreshProductLimits();
     unawaited(_reviewPricesOnOpen());
     _buildDepartments();
@@ -313,6 +384,7 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
     _deptPoints = {for (final d in _activeDepartments) d: <Offset?>[]};
     _deptSigned = {for (final d in _activeDepartments) d: false};
     _deptSignedAt = {for (final d in _activeDepartments) d: null};
+    _deptSignedLines = {for (final d in _activeDepartments) d: null};
 
     final savedSigs = _draft?.signatures;
     if (savedSigs != null) {
@@ -334,8 +406,46 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
         _deptSignedAt[dept] = signedAtMs != null
             ? DateTime.fromMillisecondsSinceEpoch(signedAtMs)
             : null;
+        final Object? signedLines = entry['lines'];
+        _deptSignedLines[dept] = signedLines is String ? signedLines : null;
+        if (entry['changedAfterSigning'] == true) {
+          _deptChangedAfterSigning.add(dept);
+        }
       }
+      if (_unsignChangedDepartments()) _persistSignOffState();
     }
+  }
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(() {
+      fn();
+      _unsignChangedDepartments();
+    });
+  }
+
+  String _signedLinesKey(String dept) => signedLinesRecord(
+    _byDepartment[dept] ?? const <SignatureOrderItem>[],
+  );
+
+  bool _unsignChangedDepartments() {
+    bool changed = false;
+    for (final String dept in _activeDepartments) {
+      if (_deptSigned[dept] != true) continue;
+      if (_deptSignedLines[dept] == null) {
+        _deptSignedLines[dept] = _signedLinesKey(dept);
+        changed = true;
+        continue;
+      }
+      if (_deptSignedLines[dept] == _signedLinesKey(dept)) continue;
+      _deptPoints[dept]!.clear();
+      _deptSigned[dept] = false;
+      _deptSignedAt[dept] = null;
+      _deptSignedLines[dept] = null;
+      _deptChangedAfterSigning.add(dept);
+      changed = true;
+    }
+    return changed;
   }
 
   void _buildItems() {
@@ -405,7 +515,8 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
         productId: productId,
         barcode: raw['barcode']?.toString().trim() ?? '',
         packingSize: raw['packingSize'] as String? ?? '',
-        uom: uomOf(raw) ?? 'ctn',
+        uom:
+            uomOf(prior ?? const <String, dynamic>{}) ?? uomOf(raw) ?? 'ctn',
         maxOrderQty: maxQtyFor(raw),
         unitPrice:
             (prior?['price'] as num?)?.toDouble() ??
@@ -565,6 +676,7 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
       _deptPoints[dept]!.clear();
       _deptSigned[dept] = false;
       _deptSignedAt[dept] = null;
+      _deptSignedLines[dept] = null;
     });
     _scheduleSignatureAutosave();
   }
@@ -574,6 +686,8 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
       _deptPoints[dept]!.add(box.globalToLocal(d.globalPosition));
       _deptSigned[dept] = true;
       _deptSignedAt[dept] ??= DateTime.now();
+      _deptSignedLines[dept] = _signedLinesKey(dept);
+      _deptChangedAfterSigning.remove(dept);
     });
     _signatureCacheDirty = true;
     _restartAutosaveTimer();
@@ -636,6 +750,9 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
           }).toList(),
           'signed': _deptSigned[dept] ?? false,
           'signedAt': _deptSignedAt[dept]?.millisecondsSinceEpoch,
+          'lines': _deptSignedLines[dept] ?? '',
+          if (_deptChangedAfterSigning.contains(dept))
+            'changedAfterSigning': true,
         },
     };
   }
@@ -802,7 +919,8 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
     }
   }
 
-  String _formatTimestamp(DateTime dt) {
+  String _formatTimestamp(DateTime instant) {
+    final DateTime dt = instant.toUtc().add(const Duration(hours: 8));
     final date =
         '${dt.day.toString().padLeft(2, '0')}/'
         '${dt.month.toString().padLeft(2, '0')}/'
@@ -954,11 +1072,18 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
     };
   }
 
-  Future<void> _writeOrderTracking(
+  Future<void> _writeOrderTrackingAfter(
+    Future<void> orderCommit,
     FirebaseFirestore firestore,
     String orderId,
     Map<String, dynamic> trackingData,
   ) async {
+    try {
+      await orderCommit;
+    } catch (error) {
+      debugPrint('Order tracking skipped, the order was not saved: $error');
+      return;
+    }
     try {
       await firestore.collection('gps_tracking').doc('order_$orderId').set(
         <String, dynamic>{
@@ -1019,16 +1144,21 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
 
     final DeviceLocationFix fix = _fixFromPosition(position);
     final GuidedVisitContext? visit = widget.guidedVisitContext;
-    final ArrivalLocationAssessment? assessment = visit == null
+    final RetailerCoordinateSnapshot? pin = _plannerShopPin;
+    final ({double latitude, double longitude})? shop = visit != null
+        ? (latitude: visit.retailerLatitude, longitude: visit.retailerLongitude)
+        : pin == null
+        ? null
+        : (latitude: pin.latitude!, longitude: pin.longitude!);
+    final ArrivalLocationAssessment? assessment = shop == null
         ? null
         : ArrivalLocationAssessment.assess(
             fix: fix,
-            retailerLatitude: visit.retailerLatitude,
-            retailerLongitude: visit.retailerLongitude,
+            retailerLatitude: shop.latitude,
+            retailerLongitude: shop.longitude,
             now: now,
           );
-    final bool usable =
-        assessment?.isVerified ?? isReliableForegroundFix(fix, now: now);
+    final bool usable = isReliableForegroundFix(fix, now: now);
     final String mode = assessment?.isVerified == true
         ? 'location_verified'
         : usable
@@ -1187,16 +1317,9 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
       return;
     }
     setState(() {
-      final Set<String> resign = <String>{};
       for (final _PriceChange change in _priceChanges) {
         change.item.unitPrice = change.newPrice!;
         change.item.priceSource = change.source;
-        resign.add(change.item.department);
-      }
-      for (final String dept in resign) {
-        _deptPoints[dept]?.clear();
-        _deptSigned[dept] = false;
-        _deptSignedAt[dept] = null;
       }
       _priceChanges = <_PriceChange>[];
     });
@@ -1492,9 +1615,21 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
 
     final submittedAt = DateTime.now();
     final position = locationAllowed ? await _tryGetSubmitPosition() : null;
+    if (!hasInFlightOrderCommit &&
+        (_unsignChangedDepartments() || !_allSigned)) {
+      _persistSignOffState();
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Changed after signing. Ask the shop to sign again.'),
+        ),
+      );
+      return;
+    }
     final Map<String, dynamic> positionFields = _orderLocationFields(
       position,
-      now: submittedAt,
+      now: DateTime.now(),
       disabledByUser: !locationAllowed,
     );
     final bool usablePosition = positionFields.containsKey('location');
@@ -1513,28 +1648,7 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
 
     final activeItems = _orderItems.where((item) => item.orderQty > 0).toList();
     final List<Map<String, dynamic>> serialisedItems = activeItems
-        .map<Map<String, dynamic>>(
-          (item) => <String, dynamic>{
-            'name': item.productName,
-            'productName': item.productName,
-            if (item.productId.isNotEmpty) 'productId': item.productId,
-            if (item.barcode.isNotEmpty) 'barcode': item.barcode,
-            'packingSize': item.packingSize,
-            if (item.uom != null) 'uom': item.uom,
-            'maxOrderQty': item.maxOrderQty,
-            'price': item.unitPrice,
-            if (item.priceSource.isNotEmpty) 'priceSource': item.priceSource,
-            'qty': item.orderQty,
-            'expiry': item.orderedExpiry,
-            'department': item.department,
-            'departmentName': item.department,
-            'shelfBatches': item.shelfBatches
-                .where((batch) => (batch['qty'] as int? ?? 0) > 0)
-                .map((b) => {'qty': b['qty'], 'expiry': b['expiry']})
-                .toList(),
-            'remarks': item.remarks,
-          },
-        )
+        .map<Map<String, dynamic>>(submittedOrderLine)
         .toList();
 
     final String? orderValidationError = OrderSubmissionContract.validateItems(
@@ -1824,7 +1938,9 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
       _pendingOrderCommit = commit;
       unawaited(issueSpecialRequest());
       if (trackingLocationFields.isNotEmpty) {
-        unawaited(_writeOrderTracking(firestore, orderId, trackingData));
+        unawaited(
+          _writeOrderTrackingAfter(commit, firestore, orderId, trackingData),
+        );
       }
 
       try {
@@ -2956,6 +3072,20 @@ class _OrderSignatureScreenState extends State<OrderSignatureScreen>
                     ),
                   ),
                 ],
+              ),
+            ),
+
+          if (_deptChangedAfterSigning.isNotEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                'Changed after signing. Ask the shop to sign again.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: kMissedText,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
 

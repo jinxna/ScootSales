@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-import inspect
+import datetime as datetime_module
+import sys
+import time
+from datetime import date, datetime
 
 import pytest
 
@@ -149,12 +152,58 @@ def test_from_dict_refuses_an_unknown_contract_version() -> None:
         OperationalForecast.from_dict(payload)
 
 
-def test_builder_is_deterministic_and_never_reads_a_clock() -> None:
+def test_builder_is_deterministic() -> None:
     assert _record(INTERMITTENT) == _record(INTERMITTENT)
-    source = inspect.getsource(forecast_contract)
-    assert "datetime.now" not in source
-    assert "utcnow" not in source
-    assert "time(" not in source
+
+
+def test_builder_never_reads_a_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("the forecast builder read a clock")
+
+    class NoClockDatetime(datetime):
+        now = classmethod(refuse)
+        utcnow = classmethod(refuse)
+        today = classmethod(refuse)
+
+    class NoClockDate(date):
+        today = classmethod(refuse)
+
+    with_dates = _record(INTERMITTENT)
+    core_modules = [
+        module
+        for name, module in list(sys.modules.items())
+        if name.startswith("forecasting.ai_core") and module is not None
+    ]
+    wall_clocks = [
+        getattr(time, name)
+        for name in ("time", "time_ns", "localtime", "gmtime", "ctime", "asctime", "strftime")
+    ]
+
+    def reads_a_clock(value: object) -> bool:
+        if any(value is wall_clock for wall_clock in wall_clocks):
+            return True
+        return getattr(value, "__self__", None) in (datetime, date) and getattr(
+            value, "__name__", ""
+        ) in ("now", "utcnow", "today")
+
+    for module in [datetime_module, time, *core_modules]:
+        for name, value in list(vars(module).items()):
+            if value is datetime:
+                monkeypatch.setattr(module, name, NoClockDatetime)
+            elif value is date:
+                monkeypatch.setattr(module, name, NoClockDate)
+            elif reads_a_clock(value):
+                monkeypatch.setattr(module, name, refuse)
+    assert forecast_contract.datetime is NoClockDatetime
+    assert time.time is refuse
+
+    assert _record(INTERMITTENT) == with_dates
+    without_dates = build_operational_forecast(INTERMITTENT, product_id="P001")
+    assert (
+        without_dates.period_start,
+        without_dates.data_cutoff,
+        without_dates.generated_at,
+    ) == ("", "", "")
 
 
 def test_value_layer_consumes_the_supplied_record() -> None:

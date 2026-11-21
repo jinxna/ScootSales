@@ -475,6 +475,19 @@ def install_client_routes(
             service.remove_account(admin_context(workspace, who), uid, key), headers=_NO_STORE
         )
 
+    @app.post("/v1/w/{workspace}/profiles/{doc_id}/remove")
+    def remove_profile(
+        workspace: str,
+        doc_id: str,
+        who: auth.ClientIdentity = Depends(identity),
+        idempotency_key: str | None = Header(default=None),
+    ) -> JSONResponse:
+        key = _idempotency(idempotency_key)
+        service = invitation_service(needs_secret=False)
+        return JSONResponse(
+            service.remove_profile(admin_context(workspace, who), doc_id, key), headers=_NO_STORE
+        )
+
     def plan_and_usage(ctx: TenantContext, *, admin_checked: bool = False) -> tuple[dict[str, Any], dict[str, int]]:
         access = access_for(ctx.record["location"])
         if not admin_checked:

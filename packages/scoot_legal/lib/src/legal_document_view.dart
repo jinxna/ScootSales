@@ -41,37 +41,6 @@ class _LegalDocumentViewState extends State<LegalDocumentView> {
     }
   }
 
-  Widget _statusBadge(ThemeData theme, String status) {
-    final ColorScheme scheme = theme.colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: scheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(
-            Icons.warning_amber_rounded,
-            size: 18,
-            color: scheme.onTertiaryContainer,
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              status,
-              style: TextStyle(
-                color: scheme.onTertiaryContainer,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _sectionIndex(ThemeData theme, LegalText text) {
     return SizedBox(
       width: 260,
@@ -119,8 +88,6 @@ class _LegalDocumentViewState extends State<LegalDocumentView> {
             text.versionLine,
             style: TextStyle(color: scheme.onSurfaceVariant),
           ),
-          const SizedBox(height: 12),
-          _statusBadge(theme, text.status),
           const SizedBox(height: 24),
           for (int i = 0; i < text.sections.length; i++) ...<Widget>[
             Semantics(

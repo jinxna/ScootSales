@@ -5,6 +5,28 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'catalogue_product_availability.dart';
 import 'quantity_unit.dart';
 
+class PurchaseOrderSourceGone implements Exception {
+  const PurchaseOrderSourceGone();
+
+  @override
+  String toString() => 'The order for this purchase order was deleted.';
+}
+
+Future<Map<String, dynamic>> readPurchaseOrderSource(
+  Future<DocumentSnapshot<Map<String, dynamic>>> Function() read,
+) async {
+  final DocumentSnapshot<Map<String, dynamic>> snapshot;
+  try {
+    snapshot = await read();
+  } on FirebaseException catch (error) {
+    if (error.code == 'permission-denied') {
+      throw const PurchaseOrderSourceGone();
+    }
+    rethrow;
+  }
+  return snapshot.data() ?? (throw const PurchaseOrderSourceGone());
+}
+
 class CanonicalCommercialLine {
   const CanonicalCommercialLine({
     required this.productId,

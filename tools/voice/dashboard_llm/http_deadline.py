@@ -66,10 +66,12 @@ def _give(key: tuple, connection: http.client.HTTPConnection) -> None:
 
 def _exchange(connection: http.client.HTTPConnection, reused: bool, key: tuple, request: urllib.request.Request,
               url: urllib.parse.SplitResult, end: float) -> Reply:
+    phase = ['connect']
+
     def remaining() -> float:
         value = end - time.monotonic()
         if value <= 0:
-            raise TimeoutError('Upstream request deadline exceeded')
+            raise TimeoutError(f'Upstream request deadline exceeded phase={phase[0]}')
         return value
 
     active_socket = [connection.sock]
@@ -101,13 +103,16 @@ def _exchange(connection: http.client.HTTPConnection, reused: bool, key: tuple, 
             connection.timeout = remaining()
             connection.connect()
         active_socket[0] = connection.sock
+        phase[0] = 'send'
         active_socket[0].settimeout(remaining())
         path = urllib.parse.urlunsplit(('', '', url.path or '/', url.query, ''))
         connection.request(request.get_method(), path, body=request.data, headers=dict(request.header_items()))
         sent = True
+        phase[0] = 'wait'
         active_socket[0].settimeout(remaining())
         response = connection.getresponse()
         answered = True
+        phase[0] = 'read'
         remaining()
         chunks = []
         size = 0
@@ -129,9 +134,9 @@ def _exchange(connection: http.client.HTTPConnection, reused: bool, key: tuple, 
             raise urllib.error.HTTPError(request.full_url, response.status, response.reason,
                                          response.headers, io.BytesIO(body))
         return Reply(response.status, body, response.headers)
-    except (OSError, http.client.HTTPException):
-        if expired.is_set() or time.monotonic() >= end:
-            raise TimeoutError('Upstream request deadline exceeded') from None
+    except (OSError, http.client.HTTPException) as error:
+        if expired.is_set() or (isinstance(error, TimeoutError) and error.errno is None) or time.monotonic() >= end:
+            raise TimeoutError(f'Upstream request deadline exceeded phase={phase[0]}') from None
         if reused and not answered and (not sent or request.get_method() == 'GET'):
             raise _StaleConnection from None
         raise
@@ -166,5 +171,5 @@ def request_bytes(request: urllib.request.Request, *, timeout: float,
             pass
     connection_type = http.client.HTTPSConnection if url.scheme == 'https' else http.client.HTTPConnection
     if end - time.monotonic() <= 0:
-        raise TimeoutError('Upstream request deadline exceeded')
+        raise TimeoutError('Upstream request deadline exceeded phase=connect')
     return _exchange(connection_type(url.hostname, url.port, timeout=end - time.monotonic()), False, key, request, url, end)

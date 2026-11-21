@@ -44,6 +44,10 @@ FLOW_DIR = "e2e/flows"
 CLOCK_SHIFT = re.compile(r"shiftDeviceClock\(")
 FLOW_SUFFIXES = {".js", ".cjs", ".mjs"}
 CLOCK_SHIFT_LIMIT = 1
+E2E_LIB_DIR = "e2e/lib"
+TYPING_HELPER = "e2e/lib/browser.cjs"
+CLEAR_BY_HAND = re.compile(r"keyboard\.press\(\s*['\"](?:Control|Meta)\+A['\"]")
+CLEAR_BY_HAND_LIMIT = 2
 
 ASSISTANT_NAME_DIRS = [
     "admin_dashboard/lib",
@@ -463,6 +467,15 @@ def run(root: Path) -> list[str]:
         problems += [f"{path}: {count} of {total} phone clock shifts in e2e/flows, limit {CLOCK_SHIFT_LIMIT}; "
                      "the rules refuse a phone clock more than 10 minutes off, so on a Sunday use mobile.routeDayForSunday(db, plan)"
                      for path, count in shifts.items() if count]
+    e2e_scripts = flows + sorted(p for p in (root / E2E_LIB_DIR).rglob("*")
+                                 if p.is_file() and p.suffix in FLOW_SUFFIXES and p != root / TYPING_HELPER)
+    clears = {path: len(CLEAR_BY_HAND.findall(path.read_text(encoding="utf-8", errors="replace"))) for path in e2e_scripts}
+    total_clears = sum(clears.values())
+    if total_clears > CLEAR_BY_HAND_LIMIT:
+        problems += [f"{path}: {count} of {total_clears} hand-made select-all-and-type steps in e2e, limit {CLEAR_BY_HAND_LIMIT}; "
+                     "Flutter web can drop the first typed key, so use B.fillField(page, locator, text, { shown }) "
+                     "from e2e/lib/browser.cjs, which retries and records a typing trace"
+                     for path, count in clears.items() if count]
     name_sources = [root / rel for rel in ASSISTANT_NAME_DIRS] + sorted(root.glob(ASSISTANT_NAME_PACKAGE_GLOB))
     name_files = [root / rel for rel in ASSISTANT_NAME_FILES if (root / rel).is_file()]
     for source in name_sources:

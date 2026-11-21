@@ -19,7 +19,7 @@ module.exports = {
     let server;
     let adminS;
     let live;
-    const UNAVAILABLE = 'Assistant is not available now. Try again later.';
+    const UNAVAILABLE = 'The assistant did not answer this time. Ask again, or try one of these.';
     const CLIENT_TIMEOUT_MS = 10000;
 
     const panel = () => adminS.page.getByRole('group', { name: /^Scout panel/ });
@@ -146,7 +146,8 @@ module.exports = {
         await B.see(adminS.page, /items need attention most/);
         expectEqual(server.requests.length, 1, 'interpret requests');
         expectEqual([...server.requests[0].actions].sort(),
-          ['daily_briefing', 'explain_item', 'export_results', 'search_orders', 'set_item_status'], 'actions offered');
+          ['brief_retailer', 'daily_briefing', 'due_overview', 'explain_item', 'export_results', 'no_route', 'open_planner', 'route_why',
+            'salesperson_visits', 'search_orders', 'set_item_status'], 'actions offered');
       });
 
       await t.step('the model can ask for an explanation by item number', async () => {
@@ -231,6 +232,18 @@ module.exports = {
         await say('somewhere to see what customers sent us');
         await B.see(adminS.page, /Opened All Orders/);
       });
+
+      for (const [phrase, label] of [['refresh inventory', 'Products'], ['is there a report for returns', 'Reports']]) {
+        await t.step(`"${phrase}" reaches the model, which picks ${label}, and the page opens`, async () => {
+          await waitForSettledFocus();
+          const before = server.requests.length;
+          await askModel(phrase);
+          expectEqual(server.requests[before].text, phrase, 'text sent to the model');
+          await B.see(adminS.page, new RegExp(`^Opened ${label}\\.$`));
+          await adminS.page.getByRole('button', { name: new RegExp(`^${label}, current page`) }).first().waitFor({ timeout: 20000 });
+          await t.shot(adminS, `model-opened-${label.toLowerCase()}`);
+        });
+      }
 
       await t.step('a busy server and an unknown sentence give plain answers', async () => {
         await waitForSettledFocus();

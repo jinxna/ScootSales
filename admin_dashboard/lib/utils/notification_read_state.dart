@@ -29,6 +29,16 @@ class NotificationReadState {
   }
 }
 
+int unreadNotificationCount(
+  Iterable<Map<String, dynamic>> notifications,
+  NotificationReadState? state,
+) => notifications
+    .where(
+      (Map<String, dynamic> notification) =>
+          !(state ?? const NotificationReadState()).isRead(notification),
+    )
+    .length;
+
 DateTime? notificationEventTimestamp(Map<String, dynamic> notification) {
   for (final String field in const <String>[
     'createdAt',

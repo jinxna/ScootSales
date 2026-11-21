@@ -744,9 +744,26 @@ class _SettingToggle extends StatelessWidget {
   }
 }
 
-class _SignOutButton extends StatelessWidget {
+class _SignOutButton extends StatefulWidget {
+  @override
+  State<_SignOutButton> createState() => _SignOutButtonState();
+}
+
+class _SignOutButtonState extends State<_SignOutButton> {
+  bool _checkingWork = false;
+
+  Future<bool> _hasWorkWhileBusy(HeldWorkSync sync, String uid) async {
+    if (mounted) setState(() => _checkingWork = true);
+    try {
+      return uid.isNotEmpty && await sync.hasWorkToUpload(uid);
+    } finally {
+      if (mounted) setState(() => _checkingWork = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final Color foreground = ScootColors.of(context).danger.foreground;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: SizedBox(
@@ -754,12 +771,12 @@ class _SignOutButton extends StatelessWidget {
         height: 54,
         child: ElevatedButton(
           onPressed: () async {
+            if (_checkingWork) return;
             final String uid = context.read<AuthProvider>().user?.uid ?? '';
             final HeldWorkSync sync = HeldWorkSync();
             final bool confirmed = await confirmSignOut(
               context,
-              hasWork: () async =>
-                  uid.isNotEmpty && await sync.hasWorkToUpload(uid),
+              hasWork: () => _hasWorkWhileBusy(sync, uid),
               upload: uploadWaitingWork,
             );
             if (!confirmed || !context.mounted) return;
@@ -778,11 +795,27 @@ class _SignOutButton extends StatelessWidget {
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: ScootColors.of(context).danger.background,
-            foregroundColor: ScootColors.of(context).danger.foreground,
+            foregroundColor: foreground,
             elevation: 0,
             side: BorderSide(color: ScootColors.of(context).danger.border),
           ),
-          child: const Text('Sign Out'),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_checkingWork) ...[
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: foreground,
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              const Text('Sign Out'),
+            ],
+          ),
         ),
       ),
     );

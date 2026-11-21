@@ -13,14 +13,29 @@ import '../utils/geo_field_utils.dart';
 import '../utils/order_data_utils.dart' show isOperationalRetailerRecord;
 import '../utils/retailer_readiness.dart';
 import '../utils/route_execution.dart';
+import '../utils/route_ranking_selection.dart';
 import '../utils/firestore_query_utils.dart';
 import '../utils/firestore_value_equality.dart';
 import '../utils/route_regions.dart';
 import '../utils/route_service_time_input.dart';
-import '../utils/route_travel_time.dart';
+import '../utils/route_stop_order.dart';
 import 'geoapify_config.dart';
 import 'geoapify_route_matrix_client.dart';
 import 'geoapify_routing_client.dart';
+
+const int kRouteAreaMinShops = 2;
+
+const String kPlacedWithNearestShops = 'Placed with the nearest shops.';
+const String kPlacedByManager = 'Placed by the manager.';
+const String kAddedByManager = 'Added by the manager.';
+
+String routeReasonMovedByManager(String reason) {
+  final String kept = reason.replaceAll(kPlacedWithNearestShops, '').trim();
+  if (kept.contains(kPlacedByManager) || kept.contains(kAddedByManager)) {
+    return kept;
+  }
+  return '$kept $kPlacedByManager'.trim();
+}
 
 class RoutePlanningService {
   Future<List<Map<String, dynamic>>> loadStopArrivalDocuments({
@@ -80,8 +95,6 @@ class RoutePlanningService {
 
   static const Distance _distance = DistanceHaversine(roundResult: false);
 
-  static const double _fallbackSpeedKmh = kRouteFallbackSpeedKmh;
-
   Future<RoutePlan> generateWeeklyRoute({
     required String salesmanUid,
     String salesmanCode = '',
@@ -96,20 +109,42 @@ class RoutePlanningService {
     int maxPerDay = 6,
     int serviceMinutes = 20,
     int workdayStartHour = 9,
-    LatLng? depot,
+    RouteStartPoint? depot,
+    void Function(String dayId, RouteLegTable table)? onLegTable,
     Map<String, ServiceTimeStat> learnedServiceTimes =
         const <String, ServiceTimeStat>{},
     Map<String, DateTime> lastVisitByRetailer = const <String, DateTime>{},
+    RouteRankingInput? ranking,
+    Map<String, int> usualOrderWeekdays = const <String, int>{},
+    Map<String, DateTime> followUpDates = const <String, DateTime>{},
+    Map<String, String> followUpRetailerNames = const <String, String>{},
   }) async {
     final DateTime monday = _mondayOf(weekStart);
-    final List<_Candidate> candidates = _scoreCandidates(
+    final LatLng? start = depot == null ? null : LatLng(depot.lat, depot.lng);
+    final List<_Candidate> scored = _scoreCandidates(
       retailers,
-      depot,
+      start,
       lastVisitByRetailer,
     );
+    final RouteRankingInput? usedRanking =
+        ranking != null &&
+            ranking.ranksAnyOf(scored.map((_Candidate c) => c.id))
+        ? ranking
+        : null;
+    final List<_Candidate> candidates = usedRanking == null
+        ? scored
+        : _inRankingOrder(scored, usedRanking);
 
     final int capacity = maxPerDay * 6;
-    final List<_Candidate> selected = candidates.take(capacity).toList();
+    bool followUpDue(_Candidate c) =>
+        routeFollowUpDayIndex(followUpDates[c.id], monday) != null;
+    final List<_Candidate> selected = <_Candidate>[
+      ...candidates.where(followUpDue),
+      ...candidates.where((_Candidate c) => !followUpDue(c)),
+    ].take(capacity).toList();
+    final Map<String, int> placeOf = <String, int>{
+      for (int i = 0; i < candidates.length; i++) candidates[i].id: i,
+    };
 
     final Map<String, int> effectiveServiceMinutesByRetailer =
         buildServiceMinutesByRetailer(
@@ -118,15 +153,53 @@ class RoutePlanningService {
           learnedServiceTimes: learnedServiceTimes,
         );
 
-    final List<List<_Candidate>> buckets = assignRegionDays<_Candidate>(
-      selected,
-      regionOf: (_Candidate c) => c.region,
-      scoreOf: (_Candidate c) => c.score,
-      preferredDaysOf: (_Candidate c) => c.preferredDays,
+    final List<List<_Candidate>> buckets = usedRanking == null
+        ? assignRegionDays<_Candidate>(
+            selected,
+            regionOf: (_Candidate c) => c.region,
+            scoreOf: (_Candidate c) => c.score,
+            preferredDaysOf: (_Candidate c) => c.preferredDays,
+            maxPerDay: maxPerDay,
+          )
+        : _rankedAreaDays(
+            selected,
+            ranking: usedRanking,
+            placeOf: placeOf,
+            maxPerDay: maxPerDay,
+          );
+    final List<RouteFollowUpNotPlaced> followUpsNotPlaced = _applyDayRules(
+      buckets,
+      placeOf: placeOf,
+      monday: monday,
       maxPerDay: maxPerDay,
+      usualOrderWeekdays: usualOrderWeekdays,
+      followUpDates: followUpDates,
     );
-
-    final LatLng anchor = depot ?? _centroid(selected);
+    final Set<String> accountedFor = <String>{
+      for (final List<_Candidate> bucket in buckets)
+        for (final _Candidate c in bucket) c.id,
+      for (final RouteFollowUpNotPlaced row in followUpsNotPlaced)
+        row.retailerId,
+    };
+    final Map<String, String> candidateNames = <String, String>{
+      for (final _Candidate c in candidates) c.id: c.name,
+    };
+    followUpDates.forEach((String retailerId, DateTime date) {
+      if (routeFollowUpDayIndex(date, monday) == null ||
+          !accountedFor.add(retailerId)) {
+        return;
+      }
+      followUpsNotPlaced.add(
+        RouteFollowUpNotPlaced(
+          retailerId: retailerId,
+          retailerName:
+              candidateNames[retailerId] ??
+              followUpRetailerNames[retailerId] ??
+              retailerId,
+          followUpDate: routeDateKey(date),
+        ),
+      );
+    });
 
     final List<RouteDay?> builtDays = List<RouteDay?>.filled(6, null);
     final List<String?> dayNotes = List<String?>.filled(6, null);
@@ -145,20 +218,22 @@ class RoutePlanningService {
         );
         return;
       }
-      late final _OrderedDay ordered;
-      if (_geoapifyClient.isConfigured) {
+      RouteLegTable? table;
+      final int pointCount = dayStops.length + (start == null ? 0 : 1);
+      if (_geoapifyClient.isConfigured && pointCount >= 2) {
         try {
-          ordered = await _orderDayByRoad(dayStops, anchor);
-        } catch (_) {
-          ordered = _orderDay(dayStops, anchor);
+          table = await _roadLegTable(dayStops, start);
+          onLegTable?.call(_dayIdFor(d), table);
+        } on GeoapifyRouteMatrixException catch (error) {
+          dayNotes[d] =
+              'Road times unavailable for ${_weekdayLabel(d)}: ${error.message}';
         }
-      } else {
-        ordered = _orderDay(dayStops, anchor);
       }
+      final _OrderedDay ordered = _orderDay(dayStops, start, table);
       _OrderedDay drawn = ordered;
-      if (_routingClient.isConfigured) {
+      if (_routingClient.isConfigured && pointCount >= 2) {
         try {
-          drawn = await _withRoadRoute(ordered, anchor);
+          drawn = await _withRoadRoute(ordered, start);
         } on GeoapifyRoutingException catch (error) {
           dayNotes[d] =
               'Road route unavailable for ${_weekdayLabel(d)}: ${error.message}';
@@ -218,12 +293,279 @@ class RoutePlanningService {
       optimisationMethod: method,
       days: days,
       roadRouteNotes: roadRouteNotes,
+      startPoint: depot,
+      selectionMethod: usedRanking == null ? '' : kRouteSelectionRankingOrder,
+      rankingId: usedRanking?.rankingId ?? '',
+      rankingWeekKey: usedRanking?.weekKey ?? '',
+      followUpsNotPlaced: followUpsNotPlaced,
     );
   }
 
+  List<List<_Candidate>> _rankedAreaDays(
+    List<_Candidate> selected, {
+    required RouteRankingInput ranking,
+    required Map<String, int> placeOf,
+    required int maxPerDay,
+  }) {
+    bool isRanked(_Candidate c) => ranking.rankByRetailer.containsKey(c.id);
+    final Map<String, int> areaSize = <String, int>{};
+    for (final _Candidate c in selected.where(isRanked)) {
+      areaSize[c.region] = (areaSize[c.region] ?? 0) + 1;
+    }
+    bool hasArea(_Candidate c) =>
+        c.region.trim().isNotEmpty &&
+        c.region != kUnzonedRegion &&
+        (areaSize[c.region] ?? 0) >= kRouteAreaMinShops;
+    final List<List<_Candidate>> buckets = assignRegionDays<_Candidate>(
+      selected.where((_Candidate c) => isRanked(c) && hasArea(c)).toList(),
+      regionOf: (_Candidate c) => c.region,
+      scoreOf: (_Candidate c) => -placeOf[c.id]!.toDouble(),
+      preferredDaysOf: (_Candidate c) => c.preferredDays,
+      maxPerDay: maxPerDay,
+    );
+    final int cap = maxPerDay <= 0 ? 1 : maxPerDay;
+    bool hasRoom(List<_Candidate> bucket) => bucket.length < cap;
+    double metresToDay(_Candidate c, List<_Candidate> bucket) => bucket
+        .map(
+          (_Candidate other) =>
+              _distance.as(LengthUnit.Meter, c.position, other.position),
+        )
+        .reduce((double a, double b) => a < b ? a : b);
+    for (final _Candidate c in selected.where(
+      (_Candidate c) => !isRanked(c) || !hasArea(c),
+    )) {
+      int nearestDay = -1;
+      double nearestMetres = double.infinity;
+      for (int d = 0; d < buckets.length; d++) {
+        if (buckets[d].isEmpty || !hasRoom(buckets[d])) continue;
+        final double metres = metresToDay(c, buckets[d]);
+        if (metres < nearestMetres) {
+          nearestMetres = metres;
+          nearestDay = d;
+        }
+      }
+      final int emptyDay = buckets.indexWhere(
+        (List<_Candidate> bucket) => bucket.isEmpty,
+      );
+      final int openDay = buckets.indexWhere(hasRoom);
+      final int day = nearestDay >= 0
+          ? nearestDay
+          : emptyDay >= 0
+          ? emptyDay
+          : openDay >= 0
+          ? openDay
+          : buckets.length - 1;
+      buckets[day].add(c);
+      c.reason = isRanked(c)
+          ? '${c.reason.trim()} $kPlacedWithNearestShops'.trim()
+          : '$kNotInWeeklyRanking. $kPlacedWithNearestShops';
+    }
+    return buckets;
+  }
+
+  int _nearestDayWithRoom(
+    List<List<_Candidate>> buckets, {
+    required int target,
+    required int cap,
+    required int fallback,
+  }) {
+    int nearest = fallback;
+    for (int d = 0; d < buckets.length; d++) {
+      if (buckets[d].length < cap &&
+          (d - target).abs() < (nearest - target).abs()) {
+        nearest = d;
+      }
+    }
+    return nearest;
+  }
+
+  List<RouteFollowUpNotPlaced> _applyDayRules(
+    List<List<_Candidate>> buckets, {
+    required Map<String, int> placeOf,
+    required DateTime monday,
+    required int maxPerDay,
+    required Map<String, int> usualOrderWeekdays,
+    required Map<String, DateTime> followUpDates,
+  }) {
+    final int cap = maxPerDay <= 0 ? 1 : maxPerDay;
+    final List<_Candidate> inPlaceOrder =
+        <_Candidate>[for (final List<_Candidate> bucket in buckets) ...bucket]
+          ..sort(
+            (_Candidate a, _Candidate b) =>
+                placeOf[a.id]!.compareTo(placeOf[b.id]!),
+          );
+    int? followUpDay(_Candidate c) =>
+        routeFollowUpDayIndex(followUpDates[c.id], monday);
+    int dayOf(_Candidate c) =>
+        buckets.indexWhere((List<_Candidate> bucket) => bucket.contains(c));
+
+    for (final _Candidate c in inPlaceOrder) {
+      final int? weekday = usualOrderWeekdays[c.id];
+      if (weekday == null || weekday < 1 || weekday > buckets.length) continue;
+      final int usual = weekday - 1;
+      c.reason = _withLabel(
+        c.reason,
+        'Usual order day: ${_weekdayLabel(usual)}',
+      );
+      if (followUpDay(c) != null) continue;
+      final int from = dayOf(c);
+      if (from == usual) continue;
+      if (buckets[usual].length < cap) {
+        buckets[from].remove(c);
+        buckets[usual].add(c);
+        continue;
+      }
+      final List<_Candidate> areaOnly =
+          buckets[usual]
+              .where(
+                (_Candidate other) =>
+                    followUpDay(other) == null &&
+                    usualOrderWeekdays[other.id] != weekday &&
+                    placeOf[other.id]! > placeOf[c.id]!,
+              )
+              .toList()
+            ..sort(
+              (_Candidate a, _Candidate b) =>
+                  placeOf[b.id]!.compareTo(placeOf[a.id]!),
+            );
+      if (areaOnly.isEmpty) continue;
+      final _Candidate displaced = areaOnly.first;
+      buckets[from].remove(c);
+      buckets[usual].remove(displaced);
+      buckets[usual].add(c);
+      final int moveTo = _nearestDayWithRoom(
+        buckets,
+        target: usual,
+        cap: cap,
+        fallback: from,
+      );
+      buckets[moveTo].add(displaced);
+    }
+
+    final List<RouteFollowUpNotPlaced> notPlaced = <RouteFollowUpNotPlaced>[];
+    for (final _Candidate c in inPlaceOrder) {
+      final int? target = followUpDay(c);
+      if (target == null) continue;
+      final DateTime date = followUpDates[c.id]!;
+      c.reason = _withLabel(c.reason, routeFollowUpLabel(date, monday));
+      final int from = dayOf(c);
+      if (from == target) continue;
+      if (buckets[target].length < cap) {
+        buckets[from].remove(c);
+        buckets[target].add(c);
+        continue;
+      }
+      final List<_Candidate> movable =
+          buckets[target]
+              .where((_Candidate other) => followUpDay(other) == null)
+              .toList()
+            ..sort(
+              (_Candidate a, _Candidate b) =>
+                  placeOf[b.id]!.compareTo(placeOf[a.id]!),
+            );
+      buckets[from].remove(c);
+      if (movable.isEmpty) {
+        notPlaced.add(
+          RouteFollowUpNotPlaced(
+            retailerId: c.id,
+            retailerName: c.name,
+            followUpDate: routeDateKey(date),
+          ),
+        );
+        continue;
+      }
+      final _Candidate displaced = movable.first;
+      buckets[target].remove(displaced);
+      buckets[target].add(c);
+      final int moveTo = _nearestDayWithRoom(
+        buckets,
+        target: target,
+        cap: cap,
+        fallback: from,
+      );
+      buckets[moveTo].add(displaced);
+    }
+    return notPlaced;
+  }
+
+  String _withLabel(String reason, String label) {
+    final String text = reason.trim();
+    if (text.toLowerCase().startsWith('prioritised:') && text.endsWith('.')) {
+      return '${text.substring(0, text.length - 1)}, $label.';
+    }
+    return text.isEmpty ? '$label.' : '$text $label.';
+  }
+
+  List<_Candidate> _inRankingOrder(
+    List<_Candidate> scored,
+    RouteRankingInput ranking,
+  ) {
+    final List<_Candidate> ranked =
+        scored
+            .where((_Candidate c) => ranking.rankByRetailer.containsKey(c.id))
+            .toList()
+          ..sort(
+            (_Candidate a, _Candidate b) => ranking.rankByRetailer[a.id]!
+                .compareTo(ranking.rankByRetailer[b.id]!),
+          );
+    final List<_Candidate> ordered = <_Candidate>[
+      ...ranked,
+      ...scored.where(
+        (_Candidate c) => !ranking.rankByRetailer.containsKey(c.id),
+      ),
+    ];
+    for (final _Candidate c in ordered) {
+      c.reason = ranking.reasonFor(c.id, c.reason);
+    }
+    return ordered;
+  }
+
+  RouteStop stopForRetailer(
+    Map<String, dynamic> retailer, {
+    required int dayIndex,
+    required Set<String> takenStopIds,
+    required String reason,
+  }) {
+    final List<_Candidate> one = _scoreCandidates(
+      <Map<String, dynamic>>[retailer],
+      null,
+      const <String, DateTime>{},
+    );
+    if (one.isEmpty) {
+      throw StateError('This shop has no coordinates.');
+    }
+    final _Candidate c = one.first;
+    return RouteStop(
+      stopId: freeStopId(dayIndex, c.id, takenStopIds),
+      dayId: dayIdFor(dayIndex),
+      retailerId: c.id,
+      retailerName: c.name,
+      address: c.address,
+      lat: c.position.latitude,
+      lng: c.position.longitude,
+      sequence: 0,
+      arrival: '',
+      departure: '',
+      legDistanceKm: 0,
+      reason: reason,
+      score: 0,
+      retailerCoordinateSnapshot: c.retailerCoordinateSnapshot,
+    );
+  }
+
+  String freeStopId(int dayIndex, String retailerId, Set<String> taken) {
+    int sequence = 1;
+    while (taken.contains(_stopIdFor(dayIndex, sequence, retailerId))) {
+      sequence++;
+    }
+    return _stopIdFor(dayIndex, sequence, retailerId);
+  }
+
+  String dayIdFor(int dayIndex) => _dayIdFor(dayIndex);
+
   Future<RouteDay> refreshRoadGeometry(
     RouteDay day, {
-    required LatLng anchor,
+    required RouteStartPoint? start,
     int serviceMinutes = 20,
     int workdayStartHour = 9,
     Map<String, ServiceTimeStat> learnedServiceTimes =
@@ -234,37 +576,46 @@ class RoutePlanningService {
       serviceMinutes: serviceMinutes,
       workdayStartHour: workdayStartHour,
       learnedServiceTimes: learnedServiceTimes,
+      start: start,
+      orderMethod: day.orderMethod,
     );
-    final GeoapifyRouteResult road = await _routingClient.route(<LatLng>[
-      anchor,
-      for (final RouteStop s in base.stops) LatLng(s.lat, s.lng),
-    ]);
+    final LatLng? startPosition = start == null
+        ? null
+        : LatLng(start.lat, start.lng);
+    final GeoapifyRouteResult road = await _roadRoute(
+      _roundTripWaypoints(<LatLng>[
+        for (final RouteStop s in base.stops) LatLng(s.lat, s.lng),
+      ], startPosition),
+    );
+    final _RoadLegs legs = _RoadLegs.read(
+      road,
+      base.stops.length,
+      startPosition,
+    );
     int clock = workdayStartHour * 60;
-    double totalKm = 0;
     final List<RouteStop> stops = <RouteStop>[];
     for (int i = 0; i < base.stops.length; i++) {
       final RouteStop s = base.stops[i];
-      final double km = road.legs[i].meters / 1000;
-      final int travel = (road.legs[i].seconds / 60).round();
-      totalKm += km;
-      clock += travel;
+      clock += legs.minutes[i];
       final String arrival = _hhmm(clock);
       clock += _minutesOf(s.departure) - _minutesOf(s.arrival);
       stops.add(
         s.copyWith(
           arrival: arrival,
           departure: _hhmm(clock),
-          legDistanceKm: double.parse(km.toStringAsFixed(2)),
-          travelMinutesFromPrevious: travel,
+          legDistanceKm: double.parse(legs.km[i].toStringAsFixed(2)),
+          travelMinutesFromPrevious: legs.minutes[i],
         ),
       );
     }
     return base.copyWith(
       stops: stops,
-      totalDistanceKm: double.parse(totalKm.toStringAsFixed(2)),
+      totalDistanceKm: double.parse(legs.totalKm.toStringAsFixed(2)),
       geometry: simplifyRoadGeometry(road.legs),
       geometrySource: 'geoapify_route',
       estimateSource: 'geoapify_routing',
+      returnLegDistanceKm: double.parse(legs.returnKm.toStringAsFixed(2)),
+      returnTravelMinutes: legs.returnMinutes,
     );
   }
 
@@ -275,19 +626,49 @@ class RoutePlanningService {
         : (int.tryParse(p[0]) ?? 0) * 60 + (int.tryParse(p[1]) ?? 0);
   }
 
-  Future<_OrderedDay> _withRoadRoute(_OrderedDay ordered, LatLng anchor) async {
-    final GeoapifyRouteResult road = await _routingClient.route(<LatLng>[
-      anchor,
-      for (final _Candidate c in ordered.ordered) c.position,
-    ]);
+  static List<LatLng> _roundTripWaypoints(List<LatLng> stops, LatLng? start) =>
+      <LatLng>[if (start != null) start, ...stops, if (start != null) start];
+
+  final Map<String, GeoapifyRouteLeg> _roadLegCache =
+      <String, GeoapifyRouteLeg>{};
+
+  static String _legKey(LatLng from, LatLng to) =>
+      '${from.latitude.toStringAsFixed(6)},${from.longitude.toStringAsFixed(6)}'
+      '>${to.latitude.toStringAsFixed(6)},${to.longitude.toStringAsFixed(6)}';
+
+  Future<GeoapifyRouteResult> _roadRoute(List<LatLng> waypoints) async {
+    final List<String> keys = <String>[
+      for (int i = 1; i < waypoints.length; i++)
+        _legKey(waypoints[i - 1], waypoints[i]),
+    ];
+    if (keys.isNotEmpty && keys.every(_roadLegCache.containsKey)) {
+      return GeoapifyRouteResult(<GeoapifyRouteLeg>[
+        for (final String key in keys) _roadLegCache[key]!,
+      ]);
+    }
+    final GeoapifyRouteResult road = await _routingClient.route(waypoints);
+    if (road.legs.length == keys.length) {
+      for (int i = 0; i < keys.length; i++) {
+        _roadLegCache[keys[i]] = road.legs[i];
+      }
+    }
+    return road;
+  }
+
+  Future<_OrderedDay> _withRoadRoute(_OrderedDay ordered, LatLng? start) async {
+    final GeoapifyRouteResult road = await _roadRoute(
+      _roundTripWaypoints(<LatLng>[
+        for (final _Candidate c in ordered.ordered) c.position,
+      ], start),
+    );
+    final _RoadLegs legs = _RoadLegs.read(road, ordered.ordered.length, start);
     return _OrderedDay(
       ordered: ordered.ordered,
-      legKm: <double>[
-        for (final GeoapifyRouteLeg l in road.legs) l.meters / 1000,
-      ],
-      legMinutes: <int>[
-        for (final GeoapifyRouteLeg l in road.legs) (l.seconds / 60).round(),
-      ],
+      legKm: legs.km,
+      legMinutes: legs.minutes,
+      returnKm: legs.returnKm,
+      returnMinutes: legs.returnMinutes,
+      orderMethod: ordered.orderMethod,
       geometry: simplifyRoadGeometry(road.legs),
       geometrySource: 'geoapify_route',
       estimateSource: 'geoapify_routing',
@@ -334,7 +715,10 @@ class RoutePlanningService {
       ...data,
       'planId': plan.id,
       'updatedAt': FieldValue.serverTimestamp(),
-      if (plan.status == 'approved') 'approvedAt': FieldValue.serverTimestamp(),
+      if (plan.status == 'approved') ...<String, dynamic>{
+        'approvedAt': FieldValue.serverTimestamp(),
+        'approvedByUid': FirebaseAuth.instance.currentUser?.uid ?? '',
+      },
     });
     unawaited(
       AuditLogService.instance.record(
@@ -391,10 +775,8 @@ class RoutePlanningService {
       final String lockedPlanId = '${keyData?['planId'] ?? ''}'.trim();
       final bool active = keyData?['active'] != false;
       if (active && lockedPlanId.isNotEmpty && lockedPlanId != plan.id) {
-        final DocumentSnapshot<Map<String, dynamic>> holder =
-            await transaction.get(
-              _db.collection('route_plans').doc(lockedPlanId),
-            );
+        final DocumentSnapshot<Map<String, dynamic>> holder = await transaction
+            .get(_db.collection('route_plans').doc(lockedPlanId));
         final bool holderPublished =
             holder.exists &&
             _text(holder.data()?['status']).toLowerCase() == 'published';
@@ -445,6 +827,7 @@ class RoutePlanningService {
         'publicationKeyId': keyId,
         'updatedAt': FieldValue.serverTimestamp(),
         'publishedAt': FieldValue.serverTimestamp(),
+        'publishedByUid': actorUid,
       }, SetOptions(merge: true));
       transaction.set(keyRef, <String, dynamic>{
         'keyId': keyId,
@@ -544,12 +927,18 @@ class RoutePlanningService {
     int workdayStartHour = 9,
     Map<String, ServiceTimeStat> learnedServiceTimes =
         const <String, ServiceTimeStat>{},
+    RouteStartPoint? start,
+    RouteLegTable? legTable,
+    String orderMethod = kRouteOrderManual,
   }) {
     return recomputeRouteDay(
       day,
       serviceMinutes: serviceMinutes,
       workdayStartHour: workdayStartHour,
       learnedServiceTimes: learnedServiceTimes,
+      start: start,
+      legTable: legTable,
+      orderMethod: orderMethod,
     );
   }
 
@@ -617,6 +1006,39 @@ class RoutePlanningService {
     );
   }
 
+  Future<void> deleteDraftPlan(RoutePlan plan) async {
+    if (plan.id.isEmpty) {
+      throw StateError(
+        'This draft was never saved, so there is nothing to delete.',
+      );
+    }
+    final DocumentReference<Map<String, dynamic>> planRef = _db
+        .collection('route_plans')
+        .doc(plan.id);
+    await _db.runTransaction<void>((Transaction transaction) async {
+      final DocumentSnapshot<Map<String, dynamic>> snapshot = await transaction
+          .get(planRef);
+      if (!snapshot.exists) {
+        throw StateError('This route plan no longer exists.');
+      }
+      final String status = _text(snapshot.data()?['status']).toLowerCase();
+      if (status != 'draft') {
+        throw StateError(
+          'Only a draft route can be deleted. This route is $status.',
+        );
+      }
+      transaction.delete(planRef);
+    });
+    await AuditLogService.instance.record(
+      action: 'deleted',
+      entityType: 'route_plan',
+      entityId: plan.id,
+      summary:
+          'Deleted draft route for ${plan.salesmanName} '
+          '(${_dateKey(plan.weekStart)})',
+    );
+  }
+
   Future<String> replacePublishedPlan(RoutePlan plan) async {
     final String actorUid =
         FirebaseAuth.instance.currentUser?.uid ?? plan.createdByUid;
@@ -640,6 +1062,10 @@ class RoutePlanningService {
       optimisationMethod: plan.optimisationMethod,
       days: plan.days,
       roadRouteNotes: plan.roadRouteNotes,
+      startPoint: plan.startPoint,
+      selectionMethod: plan.selectionMethod,
+      rankingId: plan.rankingId,
+      rankingWeekKey: plan.rankingWeekKey,
     );
     final WriteBatch batch = _db.batch();
     await _closePublishedPlan(batch, plan, 'archived', replaced: true);
@@ -679,7 +1105,11 @@ class RoutePlanningService {
     }
     await _db.collection('route_plans').doc(planId).set(<String, dynamic>{
       ...closedPlanFields(status),
-      if (status == 'approved') 'approvedAt': FieldValue.serverTimestamp(),
+      if (status == 'draft') 'approvedByUid': FieldValue.delete(),
+      if (status == 'approved') ...<String, dynamic>{
+        'approvedAt': FieldValue.serverTimestamp(),
+        'approvedByUid': FirebaseAuth.instance.currentUser?.uid ?? '',
+      },
     }, SetOptions(merge: true));
   }
 
@@ -714,6 +1144,7 @@ class RoutePlanningService {
     String salesmanCode = '',
     String branchId = '',
     bool queryByUid = true,
+    bool strict = false,
   }) async {
     final Map<String, RoutePlan> byId = <String, RoutePlan>{};
 
@@ -738,7 +1169,9 @@ class RoutePlanningService {
             in snapshot.docs) {
           byId[document.id] = RoutePlan.fromMap(document.id, document.data());
         }
-      } catch (_) {}
+      } catch (_) {
+        if (strict) rethrow;
+      }
     }
 
     await Future.wait(<Future<void>>[
@@ -954,9 +1387,9 @@ class RoutePlanningService {
 
     double maxOverdue = 0, maxValue = 0, maxForecast = 0, maxDist = 0;
     double maxPriority = 0;
-    final LatLng anchor = depot ?? _centroid(raw);
+    final LatLng distanceOrigin = depot ?? _centroid(raw);
     for (final _Candidate c in raw) {
-      c.distanceKm = _haversineKm(anchor, c.position);
+      c.distanceKm = _haversineKm(distanceOrigin, c.position);
       maxOverdue = c.overdueDays > maxOverdue ? c.overdueDays : maxOverdue;
       maxValue = c.value > maxValue ? c.value : maxValue;
       maxForecast = c.forecast > maxForecast ? c.forecast : maxForecast;
@@ -1089,97 +1522,71 @@ class RoutePlanningService {
     return 'Prioritised: ${parts.join(', ')}.';
   }
 
-  _OrderedDay _orderDay(List<_Candidate> stops, LatLng anchor) {
-    if (stops.length <= 1) {
-      return _OrderedDay(
-        ordered: stops,
-        legKm: stops.isEmpty
-            ? <double>[]
-            : <double>[_haversineKm(anchor, stops.first.position)],
-        legMinutes: const <int>[],
-        geometry: const <List<double>>[],
-      );
-    }
-
-    final List<_Candidate> ordered = _nearestNeighbour(stops, anchor);
-    final List<double> legKm = <double>[];
-    LatLng prev = anchor;
-    for (final _Candidate c in ordered) {
-      legKm.add(_haversineKm(prev, c.position));
-      prev = c.position;
-    }
-    return _OrderedDay(
-      ordered: ordered,
-      legKm: legKm,
-      legMinutes: const <int>[],
-      geometry: const <List<double>>[],
+  Future<RouteLegTable> _roadLegTable(
+    List<_Candidate> stops,
+    LatLng? start,
+  ) async {
+    final GeoapifyRouteMatrixResult table = await _geoapifyClient.matrix(
+      <LatLng>[
+        if (start != null) start,
+        for (final _Candidate stop in stops) stop.position,
+      ],
+    );
+    return RouteLegTable(
+      hasStart: start != null,
+      stopIds: <String>[for (final _Candidate stop in stops) stop.id],
+      seconds: table.durationsSeconds,
+      meters: table.distancesMeters,
     );
   }
 
-  Future<_OrderedDay> _orderDayByRoad(
+  _OrderedDay _orderDay(
     List<_Candidate> stops,
-    LatLng anchor,
-  ) async {
-    final List<LatLng> coordinates = <LatLng>[
-      anchor,
-      for (final _Candidate stop in stops) stop.position,
-    ];
-    final GeoapifyRouteMatrixResult table = await _geoapifyClient.matrix(
-      coordinates,
+    LatLng? start,
+    RouteLegTable? table,
+  ) {
+    String? idOf(int node) => node == kRouteStartNode ? null : stops[node].id;
+    LatLng positionOf(int node) =>
+        node == kRouteStartNode ? start! : stops[node].position;
+    final RouteOrderResult best = bestStopOrder(
+      stopCount: stops.length,
+      hasStart: start != null,
+      cost: (int from, int to) => table != null
+          ? table.secondsBetween(idOf(from), idOf(to))
+          : _haversineKm(positionOf(from), positionOf(to)),
     );
-    final List<int> remaining = List<int>.generate(stops.length, (int i) => i);
-    final List<_Candidate> ordered = <_Candidate>[];
+    ({double km, int minutes}) leg(int from, int to) => routeLegBetween(
+      fromStopId: idOf(from),
+      from: positionOf(from),
+      toStopId: idOf(to),
+      to: positionOf(to),
+      legTable: table,
+    );
     final List<double> legKm = <double>[];
     final List<int> legMinutes = <int>[];
-    int currentMatrixIndex = 0;
-    while (remaining.isNotEmpty) {
-      int best = remaining.first;
-      double bestSeconds = double.infinity;
-      for (final int candidate in remaining) {
-        final double seconds =
-            table.durationsSeconds[currentMatrixIndex][candidate + 1];
-        if (seconds < bestSeconds) {
-          bestSeconds = seconds;
-          best = candidate;
-        }
-      }
-      final int nextMatrixIndex = best + 1;
-      ordered.add(stops[best]);
-      legKm.add(
-        table.distancesMeters[currentMatrixIndex][nextMatrixIndex] / 1000,
-      );
-      legMinutes.add((bestSeconds / 60).round());
-      remaining.remove(best);
-      currentMatrixIndex = nextMatrixIndex;
+    for (int i = 0; i < best.order.length; i++) {
+      final ({double km, int minutes}) step = i > 0
+          ? leg(best.order[i - 1], best.order[i])
+          : start != null
+          ? leg(kRouteStartNode, best.order[i])
+          : (km: 0, minutes: 0);
+      legKm.add(step.km);
+      legMinutes.add(step.minutes);
     }
+    final ({double km, int minutes}) back =
+        start != null && best.order.isNotEmpty
+        ? leg(best.order.last, kRouteStartNode)
+        : (km: 0, minutes: 0);
     return _OrderedDay(
-      ordered: ordered,
+      ordered: <_Candidate>[for (final int index in best.order) stops[index]],
       legKm: legKm,
       legMinutes: legMinutes,
+      returnKm: back.km,
+      returnMinutes: back.minutes,
+      orderMethod: best.method,
       geometry: const <List<double>>[],
-      estimateSource: 'geoapify_matrix',
+      estimateSource: table == null ? 'haversine_fallback' : 'geoapify_matrix',
     );
-  }
-
-  List<_Candidate> _nearestNeighbour(List<_Candidate> stops, LatLng anchor) {
-    final List<_Candidate> remaining = List<_Candidate>.of(stops);
-    final List<_Candidate> ordered = <_Candidate>[];
-    LatLng current = anchor;
-    while (remaining.isNotEmpty) {
-      _Candidate? best;
-      double bestKm = double.infinity;
-      for (final _Candidate c in remaining) {
-        final double km = _haversineKm(current, c.position);
-        if (km < bestKm) {
-          bestKm = km;
-          best = c;
-        }
-      }
-      ordered.add(best!);
-      remaining.remove(best);
-      current = best.position;
-    }
-    return ordered;
   }
 
   RouteDay _buildDay({
@@ -1196,11 +1603,9 @@ class RoutePlanningService {
     final List<RouteStop> stops = <RouteStop>[];
     for (int i = 0; i < ordered.ordered.length; i++) {
       final _Candidate c = ordered.ordered[i];
-      final double legKm = i < ordered.legKm.length ? ordered.legKm[i] : 0;
+      final double legKm = ordered.legKm[i];
       totalKm += legKm;
-      final int travelMin = i < ordered.legMinutes.length
-          ? ordered.legMinutes[i]
-          : (legKm / _fallbackSpeedKmh * 60).round();
+      final int travelMin = ordered.legMinutes[i];
       clock += travelMin;
       final String arrival = _hhmm(clock);
       final int stopServiceMinutes =
@@ -1233,11 +1638,16 @@ class RoutePlanningService {
       dayLabel: _weekdayLabel(dayIndex),
       date: date,
       stops: stops,
-      totalDistanceKm: double.parse(totalKm.toStringAsFixed(2)),
+      totalDistanceKm: double.parse(
+        (totalKm + ordered.returnKm).toStringAsFixed(2),
+      ),
       estimatedServiceMinutes: totalServiceMinutes,
       estimateSource: ordered.estimateSource,
       geometry: ordered.geometry,
       geometrySource: ordered.geometrySource,
+      orderMethod: ordered.orderMethod,
+      returnLegDistanceKm: double.parse(ordered.returnKm.toStringAsFixed(2)),
+      returnTravelMinutes: ordered.returnMinutes,
     );
   }
 
@@ -1349,6 +1759,9 @@ class _OrderedDay {
     required this.ordered,
     required this.legKm,
     required this.legMinutes,
+    required this.returnKm,
+    required this.returnMinutes,
+    required this.orderMethod,
     required this.geometry,
     this.geometrySource = '',
     this.estimateSource = 'haversine_fallback',
@@ -1357,9 +1770,48 @@ class _OrderedDay {
   final List<_Candidate> ordered;
   final List<double> legKm;
   final List<int> legMinutes;
+  final double returnKm;
+  final int returnMinutes;
+  final String orderMethod;
   final List<List<double>> geometry;
   final String geometrySource;
   final String estimateSource;
+}
+
+class _RoadLegs {
+  _RoadLegs._(this.km, this.minutes, this.returnKm, this.returnMinutes);
+
+  factory _RoadLegs.read(
+    GeoapifyRouteResult road,
+    int stopCount,
+    LatLng? start,
+  ) {
+    final int expected = start == null ? stopCount - 1 : stopCount + 1;
+    if (road.legs.length != expected) {
+      throw GeoapifyRoutingException(
+        'The road route has ${road.legs.length} legs, not $expected.',
+      );
+    }
+    double kmOf(GeoapifyRouteLeg leg) => leg.meters / 1000;
+    int minutesOf(GeoapifyRouteLeg leg) => (leg.seconds / 60).round();
+    final List<GeoapifyRouteLeg> toStops = start == null
+        ? road.legs
+        : road.legs.sublist(0, stopCount);
+    return _RoadLegs._(
+      <double>[if (start == null) 0, ...toStops.map(kmOf)],
+      <int>[if (start == null) 0, ...toStops.map(minutesOf)],
+      start == null ? 0 : kmOf(road.legs.last),
+      start == null ? 0 : minutesOf(road.legs.last),
+    );
+  }
+
+  final List<double> km;
+  final List<int> minutes;
+  final double returnKm;
+  final int returnMinutes;
+
+  double get totalKm =>
+      km.fold<double>(0, (double sum, double leg) => sum + leg) + returnKm;
 }
 
 extension _BranchScopedQuery on Query<Map<String, dynamic>> {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -30,31 +31,32 @@ def _fields(role: Any = "admin", status: Any = "active") -> dict[str, Any]:
 
 
 @pytest.mark.parametrize(
-    "header,claims",
+    "header,make_claims",
     [
-        ({"alg": "HS256", "kid": "kid"}, _verified_claims()),
-        ({"alg": "RS256"}, _verified_claims()),
+        ({"alg": "HS256", "kid": "kid"}, lambda: _verified_claims()),
+        ({"alg": "RS256"}, lambda: _verified_claims()),
         (
             {"alg": "RS256", "kid": "kid"},
-            _verified_claims(aud="wrong-project"),
+            lambda: _verified_claims(aud="wrong-project"),
         ),
         (
             {"alg": "RS256", "kid": "kid"},
-            _verified_claims(iss="https://securetoken.google.com/wrong-project"),
+            lambda: _verified_claims(iss="https://securetoken.google.com/wrong-project"),
         ),
-        ({"alg": "RS256", "kid": "kid"}, _verified_claims(sub="")),
-        ({"alg": "RS256", "kid": "kid"}, _verified_claims(auth_time=None)),
+        ({"alg": "RS256", "kid": "kid"}, lambda: _verified_claims(sub="")),
+        ({"alg": "RS256", "kid": "kid"}, lambda: _verified_claims(auth_time=None)),
         (
             {"alg": "RS256", "kid": "kid"},
-            _verified_claims(auth_time=time.time() + 120),
+            lambda: _verified_claims(auth_time=time.time() + 120),
         ),
     ],
 )
 def test_invalid_firebase_token_shape_is_denied(
     monkeypatch: pytest.MonkeyPatch,
     header: dict[str, str],
-    claims: dict[str, Any],
+    make_claims: Callable[[], dict[str, Any]],
 ) -> None:
+    claims = make_claims()
     monkeypatch.setattr(platform_auth.google_jwt, "decode_header", lambda _: header)
     monkeypatch.setattr(
         platform_auth.google_id_token,

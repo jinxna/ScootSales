@@ -688,7 +688,7 @@ describe('boundary regressions against the real rules', function () {
     await s.control('tap on archive plan', ALLOW, () => tap('planArchive'));
     await s.info('rule-level exit: admin sets status archived after the tap', ALLOW, () => updateDoc(doc(admin, 'route_plans', 'planArchive'), { status: 'archived', updatedAt: ST() }));
     await s.control('tap on delete plan', ALLOW, () => tap('planDelete'));
-    await s.info('rule-level exit: admin deletes the plan after the tap', ALLOW, () => deleteDoc(doc(admin, 'route_plans', 'planDelete')));
+    await s.info('rule-level exit: admin deletes the plan after the tap', DENY, () => deleteDoc(doc(admin, 'route_plans', 'planDelete')));
     await s.info('route with an empty salesmanUid cannot be withdrawn even with no tap', DENY, () => updateDoc(doc(admin, 'route_plans', 'planNoUid'), withdraw()));
     s.finish();
   });

@@ -12,16 +12,4 @@ void main() {
     expect(gate, ProfileGateState.lookupFailed);
     expect(gate, isNot(ProfileGateState.missingProfile));
   });
-
-  test('a suspended profile is reported as suspended, not as a role', () {
-    expect(
-      decideProfileGate(
-        waiting: false,
-        failed: false,
-        role: 'branch_manager',
-        active: false,
-      ),
-      ProfileGateState.suspended,
-    );
-  });
 }

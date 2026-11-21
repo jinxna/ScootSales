@@ -50,6 +50,12 @@ def test_valid_calls_round_trip():
         ("set_item_status", {"status": "ignored"}),
         ("brief_retailer", {"retailer": "Kedai Maju"}),
         ("brief_retailer", {}),
+        ("route_why", {"retailer": "Emart Matang", "salesperson": "Jayson"}),
+        ("route_why", {}),
+        ("salesperson_visits", {"salesperson": "Jayson", "week": "next_week"}),
+        ("due_overview", {}),
+        ("open_planner", {"salesperson": "Jayson", "week": "next_week"}),
+        ("no_route", {"week": "this_week"}),
         ("navigate_to_page", {"page": "reports"}),
     ]:
         parsed = parse(call(name, **args))
@@ -63,6 +69,18 @@ def test_leading_white_space_before_the_name_is_tolerated_but_other_text_is_not(
     assert parse(out(" export_results{}<end_function_call>")) is not None
     assert parse(out("item_no_3:explain_item{position:3}<end_function_call>")) is None
     assert parse(out("\n\nNo_match{}<end_function_call>")) is None
+
+
+def test_hosted_only_actions_are_rejected_unless_offered_and_have_checked_arguments():
+    assert parse(call("no_route", week="next_week"), actions=["search_orders"]) is None
+    assert parse(call("no_route", week="next_year")) is None
+    assert parse(call("open_planner", week="someday")) is None
+    assert parse(call("due_overview", week="next_week")) is None
+    assert parse(call("route_why", position=2)) is None
+    assert set(schema.HOSTED_ONLY_ACTIONS) <= set(schema.ACTION_ORDER)
+    assert set(schema.HOSTED_ONLY_ACTIONS).isdisjoint(schema.TRAINED_ACTION_ORDER)
+    _, _, offered = schema.validate_request({"text": "hello", "actions": ["no_route"]})
+    assert offered == ["no_route"]
 
 
 def test_page_alias_resolves_and_unknown_page_is_rejected():
@@ -209,7 +227,7 @@ def test_one_sentence_has_one_positive_answer(dataset):
 def test_dataset_covers_every_action_in_both_languages(dataset):
     train = dataset[0]
     seen = {(x["target"]["name"], x["lang"]) for x in train}
-    for action in schema.ACTION_ORDER:
+    for action in schema.TRAINED_ACTION_ORDER:
         assert (action, "en") in seen and (action, "ms") in seen, action
     kinds = {x["kind"].split(":")[0] for x in train}
     assert {"gated", "write_negative"} <= kinds

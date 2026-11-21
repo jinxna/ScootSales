@@ -106,11 +106,9 @@ def test_aggregate_uncertainty_uses_the_interval_half_width() -> None:
     ]
     rows = retailer_opportunities(patterns, unit_prices={"P1": 2.0})
     row = rows[0]
-    if row.interval_pair_count:
-        assert row.relative_uncertainty_source == "aggregate_interval"
-        assert 0.0 < row.relative_uncertainty <= 1.0
-    else:
-        assert row.relative_uncertainty_source == "documented_default_no_interval"
+    assert row.interval_pair_count == 1
+    assert row.relative_uncertainty_source == "aggregate_interval"
+    assert 0.0 < row.relative_uncertainty < DEFAULT_RELATIVE_UNCERTAINTY
 
 
 def test_definition_is_deterministic() -> None:

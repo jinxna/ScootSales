@@ -75,6 +75,19 @@ class UserManagementRules {
         !sameBranch(oldBranchId, newBranchId);
   }
 
+  static String? employeeCodeToSave({
+    required String typed,
+    required String storedCode,
+  }) {
+    final String code = typed.trim();
+    if (storedCode.isNotEmpty &&
+        (code.isEmpty ||
+            code.toUpperCase() == storedCode.trim().toUpperCase())) {
+      return storedCode;
+    }
+    return code.isEmpty ? null : code.toUpperCase();
+  }
+
   static String supervisorOptionLabel(String name, int load) =>
       '$name ($load/$maxSalesmenPerSupervisor)';
 

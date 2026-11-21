@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../models/visit_brief.dart';
+import '../models/stop_brief_view.dart';
 import '../theme/app_theme.dart';
 import '../utils/replenishment_prefill.dart';
 
@@ -8,18 +8,17 @@ class ReplenishmentSuggestionsCard extends StatelessWidget {
   const ReplenishmentSuggestionsCard({
     super.key,
     required this.retailerId,
-    required this.suggestions,
-    this.productNames = const <String, String>{},
+    required this.reorders,
   });
 
-  final String retailerId;
-  final List<ReplenishmentSuggestion> suggestions;
+  static const String title = 'Reorder suggestions';
 
-  final Map<String, String> productNames;
+  final String retailerId;
+  final List<BriefReorderView> reorders;
 
   @override
   Widget build(BuildContext context) {
-    if (suggestions.isEmpty) return const SizedBox.shrink();
+    if (reorders.isEmpty) return const SizedBox.shrink();
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
@@ -31,24 +30,21 @@ class ReplenishmentSuggestionsCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Replenishment suggestions',
+            title,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: Color(0xFF4C1D95),
             ),
           ),
+          const SizedBox(height: 2),
+          const Text(
+            'Tap a product to use its number in the order.',
+            style: TextStyle(fontSize: 11, color: AppColors.textGrey),
+          ),
           const SizedBox(height: 6),
-          for (final suggestion in suggestions) ...[
-            _ReplenishmentChip(
-              retailerId: retailerId,
-              suggestion: suggestion,
-              productName:
-                  productNames[suggestion.productId] ??
-                  (suggestion.productName.isEmpty
-                      ? null
-                      : suggestion.productName),
-            ),
+          for (final BriefReorderView reorder in reorders) ...[
+            _ReplenishmentChip(retailerId: retailerId, reorder: reorder),
             const SizedBox(height: 6),
           ],
         ],
@@ -58,46 +54,38 @@ class ReplenishmentSuggestionsCard extends StatelessWidget {
 }
 
 class _ReplenishmentChip extends StatelessWidget {
-  const _ReplenishmentChip({
-    required this.retailerId,
-    required this.suggestion,
-    required this.productName,
-  });
+  const _ReplenishmentChip({required this.retailerId, required this.reorder});
 
   final String retailerId;
-  final ReplenishmentSuggestion suggestion;
-  final String? productName;
+  final BriefReorderView reorder;
 
-  Color get _confidenceColor {
-    switch (suggestion.confidenceLabel) {
-      case 'high':
-        return const Color(0xFF067647);
-      case 'medium':
-        return const Color(0xFFB54708);
-      default:
-        return const Color(0xFF667085);
-    }
-  }
-
-  void _handleTap(BuildContext context) {
-    ReplenishmentPrefill.stash(
+  Future<void> _handleTap(BuildContext context) async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final ReorderChoice choice = await ReplenishmentPrefill.choose(
       retailerId: retailerId,
-      productId: suggestion.productId,
-      suggestedQty: suggestion.suggestedQty,
+      productId: reorder.suggestion.productId,
+      suggestedQty: reorder.suggestion.suggestedQty,
     );
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Qty ${suggestion.suggestedQty} ready to prefill in the cart for ${productName ?? suggestion.productId}.',
-        ),
-        duration: const Duration(seconds: 3),
-      ),
+    final String message;
+    switch (choice.result) {
+      case ReorderChoiceResult.setInDraft:
+        message = choice.quantity < reorder.suggestion.suggestedQty
+            ? '${choice.quantity} set for ${reorder.name} in this order. '
+                  'That is the limit for this product.'
+            : '${choice.quantity} set for ${reorder.name} in this order.';
+      case ReorderChoiceResult.waitsForAdd:
+        message =
+            '${reorder.name} will start at ${choice.quantity} when you add it.';
+      case ReorderChoiceResult.notKept:
+        message = 'The number could not be kept. Enter it in the order.';
+    }
+    messenger.showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final String label = productName ?? suggestion.productId;
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(10),
@@ -112,55 +100,21 @@ class _ReplenishmentChip extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        label,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _confidenceColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        'Suggest ${suggestion.suggestedQty} • ${suggestion.confidenceLabel}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: _confidenceColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (suggestion.rationale.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Tooltip(
-                    message: suggestion.rationale,
-                    child: Text(
-                      suggestion.rationale,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textGrey,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                Text(
+                  reorder.name,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
-                ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  reorder.line,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
               ],
             ),
           ),

@@ -10,6 +10,7 @@ import '../../../theme/dso_theme.dart';
 import '../../../utils/order_csv.dart';
 import '../../../utils/order_data_utils.dart';
 import '../../../utils/order_id_resolver.dart';
+import '../../../utils/order_waiting_statuses.dart';
 import '../../../utils/server_price_check.dart';
 import '../../../widgets/dso_filter_controls.dart';
 import '../../../widgets/tip_text.dart';
@@ -540,6 +541,7 @@ class _AllOrdersPageState extends State<AllOrdersPage> {
         value: _statusFilter,
         options: const <String>[
           'all',
+          'waiting',
           'submitted',
           'held_for_review',
           'approved',
@@ -708,7 +710,10 @@ class _AllOrdersPageState extends State<AllOrdersPage> {
           if (activeFilters.status != 'all') {
             final String status = _text(order['status']).toLowerCase();
             final String effective = status.isEmpty ? 'submitted' : status;
-            if (effective != activeFilters.status) return false;
+            final bool matches = activeFilters.status == 'waiting'
+                ? kWaitingForApprovalStatuses.contains(effective)
+                : effective == activeFilters.status;
+            if (!matches) return false;
           }
           if (activeFilters.salesman != 'all') {
             final String name = _text(

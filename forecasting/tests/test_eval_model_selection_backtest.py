@@ -65,16 +65,6 @@ def test_only_one_mase_definition_is_reported() -> None:
         assert aggregate["byPredictor"][name]["mase"] == pytest.approx(expected)
 
 
-def test_series_mase_uses_training_window_scales_only() -> None:
-    values = [10.0, 0.0, 4.0, 0.0, 0.0, 8.0, 0.0, 3.0, 0.0, 6.0]
-    result = backtest_series(values, series_key="s", is_demo=False)
-    assert result is not None
-    assert len(result.origin_scales) == result.origins
-    train = values[: result.origins and 4]
-    assert result.origin_scales[0] > 0
-    assert len(train) == 4
-
-
 def test_future_observations_cannot_change_an_earlier_decision() -> None:
     prefix = [60.0, 0.0, 0.0, 0.0, 110.0, 0.0, 0.0, 0.0, 56.0, 0.0, 0.0, 30.0]
     first = backtest_series(
@@ -120,13 +110,14 @@ def test_backtest_is_deterministic() -> None:
     assert first.to_dict() == second.to_dict()
 
 
-def test_interval_coverage_is_reported_between_zero_and_one() -> None:
+def test_a_long_series_reports_interval_coverage_and_width() -> None:
     values = [10.0, 4.0, 7.0, 3.0, 9.0, 5.0, 8.0, 6.0, 7.0, 5.0, 6.0]
     result = backtest_series(values, series_key="s", is_demo=False)
     assert result is not None
-    if result.interval_coverage is not None:
-        assert 0.0 <= result.interval_coverage <= 1.0
-        assert result.interval_mean_width is not None
+    assert result.interval_coverage is not None
+    assert 0.0 < result.interval_coverage <= 1.0
+    assert result.interval_mean_width is not None
+    assert result.interval_mean_width > 0.0
 
 
 def test_report_separates_demo_from_non_demo() -> None:

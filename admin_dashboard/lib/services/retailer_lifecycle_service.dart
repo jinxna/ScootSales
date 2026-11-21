@@ -101,7 +101,6 @@ class RetailerLifecycleService {
     return _repository.readDocuments(
       collection: 'orders',
       currentUser: currentUser,
-      salesmanField: 'staffId',
       orderBy: 'submittedAt',
       limit: kLifecycleOrderReadLimit,
       deadline: kLifecycleReadTimeout,

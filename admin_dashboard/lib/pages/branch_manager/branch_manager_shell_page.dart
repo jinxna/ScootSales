@@ -55,6 +55,7 @@ class BranchManagerShellPage extends StatefulWidget {
 
 class _BranchManagerShellPageState extends State<BranchManagerShellPage> {
   late String _selectedKey;
+  final PlannerOpenRequests _plannerRequests = PlannerOpenRequests();
   void Function()? _cancelBrowserHistorySubscription;
   bool _copilotOpen = false;
   late final CopilotServerClient? _copilotServer =
@@ -162,6 +163,19 @@ class _BranchManagerShellPageState extends State<BranchManagerShellPage> {
     setState(() => _selectedKey = safeKey);
   }
 
+  Future<bool> _openPlannerFromCopilot(
+    String salesmanUid,
+    DateTime weekStart,
+  ) async {
+    if (!mounted) return false;
+    setState(
+      () =>
+          _plannerRequests.post(salesmanUid: salesmanUid, weekStart: weekStart),
+    );
+    _select('route_planner');
+    return true;
+  }
+
   List<DashboardVoicePage> get _copilotPages =>
       cmsSearchItems(DashboardRole.branchManager.wire)
           .map(
@@ -218,7 +232,7 @@ class _BranchManagerShellPageState extends State<BranchManagerShellPage> {
         pageTitle: current?.page == DashboardPage.dashboard
             ? ''
             : current?.title ?? pageNotAvailableTitle,
-        pageFact: current?.description ?? pageNotAvailableMessage,
+        pageFact: current?.headerFact ?? pageNotAvailableMessage,
         untitledPageName: current?.page == DashboardPage.dashboard
             ? current?.title ?? ''
             : '',
@@ -244,6 +258,7 @@ class _BranchManagerShellPageState extends State<BranchManagerShellPage> {
           onClose: _toggleCopilot,
           status: _copilotStatus,
           server: _copilotServer,
+          onPlannerRequested: _openPlannerFromCopilot,
         ),
         child: _selectable(_buildSelectedPage()),
       ),
@@ -290,6 +305,7 @@ class _BranchManagerShellPageState extends State<BranchManagerShellPage> {
       case DashboardPage.routePlanner:
         return RoutePlannerPage(
           currentUser: widget.currentUser,
+          openRequests: _plannerRequests,
           onNavigateRequested: _select,
         );
       case DashboardPage.myTeam:

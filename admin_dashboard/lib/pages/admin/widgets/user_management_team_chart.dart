@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../repositories/cms_repository.dart';
+import '../../../repositories/user_management_repository.dart';
 import '../../../services/platform_api_client.dart';
 import '../../../utils/my_team_roster.dart';
 import '../../../widgets/team_hierarchy_tree.dart';
@@ -131,6 +132,59 @@ class _UserManagementTeamChartState extends State<UserManagementTeamChart> {
     }
   }
 
+  Future<void> _removeOrphan(
+    TeamTreeSalesman orphan,
+    TeamTreeSupervisor supervisor,
+  ) async {
+    if (_moving) return;
+    if (supervisor.docId.isEmpty) {
+      _toast(
+        'This supervisor has no profile record, so the list cannot change.',
+        isError: true,
+      );
+      return;
+    }
+    final bool? answer = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: Text('Remove ${orphan.code} from the team?'),
+        content: Text(
+          '${orphan.code} has no profile any more. This takes the code off '
+          'the team of ${supervisor.name}. No person is removed.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove from team'),
+          ),
+        ],
+      ),
+    );
+    if (answer != true || !mounted) return;
+    setState(() => _moving = true);
+    try {
+      await UserManagementRepository().removeCodeFromTeam(
+        supervisorDocId: supervisor.docId,
+        supervisorUid: supervisor.uid,
+        salesmanCode: orphan.code,
+      );
+      _toast('${orphan.code} is no longer on the team of ${supervisor.name}.');
+    } on FirebaseException catch (error) {
+      _toast(
+        error.code == 'permission-denied'
+            ? 'You do not have permission to change this team.'
+            : 'The team was not changed. Try again.',
+        isError: true,
+      );
+    } finally {
+      if (mounted) setState(() => _moving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Map<String, dynamic>>>(
@@ -177,6 +231,7 @@ class _UserManagementTeamChartState extends State<UserManagementTeamChart> {
                       branchLabel: 'this branch',
                       hierarchy: branch.hierarchy,
                       onMove: _move,
+                      onRemoveOrphan: _removeOrphan,
                     ),
                   ],
                 ],

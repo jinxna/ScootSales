@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const B = require('../lib/browser.cjs');
+const admin = require('../lib/admin.cjs');
 const { PROJECT } = require('../lib/emulator.cjs');
 const mobile = require('../lib/mobile.cjs');
 const { PRODUCTS, RETAILERS } = require('../lib/seed.cjs');
@@ -121,6 +122,7 @@ module.exports = {
         assert.equal(line.price, before.vinegar);
         assert.equal(drafts[0].pendingOrderId || '', '', 'a saved draft has not been sent');
         assert.equal((await ordersFor(db, retailer.id)).length, 0);
+        await db.waitForQuery('visits', (v) => v.marketplace === retailer.name && v.status === 'pending_signature' && v.draftStage === 4 && Boolean(v.signatureDraft), { label: 'the visit that carries the saved draft on the server' });
       });
       await t.step('price_review: sign-out and sign-in of the same owner restores the draft', async () => {
         await home(s.page, s.url);
@@ -379,7 +381,8 @@ module.exports = {
       const moved = { latitude: RETAILERS[1].lat, longitude: RETAILERS[1].lng, accuracy: 10 };
       const near = (actual, expected) => Math.abs(actual - expected) < 1e-6;
       let before;
-      const phone = await t.session('mobile', { viewport: mobile.MOBILE_VIEWPORT, name: 'phone-location' });
+      const phone = await t.session('mobile', { viewport: mobile.MOBILE_VIEWPORT, name: 'phone-location', timezoneId: 'UTC' });
+      let locationOrderId;
       await t.step('order_location: location sharing starts a work session with a first position', async () => {
         await clearVisits(db);
         const profile = await db.get('users', accounts.salesman.email);
@@ -396,7 +399,15 @@ module.exports = {
         await orderUpToCount(phone.page, retailer, [OAT.name]);
         await mobile.continueToSignature(phone.page);
         const orderId = await mobile.signAndSubmit(phone.page, DEPARTMENT, 1);
-        await db.waitForDoc('orders', orderId, (o) => o.status === 'submitted');
+        locationOrderId = orderId;
+        const order = await db.waitForDoc('orders', orderId, (o) => o.status === 'submitted');
+        const stamps = Object.values(order.signatureTimestamps || {});
+        assert.equal(stamps.length, 1, 'one department signature time');
+        const stamp = /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/.exec(stamps[0]);
+        assert.ok(stamp, `signature time format: ${stamps[0]}`);
+        const signedAtMalaysia = Date.UTC(+stamp[3], +stamp[2] - 1, +stamp[1], +stamp[4], +stamp[5], +stamp[6]) - 8 * 3600 * 1000;
+        const signGap = order.submittedAt.getTime() - signedAtMalaysia;
+        assert.ok(signGap >= -5000 && signGap < 10 * 60 * 1000, `a phone set to UTC saves the signature time in Malaysia time (gap ${signGap} ms, text ${stamps[0]})`);
         const fix = await db.waitForDoc('gps_tracking', `order_${orderId}`, (d) => typeof d.latitude === 'number',
           { timeout: 30000, label: 'order location record' });
         assert.ok(fix.latitude >= -90 && fix.latitude <= 90 && fix.longitude >= -180 && fix.longitude <= 180, 'coordinates are in range');
@@ -406,8 +417,10 @@ module.exports = {
         assert.equal(typeof fix.accuracyMeters, 'number');
         assert.ok(fix.accuracyMeters > 0 && fix.accuracyMeters <= 100, 'accuracy is plausible');
         assert.equal(fix.isMocked, false);
-        assert.equal(fix.locationVerification, 'device_captured');
+        assert.equal(fix.locationVerification, 'location_verified', 'a planner order at the verified shop pin is checked against that pin');
         assert.equal(fix.locationEvidence.mode, fix.locationVerification);
+        assert.equal(typeof fix.locationEvidence.distanceMeters, 'number');
+        assert.ok(fix.locationEvidence.distanceMeters < 5, `distance to the shop pin is ${fix.locationEvidence.distanceMeters} m`);
         assert.equal(fix.lastOrderId, orderId);
         assert.equal(fix.salesmanUid, uid);
         assert.ok(fix.deviceCapturedAt instanceof Date, 'the device capture time is a timestamp');
@@ -426,6 +439,17 @@ module.exports = {
           locationCapturedAt: fix.locationCapturedAt.toISOString(),
         };
         await t.shot(phone, 'order-location-submitted');
+      });
+      await t.step('order_location: the dashboard shows the order at the verified shop and no late-sending note', async () => {
+        const adminS = await t.session('admin', { name: 'admin-location' });
+        await B.loginAdmin(adminS.page, adminS.url, accounts.admin.email);
+        await admin.waitForShell(adminS.page);
+        await admin.goToPage(adminS.page, 'All Orders');
+        await B.fillField(adminS.page, adminS.page.getByRole('textbox').first(), locationOrderId);
+        await admin.openOrder(adminS.page, locationOrderId);
+        await B.see(adminS.page, /Location: \d+ m accuracy, at the verified shop location, \d m from the shop/, { timeout: 30000 });
+        await t.shot(adminS, 'order-location-dashboard');
+        assert.equal(await adminS.page.getByText(/after signing/).count(), 0, 'no "Sent ... after signing" note for an order sent seconds after signing');
       });
       await t.step('order_location: offline, a new position stays pending on the phone and is not sent', async () => {
         await phone.page.getByRole('button', { name: /^Home/ }).first().click();

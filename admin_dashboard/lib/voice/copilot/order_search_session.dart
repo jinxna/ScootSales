@@ -1,6 +1,7 @@
 import '../../utils/money_format.dart' show formatRm;
 import '../../utils/order_csv.dart';
 import '../../utils/order_data_utils.dart';
+import '../../utils/order_waiting_statuses.dart';
 import '../../utils/my_team_roster.dart';
 import 'copilot_dates.dart';
 import 'copilot_entity_resolver.dart';
@@ -13,9 +14,10 @@ class OrderWindow {
 }
 
 class CopilotReply {
-  const CopilotReply(this.text, {this.card});
+  const CopilotReply(this.text, {this.card, this.dataUsed});
   final String text;
   final Object? card;
+  final String? dataUsed;
 }
 
 class OrderQuery {
@@ -63,9 +65,12 @@ class OrderResultsCard {
     required this.shown,
     required this.truncated,
     required this.spokenSummary,
+    this.rowIds,
   });
 
   final List<String> chips;
+
+  final List<String>? rowIds;
 
   final Map<String, int> statusCounts;
   final String valueText;
@@ -75,6 +80,12 @@ class OrderResultsCard {
   final int shown;
   final bool truncated;
   final String spokenSummary;
+}
+
+class SkippedOrdersCard {
+  const SkippedOrdersCard({required this.view, required this.orders});
+  final OrderResultsCard view;
+  final List<Map<String, dynamic>> orders;
 }
 
 class ChoiceCard {
@@ -111,6 +122,7 @@ class PendingExport {
 typedef ReadOrderWindow =
     Future<OrderWindow> Function(DateTime start, DateTime end);
 typedef CountWaitingOrders = Future<int> Function();
+typedef ReadWaitingOrders = Future<List<Map<String, dynamic>>> Function();
 typedef LoadSalespeople = Future<List<EntityRef>> Function();
 typedef DownloadCsv = bool Function(String filename, String csv);
 typedef RecordExport =
@@ -165,6 +177,7 @@ class OrderSearchSession {
     required this.recordExport,
     required this.scopeNote,
     this.countWaiting,
+    this.readWaiting,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
 
@@ -173,6 +186,7 @@ class OrderSearchSession {
   final DownloadCsv download;
   final RecordExport recordExport;
   final CountWaitingOrders? countWaiting;
+  final ReadWaitingOrders? readWaiting;
 
   final String? scopeNote;
   final DateTime Function() _clock;
@@ -211,6 +225,15 @@ class OrderSearchSession {
     _pendingExport = null;
   }
 
+  void forgetReads() {
+    _window = null;
+    _windowReadAt = null;
+    reset();
+  }
+
+  Future<List<EntityRef>> salespeople() async =>
+      _salespeople ??= await _loadSalespeople();
+
   Future<CopilotReply> briefRetailer(BriefRetailerIntent intent) => search(
     SearchOrdersIntent(retailer: intent.name, period: intent.period),
     brief: true,
@@ -247,12 +270,62 @@ class OrderSearchSession {
     final bool newRetailer = todo.any(
       (_Todo t) => t.kind == EntityKind.retailer,
     );
+    if (period.kind == CopilotRangeKind.allTime &&
+        status == 'submitted' &&
+        todo.isEmpty &&
+        (!keep || (frame?.salesperson == null && frame?.retailer == null)) &&
+        countWaiting != null &&
+        readWaiting != null) {
+      return waitingForApproval();
+    }
     return _run(
       period: period,
       status: status,
       salesperson: keep && !newSalesperson ? frame?.salesperson : null,
       retailer: keep && !newRetailer ? frame?.retailer : null,
       todo: todo,
+    );
+  }
+
+  Future<CopilotReply> waitingForApproval() async {
+    dropPending();
+    final DateTime now = _clock();
+    final List<Map<String, dynamic>> read;
+    final int total;
+    try {
+      read = await readWaiting!();
+      total = await countWaiting!();
+    } on StateError catch (e) {
+      return CopilotReply(e.message);
+    } catch (_) {
+      return const CopilotReply(
+        'I could not read the orders waiting for approval. Try again, or open All Orders.',
+      );
+    }
+    final CopilotRange period = copilotRange(CopilotRangeKind.allTime, now);
+    final OrderQuery query = OrderQuery(period: period, status: 'submitted');
+    final List<Map<String, dynamic>> rows = _filter(<Map<String, dynamic>>[
+      for (final Map<String, dynamic> row in read)
+        if (!isDemoRow(row) && isPendingApprovalOrder(row)) row,
+    ], query);
+    final OrderResultSet set = OrderResultSet(
+      query: query,
+      start: period.start,
+      end: period.end,
+      readAt: now,
+      window: rows,
+      rows: rows,
+      truncated: rows.length < total,
+    );
+    _current = set;
+    final CopilotReply reply = _describe(set, now, const <String>[], total);
+    return CopilotReply(
+      reply.text,
+      card: reply.card,
+      dataUsed:
+          'orders · waiting for approval '
+          '(${kWaitingForApprovalStatuses.join(', ')}) · all dates · '
+          '${_plural(read.length, 'order', 'orders')} read',
     );
   }
 
@@ -379,16 +452,7 @@ class OrderSearchSession {
       period: period,
       status: status,
     );
-    final bool waitingAll =
-        period.kind == CopilotRangeKind.allTime &&
-        status == 'submitted' &&
-        salesperson == null &&
-        retailer == null &&
-        countWaiting != null;
-    final List<Map<String, dynamic>> matched = _filter(window.rows, query);
-    final List<Map<String, dynamic>> rows = waitingAll
-        ? matched.where(isPendingApprovalOrder).toList(growable: false)
-        : matched;
+    final List<Map<String, dynamic>> rows = _filter(window.rows, query);
     final OrderResultSet set = OrderResultSet(
       query: query,
       start: period.start,
@@ -399,15 +463,13 @@ class OrderSearchSession {
       truncated: window.truncated,
     );
     _current = set;
-    int? waitingTotal;
-    if (waitingAll) {
-      try {
-        waitingTotal = await countWaiting!();
-      } catch (_) {
-        waitingTotal = null;
-      }
-    }
-    final CopilotReply reply = _describe(set, now, notes, waitingTotal);
+    final CopilotReply reply = _describe(
+      set,
+      now,
+      notes,
+      null,
+      idsOnButton: _briefNext && retailer != null,
+    );
     if (!_briefNext) return reply;
     _briefNext = false;
     return set.rows.isEmpty || retailer == null
@@ -443,7 +505,7 @@ class OrderSearchSession {
       '${_plural(set.rows.length, 'order', 'orders')}, ${formatRm(value)}'
           '${active == 0 ? '' : ' (average ${formatRm(value / active)})'}'
           '${rejected > 0 ? ', ${_group(rejected)} rejected and left out of the value' : ''}.',
-      'Latest: ${_rowLine(1, last).substring(3)}'
+      'Latest: ${_rowLine(1, last, withId: false).substring(3)}'
           '${lastWho.isEmpty ? '' : ' · $lastWho'}',
       if (people.isNotEmpty)
         'Ordered by: ${people.take(3).map((e) => '${e.key} (${e.value})').join(', ')}.',
@@ -592,13 +654,8 @@ class OrderSearchSession {
     return true;
   }
 
-  static bool _isSubmitted(Map<String, dynamic> row) => const <String>{
-    '',
-    'submitted',
-    'pending',
-    'pending_approval',
-    'held_for_review',
-  }.contains(orderStatus(row));
+  static bool _isSubmitted(Map<String, dynamic> row) =>
+      kWaitingForApprovalStatuses.contains(orderStatus(row));
 
   static List<Map<String, dynamic>> _filter(
     List<Map<String, dynamic>> window,
@@ -668,7 +725,31 @@ class OrderSearchSession {
     'Dec',
   ];
 
-  static String _rowLine(int n, Map<String, dynamic> o) {
+  static String _rowId(Map<String, dynamic> o) =>
+      '${o['orderId'] ?? o['docId'] ?? ''}'.trim();
+
+  static String approvalLine(Map<String, dynamic> o, DateTime now) {
+    final String id = _rowId(o);
+    final String retailer = '${o['retailerName'] ?? o['retailer_name'] ?? ''}'
+        .trim();
+    final String person =
+        '${o['salesmanName'] ?? o['salesmanCode'] ?? o['salesmanId'] ?? ''}'
+            .trim();
+    final DateTime? when = orderDateFromRow(o);
+    final int? days = when == null ? null : now.difference(when).inDays;
+    final String age = switch (days) {
+      null => 'age unknown',
+      <= 0 => 'today',
+      1 => '1 day old',
+      _ => '$days days old',
+    };
+    return '${id.isEmpty ? 'Order' : id} · '
+        '${retailer.isEmpty ? 'Unknown retailer' : retailer} · '
+        '${person.isEmpty ? 'Unknown salesperson' : person} · '
+        '${formatRm(orderRevenue(o))} · $age';
+  }
+
+  static String _rowLine(int n, Map<String, dynamic> o, {bool withId = true}) {
     final DateTime? when = orderDateFromRow(o);
     String date = '—';
     if (when != null) {
@@ -678,21 +759,26 @@ class OrderSearchSession {
           '${kl.hour.toString().padLeft(2, '0')}:'
           '${kl.minute.toString().padLeft(2, '0')}';
     }
-    final String id = '${o['orderId'] ?? o['docId'] ?? ''}'.trim();
+    final String id = _rowId(o);
     final String retailer = '${o['retailerName'] ?? o['retailer_name'] ?? ''}'
         .trim();
     final String status = orderStatus(o);
+    if (!withId) {
+      return '$n. $date · ${formatRm(orderRevenue(o))} · '
+          '${status.isEmpty ? 'no status' : status}';
+    }
     return '$n. ${id.isEmpty ? 'Order' : id} · '
         '${retailer.isEmpty ? 'Unknown retailer' : retailer} · $date · '
-        '${formatRm(orderRevenue(o))} · ${status.isEmpty ? 'submitted' : status}';
+        '${formatRm(orderRevenue(o))} · ${status.isEmpty ? 'no status' : status}';
   }
 
   CopilotReply _describe(
     OrderResultSet set,
     DateTime now,
-    List<String> notes, [
-    int? waitingTotal,
-  ]) {
+    List<String> notes,
+    int? waitingTotal, {
+    bool idsOnButton = false,
+  }) {
     final OrderQuery q = set.query;
     final String periodLabel = q.period.label;
     final String periodName = _periodName(q.period, now);
@@ -705,7 +791,12 @@ class OrderSearchSession {
         waitingTotal == 0
             ? 'No orders are waiting for approval ($periodLabel).$extra'
             : '${_group(waitingTotal)} waiting for approval ($periodLabel).'
-                  '${listed == 0 ? '' : ' Newest $listed shown.'}$extra',
+                  '${listed == 0
+                      ? (set.truncated ? ' Open All Orders to see them.' : '')
+                      : set.truncated
+                      ? ' $listed shown, newest first among the ${_group(set.rows.length)} I read. Open All Orders for the rest.'
+                      : ' Newest $listed shown.'}'
+                  '$extra',
         card: OrderResultsCard(
           chips: <String>[periodLabel, 'submitted'],
           statusCounts: <String, int>{
@@ -797,8 +888,12 @@ class OrderSearchSession {
         statusCounts: counts,
         valueText: formatRm(value),
         rows: <String>[
-          for (int i = 0; i < shown; i++) _rowLine(i + 1, set.rows[i]),
+          for (int i = 0; i < shown; i++)
+            _rowLine(i + 1, set.rows[i], withId: !idsOnButton),
         ],
+        rowIds: idsOnButton
+            ? <String>[for (int i = 0; i < shown; i++) _rowId(set.rows[i])]
+            : null,
         total: set.rows.length,
         shown: shown,
         truncated: set.truncated,

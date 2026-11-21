@@ -181,6 +181,25 @@ class VisitPriorityService {
     return parsePriorityRankings(result.documents);
   }
 
+  Future<List<RetailerPriorityRanking>> loadPlannerWeekRankings(
+    UserProfile currentUser, {
+    required DateTime weekStart,
+  }) async {
+    final result = await _repository.readDocuments(
+      collection: 'retailer_priority_rankings',
+      currentUser: currentUser,
+      orderBy: 'generatedAt',
+      limit: kPriorityRankingReadLimit,
+      deadline: kPriorityReadTimeout,
+      historyWindow: const Duration(days: 23),
+      asOf: weekStart.add(const Duration(days: 8)),
+    );
+    if (!result.metadata.isComplete) {
+      throw StateError('Incomplete priority ranking data');
+    }
+    return parsePriorityRankings(result.documents);
+  }
+
   Future<ScopedDashboardReadResult> _loadRankingDocs(
     UserProfile currentUser,
   ) async {

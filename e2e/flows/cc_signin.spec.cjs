@@ -14,7 +14,7 @@ const OUT = path.join(E.OUTPUT_DIR, 'cc_signin');
 const OWNER = 'e2e.owner@example.test';
 const OPERATOR = 'e2e.operator@example.test';
 const PASSWORD = E.PASSWORD;
-const STAFF_PORT = 18791;
+const STAFF_PORT = require('../lib/lane.cjs').ports.staff;
 const STAFF_URL = `http://127.0.0.1:${STAFF_PORT}`;
 const CODE_SUBJECT = 'Your Scoot Sales sign-in code';
 const RESET_SUBJECT = 'Reset your Scoot Sales password';
@@ -170,6 +170,7 @@ module.exports = {
     const button = (s, name) => s.page.getByRole('button', { name, exact: typeof name === 'string' });
     const accountMenu = (s) => s.page.getByRole('button', { name: /^Account menu/ }).first();
     const text = (s, value) => s.page.getByText(value, { exact: typeof value === 'string' }).first();
+    const codeAsked = (email) => new RegExp(`^(We sent a 6-digit code|The code is on its way) to ${email[0]}\\*\\*\\*@example\\.test\\.$`);
     const newTab = async (s) => {
       const page = await s.context.newPage();
       await B.openApp(page, t.urls.admin);
@@ -203,7 +204,7 @@ module.exports = {
       await button(s, 'Continue').click();
     };
     const finishWithCode = async (s, email) => {
-      await text(s, new RegExp(`^(We sent a 6-digit code|The code is on its way) to ${email[0]}\\*\\*\\*@example\\.test\\.$`)).waitFor({ timeout: 25000 });
+      await text(s, codeAsked(email)).waitFor({ timeout: 25000 });
       const code = await mailedCode(email);
       await fill(s, 'Code', code);
       await button(s, 'Sign in').click();
@@ -333,7 +334,7 @@ module.exports = {
 
       await step('the right password asks for the emailed code; a wrong code shows tries left', async () => {
         await signInWithPassword(ownerPage, OWNER, PASSWORD);
-        await text(ownerPage, new RegExp('^We sent a 6-digit code to e\\*\\*\\*@example\\.test\\.$')).waitFor({ timeout: 25000 });
+        await text(ownerPage, codeAsked(OWNER)).waitFor({ timeout: 25000 });
         await t.shot(ownerPage, 'code-step');
         await fill(ownerPage, 'Code', '000000');
         await button(ownerPage, 'Sign in').click();
@@ -543,7 +544,7 @@ module.exports = {
         await field(ownerPage, 'Email').waitFor({ timeout: 25000 });
         await allowNextCode(owner.uid);
         await signInWithPassword(ownerPage, OWNER, PASSWORD);
-        await text(ownerPage, /^We sent a 6-digit code to/).waitFor({ timeout: 25000 });
+        await text(ownerPage, codeAsked(OWNER)).waitFor({ timeout: 25000 });
         await button(ownerPage, 'Use a backup code').click();
         await fill(ownerPage, 'Backup code', backupCodes[0]);
         await button(ownerPage, 'Sign in').click();
@@ -561,7 +562,7 @@ module.exports = {
         await field(ownerPage, 'Email').waitFor({ timeout: 25000 });
         await allowNextCode(owner.uid);
         await signInWithPassword(ownerPage, OWNER, PASSWORD);
-        await text(ownerPage, /^We sent a 6-digit code to/).waitFor({ timeout: 25000 });
+        await text(ownerPage, codeAsked(OWNER)).waitFor({ timeout: 25000 });
         await button(ownerPage, 'Use a backup code').click();
         await fill(ownerPage, 'Backup code', backupCodes[0]);
         await button(ownerPage, 'Sign in').click();
@@ -617,7 +618,7 @@ module.exports = {
       await step('a ticked Keep me signed in survives a reload', async () => {
         await allowNextCode(owner.uid);
         await signInWithPassword(ownerPage, OWNER, PASSWORD);
-        await text(ownerPage, /^We sent a 6-digit code to/).waitFor({ timeout: 25000 });
+        await text(ownerPage, codeAsked(OWNER)).waitFor({ timeout: 25000 });
         await keepBox(ownerPage, false).waitFor({ timeout: 15000 });
         await ownerPage.page.getByRole('checkbox', { name: KEEP_LABEL }).click();
         await keepBox(ownerPage, true).waitFor({ timeout: 15000 });
@@ -660,7 +661,7 @@ module.exports = {
         const before = (await mailsTo(OWNER, CODE_SUBJECT)).length;
         await allowNextCode(owner.uid);
         await signInWithPassword(ownerPage, OWNER, PASSWORD);
-        await text(ownerPage, /^We sent a 6-digit code to/).waitFor({ timeout: 25000 });
+        await text(ownerPage, codeAsked(OWNER)).waitFor({ timeout: 25000 });
         await keepBox(ownerPage, false).waitFor({ timeout: 15000 });
         await waitForMails(OWNER, CODE_SUBJECT, before + 1);
         await t.shot(ownerPage, 'code-asked-again-after-sign-out-all');

@@ -2,25 +2,36 @@ import 'package:flutter/material.dart';
 
 import '../services/sales_visit_copilot_service.dart';
 import '../utils/retailer_memory.dart';
+import 'follow_up_chips.dart';
 
 class NoOrderDraft {
-  const NoOrderDraft({required this.reasonCode, required this.note});
+  const NoOrderDraft({
+    required this.reasonCode,
+    required this.note,
+    this.followUpOn,
+  });
 
   final String reasonCode;
   final String note;
+  final DateTime? followUpOn;
 }
 
-Future<NoOrderDraft?> showNoOrderReasonSheet(BuildContext context) {
+Future<NoOrderDraft?> showNoOrderReasonSheet(
+  BuildContext context, {
+  DateTime? nextVisit,
+}) {
   return showModalBottomSheet<NoOrderDraft>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (BuildContext context) => const NoOrderReasonSheet(),
+    builder: (BuildContext context) => NoOrderReasonSheet(nextVisit: nextVisit),
   );
 }
 
 class NoOrderReasonSheet extends StatefulWidget {
-  const NoOrderReasonSheet({super.key});
+  const NoOrderReasonSheet({super.key, this.nextVisit});
+
+  final DateTime? nextVisit;
 
   @override
   State<NoOrderReasonSheet> createState() => _NoOrderReasonSheetState();
@@ -30,6 +41,8 @@ class _NoOrderReasonSheetState extends State<NoOrderReasonSheet> {
   final TextEditingController _note = TextEditingController();
   String _reason = '';
   String _message = '';
+  DateTime? _followUpOn;
+  bool _saved = false;
 
   @override
   void dispose() {
@@ -38,6 +51,7 @@ class _NoOrderReasonSheetState extends State<NoOrderReasonSheet> {
   }
 
   void _save() {
+    if (_saved) return;
     final String note = _note.text.trim();
     if (_reason.isEmpty) {
       setState(() => _message = 'Choose a reason.');
@@ -47,7 +61,11 @@ class _NoOrderReasonSheetState extends State<NoOrderReasonSheet> {
       setState(() => _message = 'Other needs a note of at least 8 characters.');
       return;
     }
-    Navigator.pop(context, NoOrderDraft(reasonCode: _reason, note: note));
+    _saved = true;
+    Navigator.pop(
+      context,
+      NoOrderDraft(reasonCode: _reason, note: note, followUpOn: _followUpOn),
+    );
   }
 
   @override
@@ -108,6 +126,13 @@ class _NoOrderReasonSheetState extends State<NoOrderReasonSheet> {
                             : 'Note (optional)',
                       ),
                     ),
+                    FollowUpChips(
+                      nextVisit: widget.nextVisit,
+                      value: _followUpOn,
+                      onChanged: (DateTime? day) =>
+                          setState(() => _followUpOn = day),
+                    ),
+                    const SizedBox(height: 8),
                     if (_message.isNotEmpty)
                       Text(_message, style: const TextStyle(color: Colors.red)),
                   ],

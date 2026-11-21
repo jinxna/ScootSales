@@ -33,13 +33,15 @@ class FakeDb implements FirebaseFirestore {
   String? Function(String path) setError = (_) => null;
   String? Function(String path) serverGetError = (_) => null;
   Future<void>? offline;
+  Future<void> Function()? pendingWrites;
   @override
   FirebaseApp get app => Firebase.app();
   @override
   CollectionReference<Map<String, dynamic>> collection(String path) =>
       FakeCol(this, path);
   @override
-  Future<void> waitForPendingWrites() async {}
+  Future<void> waitForPendingWrites() =>
+      pendingWrites?.call() ?? Future<void>.value();
   @override
   dynamic noSuchMethod(Invocation i) =>
       throw UnimplementedError('db ${i.memberName}');
@@ -146,6 +148,7 @@ HeldOrder heldOrder(String id, {bool withTracking = true}) => HeldOrder(
   deviceAt: DateTime.utc(2026, 1, 1),
   payload: <String, dynamic>{
     'orderId': id,
+    'salesmanUid': 'u1',
     'locationEvidence': <String, dynamic>{
       'mode': 'device_captured',
       'deviceCapturedAt': '2026-01-01T00:00:00.000Z',
@@ -520,6 +523,7 @@ void main() {
     await sync.flush('u1', open);
     expect(await outbox.readAll('u1'), isEmpty);
     expect(gpsSets('o1'), 2);
+    expect(db.sets.where((String p) => p == 'orders/o1').length, 1);
   });
 
   test(
@@ -1249,6 +1253,54 @@ void main() {
       await settle();
       expect(find.text('Sign out?'), findsOneWidget);
       expect(find.text('Upload now'), findsNothing);
+    },
+  );
+
+  test(
+    'sign-out does not say work is waiting when nothing is held and the writes settle 1.4 seconds after the app opens',
+    () async {
+      db.pendingWrites = () =>
+          Future<void>.delayed(const Duration(milliseconds: 1400));
+      expect(
+        await HeldWorkSync(
+          firestore: db,
+          api: FakeApi(),
+        ).hasWorkToUpload('u1'),
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'sign-out still says work is waiting when nothing is held but writes stay unsent, after 5 seconds and not before',
+    () async {
+      db.pendingWrites = () => Completer<void>().future;
+      final Stopwatch waited = Stopwatch()..start();
+      expect(
+        await HeldWorkSync(
+          firestore: db,
+          api: FakeApi(),
+        ).hasWorkToUpload('u1'),
+        isTrue,
+      );
+      expect(waited.elapsedMilliseconds, greaterThanOrEqualTo(4900));
+    },
+  );
+
+  test(
+    'sign-out says work is waiting at once when a sale is held, with no wait for unsent writes',
+    () async {
+      await outbox.put(heldOrder('s1'));
+      db.pendingWrites = () => Completer<void>().future;
+      final Stopwatch waited = Stopwatch()..start();
+      expect(
+        await HeldWorkSync(
+          firestore: db,
+          api: FakeApi(),
+        ).hasWorkToUpload('u1'),
+        isTrue,
+      );
+      expect(waited.elapsedMilliseconds, lessThan(2000));
     },
   );
 

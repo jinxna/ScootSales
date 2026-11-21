@@ -1500,11 +1500,15 @@ class _Kpi extends StatelessWidget {
         children: <Widget>[
           Text(label, style: ScootType.small.copyWith(color: c.muted)),
           const SizedBox(height: 4),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: ScootType.kpi.copyWith(color: c.ink),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              softWrap: false,
+              style: ScootType.kpi.copyWith(color: c.ink),
+            ),
           ),
           const SizedBox(height: 2),
           Text(change ?? ' ', style: ScootType.small.copyWith(color: c.muted)),

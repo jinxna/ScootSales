@@ -30,6 +30,7 @@ List<ScootNavGroup> scootNavGroups(
   String? badgeKey,
   int badgeCount = 0,
   String badgeLabel = 'waiting',
+  String? badgeText,
 }) {
   return <ScootNavGroup>[
     for (final CmsNavSection section in sections)
@@ -46,6 +47,7 @@ List<ScootNavGroup> scootNavGroups(
               icon: item.icon,
               count: item.key == badgeKey ? badgeCount : null,
               countLabel: '$badgeCount $badgeLabel',
+              countText: badgeText,
             ),
         ],
       ),
@@ -285,10 +287,12 @@ class _Page extends StatelessWidget {
                 ),
               ),
             if (title.isNotEmpty) ...<Widget>[
-              ScootPageHeader(
-                title: title,
-                fact: fact,
-                actions: <Widget>[if (showBeta) const BetaBadge()],
+              SelectionArea(
+                child: ScootPageHeader(
+                  title: title,
+                  fact: fact.isEmpty ? null : fact,
+                  actions: <Widget>[if (showBeta) const BetaBadge()],
+                ),
               ),
               const SizedBox(height: ScootSpace.blockGap),
             ],

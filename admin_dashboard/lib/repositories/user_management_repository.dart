@@ -30,6 +30,16 @@ class UserManagementSupervisorPlan {
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> orphans;
 }
 
+List<Object> teamCodeSpellings(Object? stored, String code) {
+  final String wanted = code.trim().toLowerCase();
+  return <Object>{
+    code,
+    if (stored is Iterable)
+      for (final Object? entry in stored)
+        if (entry is String && entry.trim().toLowerCase() == wanted) entry,
+  }.toList(growable: false);
+}
+
 class UserManagementRepository {
   UserManagementRepository({FirebaseFirestore? firestore})
     : _firestore = firestore ?? FirebaseFirestore.instance;
@@ -330,15 +340,70 @@ class UserManagementRepository {
         },
       );
 
+  Future<void> removeCodeFromTeam({
+    required String supervisorDocId,
+    required String supervisorUid,
+    required String salesmanCode,
+  }) async {
+    if (salesmanCode.trim().isEmpty || supervisorDocId.isEmpty) return;
+    final DocumentReference<Map<String, dynamic>> profile = _firestore
+        .collection('users')
+        .doc(supervisorDocId);
+    final DocumentReference<Map<String, dynamic>>? access =
+        supervisorUid.isEmpty
+        ? null
+        : _firestore.collection('user_access').doc(supervisorUid);
+    await _firestore.runTransaction<void>((Transaction transaction) async {
+      final DocumentSnapshot<Map<String, dynamic>> stored = await transaction
+          .get(profile);
+      final DocumentSnapshot<Map<String, dynamic>>? storedAccess =
+          access == null ? null : await transaction.get(access);
+      transaction.set(profile, <String, dynamic>{
+        'assignedSalesmanCodes': FieldValue.arrayRemove(
+          teamCodeSpellings(
+            stored.data()?['assignedSalesmanCodes'],
+            salesmanCode,
+          ),
+        ),
+      }, SetOptions(merge: true));
+      if (access == null) return;
+      transaction.set(access, <String, dynamic>{
+        'assignedSalesmanCodes': FieldValue.arrayRemove(
+          teamCodeSpellings(
+            storedAccess?.data()?['assignedSalesmanCodes'],
+            salesmanCode,
+          ),
+        ),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
+  }
+
   void _queueSupervisorAccessAssignment(
     WriteBatch batch,
     QueryDocumentSnapshot<Map<String, dynamic>> supervisorDoc, {
     required String salesmanCode,
     required bool add,
+  }) => _queueRosterChange(
+    batch,
+    supervisorDocId: supervisorDoc.id,
+    supervisorUid: ((supervisorDoc.data()['uid'] ?? '') as Object)
+        .toString()
+        .trim(),
+    salesmanCode: salesmanCode,
+    add: add,
+  );
+
+  void _queueRosterChange(
+    WriteBatch batch, {
+    required String supervisorDocId,
+    required String supervisorUid,
+    required String salesmanCode,
+    required bool add,
   }) {
-    if (salesmanCode.trim().isEmpty) return;
+    if (salesmanCode.trim().isEmpty || supervisorDocId.isEmpty) return;
     batch.set(
-      _firestore.collection('users').doc(supervisorDoc.id),
+      _firestore.collection('users').doc(supervisorDocId),
       <String, dynamic>{
         'assignedSalesmanCodes': add
             ? FieldValue.arrayUnion(<String>[salesmanCode])
@@ -346,9 +411,7 @@ class UserManagementRepository {
       },
       SetOptions(merge: true),
     );
-    final String uid = ((supervisorDoc.data()['uid'] ?? '') as Object)
-        .toString()
-        .trim();
+    final String uid = supervisorUid;
     if (uid.isEmpty) return;
     batch.set(_firestore.collection('user_access').doc(uid), <String, dynamic>{
       'assignedSalesmanCodes': add

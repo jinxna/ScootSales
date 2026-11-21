@@ -260,6 +260,37 @@ class OrderHistoryRecord {
   }
 }
 
+enum ReorderDraftCase { sentWaiting, unsentWithItems, free }
+
+ReorderDraftCase saveReorderDraft({
+  required String salesmanUid,
+  required String retailerId,
+  required List<Map<String, dynamic>> items,
+  bool replaceUnsent = false,
+}) {
+  final String key = CartDraftCache.keyFor(
+    salesmanUid: salesmanUid,
+    retailerId: retailerId,
+  );
+  final CartDraftSnapshot? existing = CartDraftCache.read(key);
+  if (existing != null && existing.pendingOrderId.trim().isNotEmpty) {
+    return ReorderDraftCase.sentWaiting;
+  }
+  if (existing != null && existing.items.isNotEmpty && !replaceUnsent) {
+    return ReorderDraftCase.unsentWithItems;
+  }
+  CartDraftCache.save(
+    key,
+    CartDraftSnapshot(
+      salesmanUid: salesmanUid,
+      retailerId: retailerId,
+      progress: 2,
+      items: items,
+    ),
+  );
+  return ReorderDraftCase.free;
+}
+
 class OrderHistoryScreen extends StatefulWidget {
   const OrderHistoryScreen({super.key});
 
@@ -905,7 +936,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
     return 'Orders you send will show here.';
   }
 
-  void _reuseOrder(OrderHistoryRecord order) {
+  Future<void> _reuseOrder(OrderHistoryRecord order) async {
     if (order.items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('This order has no items to reuse.')),
@@ -966,18 +997,51 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
       };
     }).toList();
 
-    CartDraftCache.save(
-      CartDraftCache.keyFor(
-        salesmanUid: salesmanUid,
-        retailerId: order.retailerId,
-      ),
-      CartDraftSnapshot(
-        salesmanUid: salesmanUid,
-        retailerId: order.retailerId,
-        progress: 2,
-        items: draftItems,
-      ),
+    ReorderDraftCase outcome = saveReorderDraft(
+      salesmanUid: salesmanUid,
+      retailerId: order.retailerId,
+      items: draftItems,
     );
+    if (outcome == ReorderDraftCase.unsentWithItems) {
+      final bool? replace = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext dialogContext) => AlertDialog(
+          title: const Text('Replace the unsent order?'),
+          content: const Text(
+            'This shop already has an unsent order. '
+            'Order again replaces it.',
+          ),
+          actions: <Widget>[
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Keep it'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Replace'),
+            ),
+          ],
+        ),
+      );
+      if (replace != true || !mounted) return;
+      outcome = saveReorderDraft(
+        salesmanUid: salesmanUid,
+        retailerId: order.retailerId,
+        items: draftItems,
+        replaceUnsent: true,
+      );
+    }
+    if (outcome == ReorderDraftCase.sentWaiting) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'An order for this shop is still waiting to send. '
+            "Open this shop's order to check it first.",
+          ),
+        ),
+      );
+      return;
+    }
 
     Navigator.push(
       context,

@@ -71,10 +71,38 @@ class CopilotOrderResultsView extends StatelessWidget {
                               ? null
                               : Border(top: BorderSide(color: dso.hairline)),
                         ),
-                        child: Text(
-                          card.rows[i],
-                          style: TextStyle(fontSize: 12, color: dso.body),
-                        ),
+                        child: card.rowIds == null
+                            ? Text(
+                                card.rows[i],
+                                style: TextStyle(fontSize: 12, color: dso.body),
+                              )
+                            : Row(
+                                children: <Widget>[
+                                  Expanded(
+                                    child: Text(
+                                      card.rows[i],
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: dso.body,
+                                      ),
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => onOpen(i + 1),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: dso.accentText,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                      ),
+                                      minimumSize: const Size(0, 28),
+                                    ),
+                                    child: Text(
+                                      'Open order ${card.rowIds![i]}',
+                                      style: const TextStyle(fontSize: 11),
+                                    ),
+                                  ),
+                                ],
+                              ),
                       ),
                     ),
                 ],

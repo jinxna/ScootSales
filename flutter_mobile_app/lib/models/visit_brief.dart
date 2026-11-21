@@ -22,6 +22,7 @@ class VisitBrief {
     required this.retailerMemory,
     required this.routeIntelligence,
     required this.replenishment,
+    required this.usualOrderWeekday,
     required this.isDemo,
     required this.updatedAt,
   });
@@ -45,6 +46,7 @@ class VisitBrief {
   final RouteIntelligenceSuggestion? routeIntelligence;
 
   final List<ReplenishmentSuggestion> replenishment;
+  final int? usualOrderWeekday;
   final bool isDemo;
   final DateTime? updatedAt;
 
@@ -113,6 +115,7 @@ class VisitBrief {
                 .where((ReplenishmentSuggestion s) => s.suggestedQty >= 1)
                 .toList(growable: false)
           : const <ReplenishmentSuggestion>[],
+      usualOrderWeekday: _usualOrderWeekday(data['usualOrderWeekday']),
       isDemo: isDemoRecord(<String, dynamic>{
         ...data,
         'docId': id,
@@ -147,6 +150,7 @@ class VisitBrief {
       'replenishment': replenishment
           .map((ReplenishmentSuggestion s) => s.toMap())
           .toList(),
+    if (usualOrderWeekday != null) 'usualOrderWeekday': usualOrderWeekday,
     'isDemo': isDemo,
     if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
   };
@@ -265,6 +269,7 @@ class ReplenishmentSuggestion {
     required this.lastOrderDaysAgo,
     required this.runRatePerDay,
     required this.patternMeanQty,
+    this.unitOfMeasure = '',
   });
 
   final String retailerId;
@@ -278,6 +283,7 @@ class ReplenishmentSuggestion {
   final int lastOrderDaysAgo;
   final double? runRatePerDay;
   final double patternMeanQty;
+  final String unitOfMeasure;
 
   factory ReplenishmentSuggestion.fromMap(Map<String, dynamic> data) {
     final Map<String, dynamic> inputs = data['inputs'] is Map
@@ -301,6 +307,7 @@ class ReplenishmentSuggestion {
       lastOrderDaysAgo: (inputs['lastOrderDaysAgo'] as num?)?.toInt() ?? 0,
       runRatePerDay: (inputs['runRatePerDay'] as num?)?.toDouble(),
       patternMeanQty: (inputs['patternMeanQty'] as num?)?.toDouble() ?? 0,
+      unitOfMeasure: _text(data['unitOfMeasure']),
     );
   }
 
@@ -308,6 +315,7 @@ class ReplenishmentSuggestion {
     'retailerId': retailerId,
     'productId': productId,
     'productName': productName,
+    if (unitOfMeasure.isNotEmpty) 'unitOfMeasure': unitOfMeasure,
     'suggestedQty': suggestedQty,
     'confidence': confidence,
     'confidenceLabel': confidenceLabel,
@@ -319,6 +327,12 @@ class ReplenishmentSuggestion {
       'patternMeanQty': patternMeanQty,
     },
   };
+}
+
+int? _usualOrderWeekday(Object? value) {
+  if (value is! num || value != value.roundToDouble()) return null;
+  final int day = value.toInt();
+  return day >= DateTime.monday && day <= DateTime.saturday ? day : null;
 }
 
 String _confidenceLabel(Object? value) {
@@ -381,6 +395,7 @@ class VisitFocusItem {
     required this.previousOutcome,
     required this.occurrenceCount,
     required this.autoState,
+    this.weeks = const <BriefWeek>[],
   });
 
   final String issueId;
@@ -401,6 +416,7 @@ class VisitFocusItem {
 
   final int occurrenceCount;
   final String autoState;
+  final List<BriefWeek> weeks;
 
   bool get isReturning => previousOutcome != null || occurrenceCount > 1;
 
@@ -431,6 +447,7 @@ class VisitFocusItem {
           : null,
       occurrenceCount: (data['occurrenceCount'] as num?)?.toInt() ?? 1,
       autoState: _text(data['autoState'], fallback: 'active'),
+      weeks: BriefWeek.listFrom(data),
     );
   }
 
@@ -468,7 +485,69 @@ class VisitFocusItem {
     if (previousOutcome != null) 'previousOutcome': previousOutcome!.toMap(),
     'occurrenceCount': occurrenceCount,
     'autoState': autoState,
+    if (weeks.isNotEmpty) ...<String, dynamic>{
+      'weeklyVersion': BriefWeek.version,
+      'weekStarts': weeks
+          .map((BriefWeek week) => week.isoDate)
+          .toList(growable: false),
+      'weeklyQuantities': weeks
+          .map((BriefWeek week) => week.quantity)
+          .toList(growable: false),
+    },
   };
+}
+
+class BriefWeek {
+  const BriefWeek({required this.weekStart, required this.quantity});
+
+  static const String version = 'brief-weekly/1.0.0';
+  static const int maxWeeks = 8;
+
+  final DateTime weekStart;
+  final double quantity;
+
+  String get isoDate =>
+      '${weekStart.year.toString().padLeft(4, '0')}-'
+      '${weekStart.month.toString().padLeft(2, '0')}-'
+      '${weekStart.day.toString().padLeft(2, '0')}';
+
+  static List<BriefWeek> listFrom(Map<String, dynamic> data) {
+    final Object? starts = data['weekStarts'];
+    final Object? quantities = data['weeklyQuantities'];
+    if (data['weeklyVersion'] != version ||
+        starts is! List ||
+        quantities is! List ||
+        starts.isEmpty ||
+        starts.length != quantities.length ||
+        starts.length > maxWeeks) {
+      return const <BriefWeek>[];
+    }
+    final List<BriefWeek> weeks = <BriefWeek>[];
+    for (int index = 0; index < starts.length; index++) {
+      final Object? rawStart = starts[index];
+      final Object? rawQuantity = quantities[index];
+      final DateTime? start = rawStart is String
+          ? DateTime.tryParse(rawStart.trim())
+          : null;
+      if (start == null ||
+          rawQuantity is! num ||
+          !rawQuantity.isFinite ||
+          rawQuantity < 0) {
+        return const <BriefWeek>[];
+      }
+      weeks.add(
+        BriefWeek(
+          weekStart: DateTime(start.year, start.month, start.day),
+          quantity: rawQuantity.toDouble(),
+        ),
+      );
+    }
+    weeks.sort(
+      (BriefWeek left, BriefWeek right) =>
+          left.weekStart.compareTo(right.weekStart),
+    );
+    return List<BriefWeek>.unmodifiable(weeks);
+  }
 }
 
 class VisitBriefInsight {

@@ -121,7 +121,7 @@ cp "$COPILOT_SRC/server/__init__.py" "$COPILOT_SRC/server/app.py" "$COPILOT_DST/
 cp -r "$BUILD_DIR" "$PACKAGE/web"
 if [ -n "$DASHBOARD_DIR" ]; then cp -r "$DASHBOARD_DIR" "$PACKAGE/dashboard"; fi
 find "$PACKAGE/web" "$PACKAGE/dashboard" -maxdepth 1 -name workspace.json -delete 2>/dev/null || true
-for file in scoot-deploy.sh nginx_site.py check_headers.py scoot-platform.service scoot-scheduler.service platform.env.tpl nginx-control.http.conf.tpl nginx-control.https.conf.tpl scoot-copilot.service copilot.env.tpl scoot-forecast.service scoot-forecast.timer scoot-forecast-hardware.service scoot-forecast-hardware.timer; do
+for file in scoot-deploy.sh nginx_site.py check_headers.py scoot-platform.service scoot-scheduler.service platform.env.tpl nginx-control.http.conf.tpl nginx-control.https.conf.tpl nginx-promo.http.conf.tpl nginx-promo.https.conf.tpl scoot-copilot.service copilot.env.tpl scoot-forecast.service scoot-forecast.timer scoot-forecast-hardware.service scoot-forecast-hardware.timer; do
   tr -d '\r' < "$DROPLET_DIR/$file" > "$PACKAGE/droplet/$file"
 done
 chmod 0755 "$PACKAGE/droplet/scoot-deploy.sh"

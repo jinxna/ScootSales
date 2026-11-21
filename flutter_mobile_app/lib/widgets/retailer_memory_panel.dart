@@ -17,21 +17,15 @@ bool hasUsableRetailerMemorySnapshot(RetailerMemoryContext? memory) {
 }
 
 class RetailerMemorySnapshotCard extends StatelessWidget {
-  const RetailerMemorySnapshotCard({super.key, required this.memory});
+  const RetailerMemorySnapshotCard({super.key, required this.facts});
 
-  final RetailerMemoryContext memory;
+  static const String title = 'What we know about this shop';
+
+  final List<String> facts;
 
   @override
   Widget build(BuildContext context) {
-    final List<String> signals = <String>[
-      for (final String reason in memory.commonReasonCodes.take(2))
-        reasonCodeLabel(reason),
-      if (memory.priceSensitivityScore > 0) 'Price sensitivity',
-      if (memory.seasonalityScore > 0) 'Seasonality',
-    ].take(3).toList(growable: false);
-    if (!hasUsableRetailerMemorySnapshot(memory)) {
-      return const SizedBox.shrink();
-    }
+    if (facts.isEmpty) return const SizedBox.shrink();
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
@@ -42,27 +36,17 @@ class RetailerMemorySnapshotCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
-            'AI retailer snapshot • ${memory.confidence} confidence',
-            style: const TextStyle(
+          const Text(
+            title,
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: Color(0xFF4C1D95),
             ),
           ),
-          if (signals.isNotEmpty) ...<Widget>[
+          for (final String fact in facts) ...<Widget>[
             const SizedBox(height: 4),
-            Text(
-              'Recent patterns: ${signals.join(', ')}.',
-              style: const TextStyle(fontSize: 12),
-            ),
-          ],
-          if (memory.replacementProductIds.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 3),
-            Text(
-              'Common replacements: ${memory.replacementProductIds.join(', ')}.',
-              style: const TextStyle(fontSize: 12),
-            ),
+            Text(fact, style: const TextStyle(fontSize: 12)),
           ],
         ],
       ),
@@ -77,8 +61,10 @@ class RetailerOwnHistoryCard extends StatefulWidget {
     required this.deferInitialLoad,
     required this.hasEmbeddedSnapshot,
     required this.loadMemory,
+    this.productNames = const <String, String>{},
   });
 
+  final Map<String, String> productNames;
   final String identity;
   final bool deferInitialLoad;
   final bool hasEmbeddedSnapshot;
@@ -161,7 +147,7 @@ class _RetailerOwnHistoryCardState extends State<RetailerOwnHistoryCard> {
           children: <Widget>[
             const Expanded(
               child: Text(
-                'Your visit history is optional and kept separate from the AI snapshot.',
+                'See what you recorded at this shop before.',
                 style: TextStyle(fontSize: 12, color: AppColors.textGrey),
               ),
             ),
@@ -191,7 +177,7 @@ class _RetailerOwnHistoryCardState extends State<RetailerOwnHistoryCard> {
           children: <Widget>[
             Text(
               widget.hasEmbeddedSnapshot
-                  ? 'Could not refresh your visit history. The AI snapshot remains available.'
+                  ? 'Could not refresh your visit history. The brief is still shown.'
                   : 'Could not load your visit history for this retailer.',
               style: const TextStyle(fontSize: 12, color: AppColors.textGrey),
             ),
@@ -249,7 +235,10 @@ class _RetailerOwnHistoryCardState extends State<RetailerOwnHistoryCard> {
               ),
             )
           else
-            _PopulatedHistory(memory: memory),
+            _PopulatedHistory(
+              memory: memory,
+              productNames: widget.productNames,
+            ),
         ],
       ),
     );
@@ -291,9 +280,10 @@ class _HistoryStatus extends StatelessWidget {
 }
 
 class _PopulatedHistory extends StatelessWidget {
-  const _PopulatedHistory({required this.memory});
+  const _PopulatedHistory({required this.memory, required this.productNames});
 
   final RetailerMemory memory;
+  final Map<String, String> productNames;
 
   @override
   Widget build(BuildContext context) {
@@ -305,7 +295,8 @@ class _PopulatedHistory extends StatelessWidget {
       for (final ReplacementStat replacement in memory.commonReplacements.take(
         1,
       ))
-        'Switched to ${replacement.productId}',
+        if (productNames[replacement.productId] case final String name)
+          'Switched to $name',
     ];
     final IssueMemory? lastIssue = memory.lastIssues.isEmpty
         ? null

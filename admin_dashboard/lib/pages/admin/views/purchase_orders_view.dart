@@ -46,6 +46,7 @@ class PurchaseOrdersView extends StatefulWidget {
     required this.changing,
     required this.onIssue,
     required this.onChangeStatus,
+    required this.loadOrderLines,
     this.salespersonNames = const <String, String>{},
     this.onJumpToLatest,
     this.onOpenOrders,
@@ -67,6 +68,8 @@ class PurchaseOrdersView extends StatefulWidget {
   final Set<String> changing;
   final ValueChanged<String> onIssue;
   final void Function(Map<String, dynamic> po, String target) onChangeStatus;
+  final Future<List<Map<String, dynamic>>> Function(String orderDocumentId)
+  loadOrderLines;
   final Map<String, String> salespersonNames;
   final VoidCallback? onJumpToLatest;
   final VoidCallback? onOpenOrders;
@@ -78,6 +81,8 @@ class PurchaseOrdersView extends StatefulWidget {
 
 class _PurchaseOrdersViewState extends State<PurchaseOrdersView> {
   final Set<String> _expanded = <String>{};
+  final Map<String, Future<List<Map<String, dynamic>>>> _orderLines =
+      <String, Future<List<Map<String, dynamic>>>>{};
   int _pagesLoaded = 1;
 
   @override
@@ -569,11 +574,6 @@ class _PurchaseOrdersViewState extends State<PurchaseOrdersView> {
     final bool open = _expanded.contains(docId);
     final bool busy = widget.changing.contains(docId);
     final DateTime? issuedAt = purchaseOrderIssuedAt(po);
-    final List<Map<String, dynamic>> lines = <Map<String, dynamic>>[
-      if (po['lines'] is List)
-        for (final Object? raw in po['lines'] as List)
-          if (raw is Map) Map<String, dynamic>.from(raw),
-    ];
     final String number = dataText(po['poNumber'], fallback: docId);
     final List<Widget> values = <Widget>[
       Row(
@@ -673,17 +673,103 @@ class _PurchaseOrdersViewState extends State<PurchaseOrdersView> {
                   ),
           ),
         ),
-        if (open) _lines(context, lines),
+        if (open) _poLines(context, po, docId),
       ],
+    );
+  }
+
+  Widget _poLines(BuildContext context, Map<String, dynamic> po, String docId) {
+    final Object? stored = po['lines'];
+    if (stored is List) {
+      return _lines(context, <Map<String, dynamic>>[
+        for (final Object? raw in stored)
+          if (raw is Map) Map<String, dynamic>.from(raw),
+      ]);
+    }
+    final Future<List<Map<String, dynamic>>> load = _orderLines.putIfAbsent(
+      docId,
+      () => widget.loadOrderLines(docId),
+    );
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: load,
+      builder:
+          (
+            BuildContext context,
+            AsyncSnapshot<List<Map<String, dynamic>>> snapshot,
+          ) {
+            if (snapshot.error is PurchaseOrderSourceGone) {
+              return _linesGone(context);
+            }
+            if (snapshot.hasError) return _linesFailed(context, docId);
+            if (!snapshot.hasData) return _linesLoading(context);
+            return _lines(context, snapshot.data!);
+          },
+    );
+  }
+
+  Widget _linesBox(BuildContext context, Widget child) => Container(
+    color: ScootColors.of(context).page,
+    padding: const EdgeInsets.fromLTRB(46, 8, 14, 12),
+    child: child,
+  );
+
+  Widget _linesLoading(BuildContext context) {
+    final ScootColors c = ScootColors.of(context);
+    return _linesBox(
+      context,
+      Row(
+        children: <Widget>[
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'Loading the order lines.',
+            style: ScootType.small.copyWith(color: c.muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _linesGone(BuildContext context) => _linesBox(
+    context,
+    Text(
+      'The order was deleted, so its lines are not available.',
+      style: ScootType.small.copyWith(color: ScootColors.of(context).muted),
+    ),
+  );
+
+  Widget _linesFailed(BuildContext context, String docId) {
+    final ScootColors c = ScootColors.of(context);
+    return _linesBox(
+      context,
+      Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(
+              'The order lines could not be loaded.',
+              style: ScootType.small.copyWith(color: c.ink),
+            ),
+          ),
+          OutlinedButton(
+            onPressed: () => setState(() {
+              _orderLines.remove(docId);
+            }),
+            child: const Text('Try again'),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _lines(BuildContext context, List<Map<String, dynamic>> lines) {
     final ScootColors c = ScootColors.of(context);
-    return Container(
-      color: c.page,
-      padding: const EdgeInsets.fromLTRB(46, 8, 14, 12),
-      child: lines.isEmpty
+    return _linesBox(
+      context,
+      lines.isEmpty
           ? Text(
               'This purchase order has no line items.',
               style: ScootType.small.copyWith(color: c.muted),

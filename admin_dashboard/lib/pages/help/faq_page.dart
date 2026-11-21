@@ -99,7 +99,7 @@ class _FaqPageState extends State<FaqPage> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
       children: <Widget>[
-        ScootPageHeader(title: 'Help and questions', fact: '${all.length} answers'),
+        const ScootPageHeader(title: 'Help and questions'),
         const SizedBox(height: ScootSpace.lg),
         TextField(
           controller: _search,

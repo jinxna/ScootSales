@@ -85,7 +85,8 @@ class GeminiGenerator:
             "contents": [{"role": "user", "parts": [{"text": text}]}],
             "tools": [{"functionDeclarations": to_declarations(schema.build_tools(pages, actions))}],
             "toolConfig": {"functionCallingConfig": {"mode": "ANY"}},
-            "generationConfig": {"temperature": 0, "maxOutputTokens": MAX_OUTPUT_TOKENS},
+            "generationConfig": {"temperature": 0, "maxOutputTokens": MAX_OUTPUT_TOKENS,
+                                 "thinkingConfig": {"thinkingLevel": "minimal"}},
         }
         reply = self._post(body, deadline)
         self.model_version = reply.get("modelVersion", self.model_version)

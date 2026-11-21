@@ -1355,13 +1355,19 @@ def test_generation_embeds_replenishment_from_pattern_run_rates() -> None:
         for brief in with_orders.visit_briefs
     )
     assert len(without_orders.visit_briefs) == len(with_orders.visit_briefs)
+    order_derived = {
+        "replenishment",
+        "usualOrderWeekday",
+        "usualOrderWeekdayVersion",
+    }
     for before, after in zip(
         without_orders.visit_briefs, with_orders.visit_briefs
     ):
+        assert "usualOrderWeekday" not in before
         assert {
-            key: value for key, value in before.items() if key != "replenishment"
+            key: value for key, value in before.items() if key not in order_derived
         } == {
-            key: value for key, value in after.items() if key != "replenishment"
+            key: value for key, value in after.items() if key not in order_derived
         }
     assert without_orders.replenishment == ()
 

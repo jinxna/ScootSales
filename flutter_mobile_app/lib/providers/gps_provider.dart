@@ -13,6 +13,7 @@ import '../services/firestore_service.dart';
 import '../services/gps_backlog.dart';
 import '../services/work_session_store.dart';
 import '../services/project_local_store.dart';
+import '../services/route_plan_service.dart';
 import '../utils/location_evidence.dart';
 import '../utils/location_fix.dart';
 
@@ -76,9 +77,17 @@ class GpsPermissionRequestGate {
   }
 }
 
+typedef SendWaitingStopEvents =
+    Future<bool> Function(String uid, UserModel? user, WorkSession session);
+
 class GpsProvider extends ChangeNotifier {
-  GpsProvider({FirestoreService? firestoreService})
-    : _firestoreService = firestoreService;
+  GpsProvider({
+    FirestoreService? firestoreService,
+    SendWaitingStopEvents? sendWaitingStopEvents,
+  }) : _firestoreService = firestoreService,
+       _sendWaitingStopEvents = sendWaitingStopEvents;
+
+  final SendWaitingStopEvents? _sendWaitingStopEvents;
 
   static const MethodChannel _notificationChannel = MethodChannel(
     'my.scootsales.app/notifications',
@@ -111,6 +120,10 @@ class GpsProvider extends ChangeNotifier {
     projectId: _localStore.projectId,
   );
   Future<void>? _backlogFlush;
+  Future<void>? _pendingEndRetry;
+  Timer? _pendingEndTimer;
+  bool _disposed = false;
+  static const Duration _pendingEndRetryDelay = Duration(seconds: 15);
   WorkSession? _workSession;
   UserModel? _sessionUser;
   bool _sessionNeedsSync = false;
@@ -126,13 +139,6 @@ class GpsProvider extends ChangeNotifier {
   int _controlSubscriptionGeneration = 0;
   int? _startFutureGeneration;
   int _trackingGeneration = 0;
-
-  @visibleForTesting
-  void showSyncPendingForTest({bool heldPoints = false, WorkSession? session}) {
-    _heldPointsBlockStart = heldPoints;
-    _workSession = session;
-    _setState(GpsTrackingState.syncPending);
-  }
 
   @visibleForTesting
   bool isCurrentTrackingGeneration({
@@ -296,6 +302,7 @@ class GpsProvider extends ChangeNotifier {
 
   Future<void> refreshTracking() async {
     unawaited(_flushHeldPoints());
+    unawaited(_finishPendingEnd());
     if (!_trackingEnabled || !_trackingRequested) return;
     final int generation = _trackingGeneration;
     _watchLocationService(generation);
@@ -452,6 +459,7 @@ class GpsProvider extends ChangeNotifier {
     if (!_isCurrentOwner(generation, user.uid)) return;
     if (blockedState != null && !explicit) {
       await _pausePositionStream(blockedState, generation: generation);
+      unawaited(_finishPendingEnd(user: user));
       return;
     }
 
@@ -544,6 +552,8 @@ class GpsProvider extends ChangeNotifier {
     required bool explicit,
   }) async {
     final FirestoreService service = _firestoreService ??= FirestoreService();
+    final Future<void>? endRetry = _pendingEndRetry;
+    if (endRetry != null) await endRetry;
     WorkSession? local;
     try {
       local = await _workSessionStore.read(user.uid);
@@ -559,28 +569,17 @@ class GpsProvider extends ChangeNotifier {
       _workSession = local;
       if (local.status == WorkSessionLocalStatus.ended) {
         if (local.endPendingSync && local.generation > 0) {
-          try {
-            await service.publishHeldTrack(
-              user: user,
-              session: local,
-              store: _backlog,
-            );
-            await service.endWorkSession(
-              uid: user.uid,
-              sessionId: local.sessionId,
-              generation: local.generation,
-            );
-            local = local.copyWith(endPendingSync: false);
-            await _workSessionStore.write(local);
-            _workSession = local;
-            await _flushHeldTrack(user);
-          } catch (_) {
-            if (_isCurrentOwner(generation, user.uid)) {
-              _sessionNeedsSync = true;
-              _setState(GpsTrackingState.syncPending);
-            }
+          await _finishPendingEnd(user: user);
+          if (!_isCurrentOwner(generation, user.uid)) return false;
+          final WorkSession? settled = _workSession;
+          if (settled == null ||
+              settled.sessionId != local.sessionId ||
+              settled.endPendingSync) {
+            _sessionNeedsSync = true;
+            _setState(GpsTrackingState.syncPending);
             return false;
           }
+          local = settled;
         } else if (await _backlog.hasAny(user.uid)) {
           unawaited(_flushHeldTrack(user));
         }
@@ -1530,7 +1529,7 @@ class GpsProvider extends ChangeNotifier {
   }
 
   void _setState(GpsTrackingState value) {
-    if (_state == value) return;
+    if (_disposed || _state == value) return;
     _state = value;
     notifyListeners();
   }
@@ -1575,7 +1574,7 @@ class GpsProvider extends ChangeNotifier {
     final int expectedGeneration = starting
         ? session.previousGeneration + 1
         : session.generation;
-    WorkSession ended = session.copyWith(
+    final WorkSession ended = session.copyWith(
       generation: expectedGeneration,
       status: WorkSessionLocalStatus.ended,
       endPendingSync: expectedGeneration > 0,
@@ -1605,6 +1604,35 @@ class GpsProvider extends ChangeNotifier {
       } catch (_) {}
     }
     if (!currentIdentity()) return;
+    await _endServerSession(
+      ownerUid: ownerUid,
+      ended: ended,
+      knownUser: user?.uid == ownerUid ? user : trackingUser,
+      currentIdentity: currentIdentity,
+      announce: true,
+    );
+  }
+
+  bool get _showsPendingEnd =>
+      _state == GpsTrackingState.sessionEndPending ||
+      _state == GpsTrackingState.syncPending;
+
+  void _armPendingEndRetry() {
+    if (_disposed) return;
+    _pendingEndTimer?.cancel();
+    _pendingEndTimer = Timer(_pendingEndRetryDelay, () {
+      _pendingEndTimer = null;
+      unawaited(_finishPendingEnd());
+    });
+  }
+
+  Future<void> _endServerSession({
+    required String ownerUid,
+    required WorkSession ended,
+    required UserModel? knownUser,
+    required bool Function() currentIdentity,
+    required bool announce,
+  }) async {
     UserModel? flushUser;
     try {
       final FirestoreService service = _firestoreService ??= FirestoreService();
@@ -1613,12 +1641,12 @@ class GpsProvider extends ChangeNotifier {
       );
       if (!currentIdentity()) return;
       if (server.sessionId == ended.sessionId &&
-          server.generation == expectedGeneration &&
+          server.generation == ended.generation &&
           server.isActive) {
         final UserModel? publishUser = await _resolveEndUser(
           service,
           ownerUid,
-          user?.uid == ownerUid ? user : trackingUser,
+          knownUser,
         );
         flushUser = publishUser;
         if (publishUser != null) {
@@ -1630,28 +1658,88 @@ class GpsProvider extends ChangeNotifier {
         } else if (await _hasHeldFixes(ownerUid, ended)) {
           throw StateError('The held location points need the user profile.');
         }
+        await _sendStopEventsBeforeEnd(ownerUid, publishUser, ended);
         await service.endWorkSession(
           uid: ownerUid,
           sessionId: ended.sessionId,
-          generation: expectedGeneration,
+          generation: ended.generation,
         );
       }
       if (!currentIdentity()) return;
-      ended = ended.copyWith(endPendingSync: false);
-      await _workSessionStore.write(ended);
+      final WorkSession synced = ended.copyWith(endPendingSync: false);
+      await _workSessionStore.write(synced);
       if (_localStore.isActive(ownerUid)) {
-        _workSession = ended;
+        _workSession = synced;
         _sessionNeedsSync = false;
-        _setState(GpsTrackingState.sessionEnded);
+        if (announce || _showsPendingEnd) {
+          _setState(GpsTrackingState.sessionEnded);
+        }
       }
     } catch (_) {
-      if (_localStore.isActive(ownerUid)) {
+      if (!_disposed && _localStore.isActive(ownerUid)) {
         _sessionNeedsSync = true;
-        _setState(GpsTrackingState.sessionEndPending);
+        if (announce) _setState(GpsTrackingState.sessionEndPending);
+        _armPendingEndRetry();
       }
       return;
     }
-    if (flushUser != null) await _flushHeldTrack(flushUser);
+    if (flushUser != null && !_disposed) await _flushHeldTrack(flushUser);
+  }
+
+  Future<void> _sendStopEventsBeforeEnd(
+    String uid,
+    UserModel? user,
+    WorkSession session,
+  ) async {
+    final SendWaitingStopEvents send =
+        _sendWaitingStopEvents ??
+        (String uid, UserModel? user, WorkSession session) => RoutePlanService()
+            .sendWaitingStopEvents(uid: uid, user: user, session: session);
+    if (!await send(uid, user, session)) {
+      throw StateError(
+        'Stop events of this work session are still waiting to be sent.',
+      );
+    }
+  }
+
+  Future<void> _finishPendingEnd({UserModel? user}) =>
+      _pendingEndRetry ??= _retryPendingEnd(
+        user,
+      ).whenComplete(() => _pendingEndRetry = null);
+
+  Future<void> _retryPendingEnd(UserModel? user) async {
+    if (_disposed) return;
+    final String uid =
+        (user?.uid ??
+                _workSession?.uid ??
+                _sessionUser?.uid ??
+                FirebaseAuth.instance.currentUser?.uid ??
+                '')
+            .trim();
+    if (uid.isEmpty || !_localStore.isActive(uid)) return;
+    WorkSession? session = _workSession?.uid == uid ? _workSession : null;
+    if (session == null) {
+      try {
+        session = await _workSessionStore.read(uid);
+      } catch (_) {
+        _armPendingEndRetry();
+        return;
+      }
+      if (_disposed || session == null || !_localStore.isActive(uid)) return;
+    }
+    if (session.status != WorkSessionLocalStatus.ended ||
+        !session.endPendingSync ||
+        session.generation <= 0) {
+      return;
+    }
+    _workSession ??= session;
+    await _endServerSession(
+      ownerUid: uid,
+      ended: session,
+      knownUser: user ?? (_sessionUser?.uid == uid ? _sessionUser : null),
+      currentIdentity: _localStore.lease(uid),
+      announce: false,
+    );
   }
 
   Future<void> _flushHeldPoints() async {
@@ -1755,6 +1843,9 @@ class GpsProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _pendingEndTimer?.cancel();
+    _pendingEndTimer = null;
     stopTracking();
     super.dispose();
   }

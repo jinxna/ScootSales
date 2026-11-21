@@ -90,7 +90,7 @@ module.exports = {
         }
       });
 
-      await t.step('admin: the setup checklist has no "Prepare AI data" step', async () => {
+      await t.step('admin: the setup checklist has no "Prepare weekly insights" step', async () => {
         s = await t.session('admin');
         await B.loginAdmin(s.page, s.url, accounts.admin.email);
         await admin.waitForShell(s.page);
@@ -98,7 +98,7 @@ module.exports = {
         const more = s.page.getByRole('button', { name: /^(Show all|\d+ more open steps)$/ }).first();
         if (await more.count()) await more.click();
         await B.see(s.page, /Publish a first route/);
-        await absent(B.semantic(s.page, /Prepare AI data/), 'Prepare AI data step');
+        await absent(B.semantic(s.page, /Prepare weekly insights/), 'Prepare weekly insights step');
         note('setup checklist', { steps: 9, prepareAiData: false });
       });
 
@@ -292,7 +292,9 @@ module.exports = {
       throw new Error(`no reply matching ${re} appeared after "${question}"`);
     }
     const AI_ON_CARD = [/today.?s focus/i, /retailer memory/i, /replenishment/i, /visit brief/i, /sales visit copilot/i,
-      /outcome\(s\)/, /no confirmed retailer outcomes/i, new RegExp(SIGNAL), new RegExp(RATIONALE)];
+      /outcome\(s\)/, /no confirmed retailer outcomes/i, new RegExp(SIGNAL), new RegExp(RATIONALE),
+      /reorder suggestions/i, /full brief/i, /what we know about this shop/i, /^Last order /, /Usually orders on/,
+      /You said you would come back/];
 
     let route;
     let stub;
@@ -397,6 +399,13 @@ module.exports = {
           throw new Error('Scout showed brief content');
         }
         await t.shot(cs, 'copilot-brief-declined');
+        for (const question of [`what should I say at ${RETAILER.name}?`, `when does ${RETAILER.name} usually order?`]) {
+          await ask(question);
+          await waitForReply(page, question, new RegExp(NOT_IN_EDITION.replace(/\./g, '\\.')));
+          if ((await allText(page)).some((x) => /talk about (this|these) point|usually orders on/.test(x) || new RegExp(SIGNAL).test(x))) {
+            throw new Error(`Scout showed brief content for "${question}"`);
+          }
+        }
 
         await ask('help');
         const help = await waitForReply(page, 'help', /I cannot submit orders, complete visits or record outcomes/);

@@ -12,6 +12,7 @@ import '../../../../utils/forecast_catalogue_provenance.dart';
 import '../../../../utils/order_data_utils.dart';
 import '../../../../utils/visit_data_utils.dart';
 import '../../../../widgets/admin_setup_checklist.dart';
+import 'home_decisions.dart';
 import 'home_parts.dart';
 import 'overview_metrics.dart';
 
@@ -276,7 +277,20 @@ class _RoleHomeSectionState extends State<RoleHomeSection> {
                     ? 2
                     : (width >= 1000 ? 4 : (width >= 640 ? 2 : 1)),
               );
-        final Widget needs = _needsCard(pending);
+        final Widget needs = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            HomeDecisionsCard(
+              currentUser: widget.currentUser,
+              title: _isBranchManager
+                  ? 'Needs a decision in your branch'
+                  : 'Needs your decision',
+              onNavigate: _go,
+            ),
+            const SizedBox(height: ScootSpace.blockGap),
+            _needsCard(pending),
+          ],
+        );
         final DateTime nowKl = DateTime.now().toUtc().add(
           const Duration(hours: 8),
         );
@@ -710,8 +724,9 @@ class _RoleHomeSectionState extends State<RoleHomeSection> {
         one: 'Order waits for approval',
         many: 'Orders wait for approval',
         detail: _isAdmin
-            ? 'Open All Orders to decide each one.'
-            : 'Open the orders page to see each one.',
+            ? 'This counts every order waiting, old ones too. In All Orders, '
+                  'choose Status: Waiting. The list holds the newest orders only.'
+            : 'Open the orders page and choose Status: Waiting.',
         action: _isAdmin ? 'Review' : 'Open orders',
         pageKey: 'all_orders',
       ),
@@ -774,11 +789,9 @@ class _RoleHomeSectionState extends State<RoleHomeSection> {
   }
 
   Widget _needsCard(AsyncSnapshot<int> pending) {
-    final String title = _isAdmin
-        ? 'Needs your decision'
-        : _isSupervisor
-        ? 'Needs you'
-        : 'Waiting on others';
+    final String title = _isBranchManager
+        ? 'Waiting on others'
+        : 'Orders and requests';
     return FutureBuilder<List<ActionCentreItem>>(
       future: widget.actionItemsFuture,
       builder:

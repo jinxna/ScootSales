@@ -505,8 +505,19 @@ def change_code(app, token, uid, code, *, key=None):
     return app.post(f"/v1/w/northwind/accounts/{uid}/employee-code", headers=headers, json={"employeeCode": code})
 
 
-
-
+@pytest.mark.parametrize("sent", ["S0002", "s0002"])
+def test_saving_the_same_code_in_another_letter_case_changes_nothing(app, world, sent):
+    write_member(PROJECT_A, "sales-c", "salesman", code="s0002")
+    db = company(PROJECT_A).db
+    db.collection("orders").document("ORD-sales-c").set({"salesmanUid": "sales-c", "salesmanCode": "s0002"})
+    index_before = db.collection("user_access").document("sales-c").get().to_dict()
+    profile_before = db.collection("users").document("s0002").get().to_dict()
+    reply = change_code(app, world["admin"], "sales-c", sent)
+    assert reply.status_code == 200, reply.text
+    assert reply.json()["employeeCode"] == "s0002"
+    assert db.collection("user_access").document("sales-c").get().to_dict() == index_before
+    assert db.collection("users").document("s0002").get().to_dict() == profile_before
+    assert not db.collection("users").document("S0002").get().exists
 
 
 def test_two_accounts_cannot_take_the_same_new_code_together(app, world):
@@ -725,6 +736,185 @@ def test_fix286_an_order_recorded_after_the_history_check_still_retires_the_code
     assert invite(app, world["admin"], employeeCode="s001", phone="+60 12-345 7003").status_code == 409
 
 
+def derived_email(code):
+    return f"{code}@t-northwind.invalid"
+
+
+def redeemed_salesperson(app, world, code="s100"):
+    made = invite(app, world["admin"], employeeCode=code).json()
+    assert redeem(app, made["code"], "6789").status_code == 200
+    return made
+
+
+def test_removing_a_person_with_no_work_frees_the_email_for_a_new_user(app, world):
+    made = redeemed_salesperson(app, world)
+    assert remove_account(app, world["admin"], made["uid"]).status_code == 200
+    assert not auth_user_exists(PROJECT_A, derived_email("s100"))
+    again = invite(app, world["admin"], employeeCode="s100")
+    assert again.status_code == 201, again.text
+    assert again.json()["uid"] != made["uid"]
+
+
+def test_removing_a_person_with_work_keeps_the_sign_in_disabled(app, world):
+    made = redeemed_salesperson(app, world)
+    record_order(PROJECT_A, made["uid"], "S100")
+    assert remove_account(app, world["admin"], made["uid"]).status_code == 200
+    assert company(PROJECT_A).auth.get_user(made["uid"]).disabled
+
+
+def test_the_same_remove_request_sent_again_after_the_sign_in_was_deleted_still_succeeds(app, world):
+    made = redeemed_salesperson(app, world)
+    assert remove_account(app, world["admin"], made["uid"], key="same-key").status_code == 200
+    assert remove_account(app, world["admin"], made["uid"], key="same-key").status_code == 200
+    assert remove_account(app, world["admin"], made["uid"]).status_code == 404
+
+
+@pytest.mark.parametrize("worked", [False, True])
+def test_an_invitation_reuses_a_leftover_disabled_sign_in_and_its_history(app, world, worked):
+    access = company(PROJECT_A)
+    access.auth.create_user(uid="ghost", email=derived_email("s102"), disabled=True)
+    if worked:
+        record_order(PROJECT_A, "ghost", "G1")
+    made = invite(app, world["admin"], employeeCode="s102", role="supervisor")
+    assert made.status_code == 201, made.text
+    assert made.json()["uid"] == "ghost"
+    assert redeem(app, made.json()["code"], "6789").status_code == 200
+    assert not access.auth.get_user("ghost").disabled
+    row = access.db.collection("user_access").document("ghost").get().to_dict()
+    assert (row["role"], row["employeeCode"], row["status"]) == ("supervisor", "S102", "active")
+    assert sign_in_password(PROJECT_A, derived_email("s102"), "correct-horse-1")["localId"] == "ghost"
+    if worked:
+        assert access.db.collection("orders").document("ORD-1").get().to_dict()["salesmanUid"] == "ghost"
+
+
+def test_a_removed_person_with_work_is_invited_again_on_the_same_sign_in(app, world, mailbox):
+    first = invite(app, world["admin"], email="aisha@example.com", phone=None, employeeCode="s100").json()
+    assert redeem_email(app, mailbox, first, "aisha@example.com").status_code == 200
+    record_order(PROJECT_A, first["uid"], "S100")
+    assert remove_account(app, world["admin"], first["uid"]).status_code == 200
+    again = invite(app, world["admin"], email="aisha@example.com", phone=None, employeeCode="s105", role="supervisor")
+    assert again.status_code == 201, again.text
+    assert again.json()["uid"] == first["uid"]
+
+
+def test_a_rehired_person_whose_work_is_filed_only_under_the_old_code_keeps_the_sign_in_on_a_second_removal(
+        app, world, mailbox):
+    first = invite(app, world["admin"], email="aisha@example.com", phone=None, employeeCode="s100").json()
+    assert redeem_email(app, mailbox, first, "aisha@example.com").status_code == 200
+    record_order(PROJECT_A, "", "S100")
+    assert remove_account(app, world["admin"], first["uid"]).status_code == 200
+    again = invite(app, world["admin"], email="aisha@example.com", phone=None, employeeCode="s106").json()
+    assert again["uid"] == first["uid"]
+    assert redeem_email(app, mailbox, again, "aisha@example.com", password="correct-horse-2").status_code == 200
+    assert remove_account(app, world["admin"], first["uid"]).status_code == 200
+    assert company(PROJECT_A).auth.get_user(first["uid"]).disabled
+
+
+def test_an_order_recorded_after_the_history_check_keeps_the_sign_in(app, world, monkeypatch):
+    made = redeemed_salesperson(app, world)
+    original = InvitationService._remove_records
+
+    def order_arrives_first(self, params):
+        record_order(PROJECT_A, made["uid"], "S100")
+        return original(self, params)
+
+    monkeypatch.setattr(InvitationService, "_remove_records", order_arrives_first)
+    assert remove_account(app, world["admin"], made["uid"]).status_code == 200
+    assert company(PROJECT_A).auth.get_user(made["uid"]).disabled
+
+
+def test_a_sign_in_with_no_account_record_is_kept_when_its_profile_code_has_orders(app, world):
+    access = company(PROJECT_A)
+    access.auth.create_user(uid="legacy-7", email="legacy7@example.com")
+    access.db.collection("users").document("G7").set({"uid": "legacy-7", "employeeCode": "G7", "role": "salesman"})
+    record_order(PROJECT_A, "", "G7")
+    assert remove_account(app, world["admin"], "legacy-7").status_code == 200
+    assert access.auth.get_user("legacy-7").disabled
+    again = invite(app, world["admin"], employeeCode="g7", phone="+60 12-345 7009")
+    assert again.status_code == 409 and "used before by someone else" in again.text, again.text
+
+
+def test_a_sign_in_whose_profile_holds_its_code_in_an_older_field_is_kept_when_that_code_has_orders(app, world):
+    access = company(PROJECT_A)
+    access.auth.create_user(uid="legacy-8", email="legacy8@example.com")
+    access.db.collection("users").document("legacy8@example.com").set({"uid": "legacy-8", "staffId": "G8", "role": "salesman"})
+    record_order(PROJECT_A, "", "G8")
+    assert remove_account(app, world["admin"], "legacy-8").status_code == 200
+    assert access.auth.get_user("legacy-8").disabled
+
+
+def test_an_open_invitation_keeps_its_disabled_sign_in_when_the_email_is_invited_again(app, world):
+    first = invite(app, world["admin"], email="aisha@example.com", phone=None, employeeCode="s100").json()
+    again = invite(app, world["admin"], email="aisha@example.com", phone=None, employeeCode="s101")
+    assert again.status_code == 409 and "sign-in email is already in use" in again.text
+    assert company(PROJECT_A).auth.get_user(first["uid"]).disabled
+    assert company(PROJECT_A).db.collection("user_access").document(first["uid"]).get().exists
+
+
+def test_a_suspended_person_keeps_the_email_when_it_is_invited_again(app, world):
+    reply = app.post("/v1/w/northwind/accounts/sales-a/revoke", headers=bearer(world["admin"]))
+    assert reply.status_code == 200, reply.text
+    again = invite(app, world["admin"], email="sales-a@example.com", phone=None, employeeCode="s103")
+    assert again.status_code == 409 and "sign-in email is already in use" in again.text
+    assert company(PROJECT_A).auth.get_user("sales-a").disabled
+
+
+def remove_profile(app, token, doc_id, *, key=None):
+    headers = {**bearer(token), "Idempotency-Key": key or uuid.uuid4().hex}
+    return app.post(f"/v1/w/northwind/profiles/{doc_id}/remove", headers=headers)
+
+
+def seed_profile(doc_id, **fields):
+    company(PROJECT_A).db.collection("users").document(doc_id).set(
+        {"employeeCode": doc_id, "name": doc_id, "role": "salesman", "branchId": "BR1", **fields})
+
+
+def test_removing_a_profile_with_no_sign_in_deletes_it_its_team_places_and_branch_link(app, world):
+    db = company(PROJECT_A).db
+    seed_profile("M100", role="branch_manager")
+    write_member(PROJECT_A, "sup-a", "supervisor", code="SUP1", codes=["m100", "S009"])
+    db.collection("users").document("SUP1").update({"assignedSalesmanCodes": ["M100", "S009"]})
+    db.collection("branches").document("BR1").set({"name": "Kuching", "branchManagerId": "m100"})
+    db.collection("branches").document("BR2").set({"name": "Miri", "branchManagerId": "S001"})
+    reply = remove_profile(app, world["admin"], "M100")
+    assert reply.status_code == 200, reply.text
+    assert reply.json() == {"docId": "M100", "status": "removed"}
+    assert not db.collection("users").document("M100").get().exists
+    assert db.collection("user_access").document("sup-a").get().to_dict()["assignedSalesmanCodes"] == ["S009"]
+    assert db.collection("users").document("SUP1").get().to_dict()["assignedSalesmanCodes"] == ["S009"]
+    assert "branchManagerId" not in db.collection("branches").document("BR1").get().to_dict()
+    assert db.collection("branches").document("BR2").get().to_dict()["branchManagerId"] == "S001"
+    assert remove_profile(app, world["admin"], "M100").status_code == 404
+
+
+def test_removing_a_profile_whose_code_has_work_keeps_the_code_retired(app, world):
+    seed_profile("M101")
+    record_order(PROJECT_A, "", "M101")
+    assert remove_profile(app, world["admin"], "M101").status_code == 200
+    claim = company(PROJECT_A).db.collection("employee_codes").document("M101").get().to_dict() or {}
+    assert claim.get("retired") is True
+
+
+def test_a_profile_that_has_a_sign_in_a_linked_access_record_or_salespeople_is_not_removed(app, world):
+    db = company(PROJECT_A).db
+    seed_profile("U1", uid="some-uid")
+    seed_profile("U2")
+    db.collection("user_access").document("linked").set({"uid": "linked", "userDocId": "U2", "employeeCode": "U2"})
+    seed_profile("U3", role="supervisor", assignedSalesmanCodes=["S001"])
+    seed_profile("U4", email="sales-a@example.com")
+    for doc_id in ("U1", "U2", "U3", "U4"):
+        reply = remove_profile(app, world["admin"], doc_id)
+        assert reply.status_code == 409, (doc_id, reply.text)
+        assert db.collection("users").document(doc_id).get().exists
+    assert "Move them to another supervisor first." in remove_profile(app, world["admin"], "U3").text
+
+
+def test_only_an_active_admin_may_remove_a_profile(app, world):
+    seed_profile("U5")
+    assert remove_profile(app, world["sales"], "U5").status_code == 403
+    assert company(PROJECT_A).db.collection("users").document("U5").get().exists
+
+
 def test_fix287_an_invitation_that_expires_during_the_redeem_hold_does_not_join(app, client, world, monkeypatch):
     made = invite(app, world["admin"]).json()
     original = InvitationService._finish_redeem
@@ -872,3 +1062,26 @@ def test_first_admin_grant_resumes_after_a_crash_between_profile_and_activation(
     assert (row["status"], row["employeeCode"], row["invitationState"]) == ("active", "ADM020", "redeemed")
     assert profile_doc("ADM021") is None
     assert usage.get().to_dict()["seats"]["admins"] == admins_before + 1
+
+
+def test_a_profile_linked_by_its_older_uid_field_is_not_removed_and_its_sign_in_is_not_reused(app, world):
+    company(PROJECT_A).auth.create_user(uid="old-link", email=derived_email("s104"), disabled=True)
+    seed_profile("L1", userUid="old-link")
+    assert remove_profile(app, world["admin"], "L1").status_code == 409
+    again = invite(app, world["admin"], employeeCode="s104")
+    assert again.status_code == 409 and "sign-in email is already in use" in again.text
+
+
+def test_a_supervisor_profile_with_an_older_role_spelling_and_salespeople_is_not_removed(app, world):
+    seed_profile("SV9", role="Supervisor", assignedSalesmanCodes=["S001"])
+    reply = remove_profile(app, world["admin"], "SV9")
+    assert reply.status_code == 409 and "still has salespeople" in reply.text
+
+
+def test_removing_a_sign_in_whose_profile_links_it_by_the_older_uid_field_deletes_the_profile(app, world):
+    access = company(PROJECT_A)
+    access.auth.create_user(uid="old-link-2", email="oldlink2@example.com")
+    seed_profile("L2", userUid="old-link-2", uid=" ")
+    assert remove_profile(app, world["admin"], "L2").status_code == 409
+    assert remove_account(app, world["admin"], "old-link-2").status_code == 200
+    assert not access.db.collection("users").document("L2").get().exists

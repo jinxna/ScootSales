@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 const int kFirestoreWhereInMaxValues = 30;
+const int kFirestoreDisjunctionMax = 30;
 
 Stream<QuerySnapshot<Map<String, dynamic>>> snapshotsWithIndexFallback(
   Query<Map<String, dynamic>> preferred,

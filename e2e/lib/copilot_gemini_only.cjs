@@ -7,7 +7,7 @@ const { ANSWERS, PORT } = require('./copilot_server.cjs');
 
 const ROOT = path.join(__dirname, '..', '..');
 const PYTHON = process.env.E2E_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
-const GEMINI_PORT = 18767;
+const GEMINI_PORT = require('./lane.cjs').ports.gemini;
 const KEY = 'e2e-fake-gemini-key';
 const DAILY_LIMIT = 3;
 const HELD_SECONDS = 30;

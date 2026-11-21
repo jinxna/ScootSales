@@ -46,9 +46,10 @@ class PickIntent extends CopilotIntent {
 }
 
 class BriefRetailerIntent extends CopilotIntent {
-  const BriefRetailerIntent(this.name, {this.period});
+  const BriefRetailerIntent(this.name, {this.period, this.fromMemory = false});
   final String name;
   final CopilotRange? period;
+  final bool fromMemory;
 }
 
 class RankWhyIntent extends CopilotIntent {
@@ -65,8 +66,19 @@ class OpenResultIntent extends CopilotIntent {
   final int position;
 }
 
+enum SmallTalkKind {
+  greeting,
+  howAreYou,
+  thanks,
+  acknowledged,
+  whoAreYou,
+  chatter,
+  offTopic,
+}
+
 class SmallTalkIntent extends CopilotIntent {
-  const SmallTalkIntent();
+  const SmallTalkIntent(this.kind);
+  final SmallTalkKind kind;
 }
 
 class TopIntent extends CopilotIntent {
@@ -118,7 +130,15 @@ const Map<String, int> _cardinals = <String, int>{
 };
 
 final List<String> _englishNumbers = <String>[
-  'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
   'ten',
 ];
 
@@ -176,14 +196,42 @@ const String _monthWords =
     'november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec';
 
 const Set<String> _nameMonths = <String>{
-  'may', 'jun', 'june', 'april', 'august', 'jan', 'mar', 'apr', 'aug',
+  'may',
+  'jun',
+  'june',
+  'april',
+  'august',
+  'jan',
+  'mar',
+  'apr',
+  'aug',
 };
 
 const Map<String, int> _monthNumbers = <String, int>{
-  'jan': 1, 'january': 1, 'feb': 2, 'february': 2, 'mar': 3, 'march': 3,
-  'apr': 4, 'april': 4, 'may': 5, 'jun': 6, 'june': 6, 'jul': 7, 'july': 7,
-  'aug': 8, 'august': 8, 'sep': 9, 'sept': 9, 'september': 9, 'oct': 10,
-  'october': 10, 'nov': 11, 'november': 11, 'dec': 12, 'december': 12,
+  'jan': 1,
+  'january': 1,
+  'feb': 2,
+  'february': 2,
+  'mar': 3,
+  'march': 3,
+  'apr': 4,
+  'april': 4,
+  'may': 5,
+  'jun': 6,
+  'june': 6,
+  'jul': 7,
+  'july': 7,
+  'aug': 8,
+  'august': 8,
+  'sep': 9,
+  'sept': 9,
+  'september': 9,
+  'oct': 10,
+  'october': 10,
+  'nov': 11,
+  'november': 11,
+  'dec': 12,
+  'december': 12,
 };
 
 final RegExp _pastDaysRange = RegExp(
@@ -337,35 +385,189 @@ final RegExp _refOnes = RegExp(
 );
 
 const Set<String> _fillerWords = <String>{
-  'i', 'you', 'we', 'he', 'she', 'it', 'they', 'is', 'are', 'was', 'were',
-  'am', 'be', 'been', 'do', 'does', 'did', 'has', 'have', 'had', 'can',
-  'could', 'will', 'would', 'should', 'that', 'thats', "that's", 'this',
-  'these', 'those', 'there', 'here', 'what', 'how', 'why', 'when', 'where',
-  'who', 'which', 'not', 'no', 'yes', 'want', 'need', 'show', 'list', 'open',
-  'buka', 'go', 'take', 'my', 'your', 'our', 'and', 'or', 'but', 'then',
-  'also', 'with', 'just', 'only', 'if', 'so', 'as', 'in', 'on', 'a', 'an',
-  'approve', 'review', 'process', 'tunjuk', 'ini', 'itu', 'apa', 'dan',
-  'cuma', 'hanya', 'sahaja', 'saya', 'kita', 'whats', "what's", 'wat', 'wats',
-  'every', 'each',
+  'i',
+  'you',
+  'we',
+  'he',
+  'she',
+  'it',
+  'they',
+  'is',
+  'are',
+  'was',
+  'were',
+  'am',
+  'be',
+  'been',
+  'do',
+  'does',
+  'did',
+  'has',
+  'have',
+  'had',
+  'can',
+  'could',
+  'will',
+  'would',
+  'should',
+  'that',
+  'thats',
+  "that's",
+  'this',
+  'these',
+  'those',
+  'there',
+  'here',
+  'what',
+  'how',
+  'why',
+  'when',
+  'where',
+  'who',
+  'which',
+  'not',
+  'no',
+  'yes',
+  'want',
+  'need',
+  'show',
+  'list',
+  'open',
+  'buka',
+  'go',
+  'take',
+  'my',
+  'your',
+  'our',
+  'and',
+  'or',
+  'but',
+  'then',
+  'also',
+  'with',
+  'just',
+  'only',
+  'if',
+  'so',
+  'as',
+  'in',
+  'on',
+  'a',
+  'an',
+  'approve',
+  'review',
+  'process',
+  'tunjuk',
+  'ini',
+  'itu',
+  'apa',
+  'dan',
+  'cuma',
+  'hanya',
+  'sahaja',
+  'saya',
+  'kita',
+  'whats',
+  "what's",
+  'wat',
+  'wats',
+  'every',
+  'each',
 };
 
 const Set<String> _notNames = <String>{
-  'reports', 'report', 'retailers', 'retailer', 'salesman', 'salesmen',
-  'salesperson', 'salespeople', 'products', 'product', 'dashboard',
-  'overview', 'settings', 'users', 'user', 'tracking', 'routes', 'route',
-  'forecast', 'forecasts', 'prediction', 'inventory', 'targets', 'audit',
-  'visits', 'schedule', 'catalogue', 'catalog', 'planner', 'map', 'team',
-  'sales', 'purchase', 'special', 'approval', 'approvals', 'procurement',
-  'po', 'page', 'screen', 'tab', 'section', 'history', 'summary', 'details',
-  'data', 'status', 'queue', 'table', 'again', 'now', 'them', 'one', 'ones',
-  'all', 'everything', 'me', 'us', 'the', 'yang', 'of', 'to', 'for', 'by',
-  'at', 'from', 'today', 'week', 'month', 'jurujual', 'kedai', 'semua',
-  'branch', 'branches', 'draft', 'drafts',
+  'reports',
+  'report',
+  'retailers',
+  'retailer',
+  'salesman',
+  'salesmen',
+  'salesperson',
+  'salespeople',
+  'products',
+  'product',
+  'dashboard',
+  'overview',
+  'settings',
+  'users',
+  'user',
+  'tracking',
+  'routes',
+  'route',
+  'forecast',
+  'forecasts',
+  'prediction',
+  'inventory',
+  'targets',
+  'audit',
+  'visits',
+  'schedule',
+  'catalogue',
+  'catalog',
+  'planner',
+  'map',
+  'team',
+  'sales',
+  'purchase',
+  'special',
+  'approval',
+  'approvals',
+  'procurement',
+  'po',
+  'page',
+  'screen',
+  'tab',
+  'section',
+  'history',
+  'summary',
+  'details',
+  'data',
+  'status',
+  'queue',
+  'table',
+  'again',
+  'now',
+  'them',
+  'one',
+  'ones',
+  'all',
+  'everything',
+  'me',
+  'us',
+  'the',
+  'yang',
+  'of',
+  'to',
+  'for',
+  'by',
+  'at',
+  'from',
+  'today',
+  'week',
+  'month',
+  'jurujual',
+  'kedai',
+  'semua',
+  'branch',
+  'branches',
+  'draft',
+  'drafts',
 };
 
 const Set<String> _glue = <String>{
-  'the', 'yang', 'ones', 'one', 'orders', 'order', 'pesanan', 'tempahan',
-  "'s", 's', 'please', 'tolong', 'ya',
+  'the',
+  'yang',
+  'ones',
+  'one',
+  'orders',
+  'order',
+  'pesanan',
+  'tempahan',
+  "'s",
+  's',
+  'please',
+  'tolong',
+  'ya',
 };
 
 class _Parsed {
@@ -665,7 +867,10 @@ final RegExp _modelText = RegExp(r"^[\p{L}\p{N} .,'&/()-]+$", unicode: true);
 
 CopilotIntent? searchIntentFromCall(Map<String, Object?> args, DateTime now) {
   const Set<String> known = <String>{
-    'salesperson', 'retailer', 'period', 'status',
+    'salesperson',
+    'retailer',
+    'period',
+    'status',
   };
   if (args.keys.any((String k) => !known.contains(k))) return null;
   final Map<String, String> v = <String, String>{};
@@ -701,9 +906,272 @@ CopilotIntent? searchIntentFromCall(Map<String, Object?> args, DateTime now) {
   );
 }
 
-final RegExp _smallTalk = RegExp(
-  r"^(?:(?:hi|hello|hey|hai|helo|yo)(?: there| copilot| scout| assistant)?|how are you(?: doing| today| feeling)?|how are u|how r u|how is it going|hows it going|how's it going|good (?:morning|afternoon|evening)|selamat (?:pagi|petang|tengah hari|malam)|apa khabar|thanks?|thank you|terima kasih|who are you|what can you do|what do you do|help|help me|bantuan)$",
+final RegExp _greeting = RegExp(
+  r'^(?:(?:hi|hello|hey|hai|helo|yo|hiya)(?: there| copilot| scout| assistant| bud| mate| bro| all| team)?|good (?:morning|afternoon|evening|day)|selamat (?:pagi|petang|tengah hari|malam))$',
 );
+final RegExp _howAreYou = RegExp(
+  r"^(?:(?:hi|hello|hey) )?(?:how are you(?: doing| today| feeling)?|how are u|how r u|how is it going|hows it going|how's it going|apa khabar)$",
+);
+final RegExp _thanks = RegExp(
+  r'^(?:(?:ok|okay|great|cool|nice|good|perfect|awesome) )?(?:thanks?(?: a lot| so much| scout| bud| mate)?|thank you(?: so much| very much| scout)?|thx|ty|tq|cheers|terima kasih)$',
+);
+final RegExp _acknowledged = RegExp(
+  r'^(?:ok|okay|cool|nice|great|got it|noted|alright|perfect|awesome|i see|understood|baik)$',
+);
+final RegExp _whoAreYou = RegExp(
+  r"^(?:who are you|who are u|what are you|who is this|what is your name|whats your name|what's your name|are you a bot|are you human|are you real)$",
+);
+final RegExp _generalQuestion = RegExp(
+  r"^(?:(?:tell me |say )?(?:a |another )?joke|what (?:is|s) the (?:weather|time|date|meaning of life)(?: .*)?|whats the (?:weather|time|date)(?: .*)?|what time is it|how old are you|where are you from|what is the capital of .+|(?:who|what) (?:invented|created|founded|discovered) .+|how (?:tall|old|rich) is .+)$",
+);
+final RegExp _whoQuestion = RegExp(
+  r"^(?:who|whos|who's) (?:is|was|are|were) (.+)$",
+);
+final RegExp _laugh = RegExp(
+  r'^(?:l+o+l+|(?:ha|he|hi){2,}h?|xd+|lmf?ao+|rofl)$',
+);
+
+const Set<String> copilotChatterWords = <String>{
+  'stupid',
+  'dumb',
+  'dumbass',
+  'idiot',
+  'idiotic',
+  'useless',
+  'ass',
+  'asshole',
+  'fool',
+  'foolish',
+  'hell',
+  'suck',
+  'sucks',
+  'sucked',
+  'trash',
+  'rubbish',
+  'garbage',
+  'crap',
+  'crappy',
+  'shit',
+  'shitty',
+  'fuck',
+  'fucking',
+  'fucked',
+  'fk',
+  'stfu',
+  'wtf',
+  'moron',
+  'bodoh',
+  'bangang',
+  'lame',
+  'pathetic',
+  'worst',
+  'terrible',
+  'awful',
+  'hate',
+  'annoying',
+  'shut',
+  'noob',
+  'loser',
+  'damn',
+  'dammit',
+  'bruh',
+  'ugh',
+  'meh',
+  'wow',
+  'omg',
+  'hmm',
+  'hmmm',
+  'lol',
+  'lmao',
+  'haha',
+};
+
+const Set<String> _chatterFiller = <String>{
+  'u',
+  'you',
+  'ur',
+  'your',
+  'youre',
+  "you're",
+  'are',
+  'r',
+  'is',
+  'so',
+  'such',
+  'a',
+  'an',
+  'the',
+  'this',
+  'that',
+  'it',
+  'its',
+  "it's",
+  'very',
+  'really',
+  'too',
+  'totally',
+  'bot',
+  'scout',
+  'thing',
+  'man',
+  'bro',
+  'bud',
+  'dude',
+  'mate',
+  'why',
+  'what',
+  'just',
+  'i',
+  'me',
+  'my',
+  'up',
+  'of',
+  'at',
+  'kinda',
+  'quite',
+  'pretty',
+  'much',
+  'even',
+  'lah',
+  'la',
+  'kau',
+  'awak',
+  'lu',
+  'sangat',
+  'betul',
+  'oh',
+  'ok',
+  'okay',
+};
+
+const Set<String> _businessWords = <String>{
+  'due',
+  'overdue',
+  'order',
+  'orders',
+  'shop',
+  'shops',
+  'store',
+  'stores',
+  'retailer',
+  'retailers',
+  'outlet',
+  'outlets',
+  'customer',
+  'customers',
+  'route',
+  'routes',
+  'plan',
+  'plans',
+  'planner',
+  'visit',
+  'visits',
+  'visiting',
+  'salesperson',
+  'salesman',
+  'salesmen',
+  'salespeople',
+  'rep',
+  'reps',
+  'team',
+  'product',
+  'products',
+  'branch',
+  'top',
+  'first',
+  'best',
+  'ranked',
+  'rank',
+  'priority',
+  'pending',
+  'waiting',
+  'approval',
+  'stopped',
+  'buying',
+  'ordering',
+  'assigned',
+  'kedai',
+  'pesanan',
+  'jurujual',
+  'laluan',
+};
+
+const Set<String> _workWords = <String>{
+  'working',
+  'work',
+  'online',
+  'offline',
+  'late',
+  'absent',
+  'logged',
+  'login',
+  'signed',
+  'created',
+  'submitted',
+  'approved',
+  'rejected',
+  'oldest',
+  'newest',
+  'latest',
+  'sale',
+  'sales',
+  'sold',
+  'staff',
+  'supervisor',
+  'manager',
+  'admin',
+  'driver',
+  'invoice',
+  'stock',
+  'delivery',
+  'today',
+  'yesterday',
+  'tomorrow',
+  'tonight',
+  'now',
+  'week',
+  'month',
+  'morning',
+  'afternoon',
+  'shift',
+  'hari',
+  'semalam',
+  'minggu',
+};
+
+bool _aboutWork(String whole) => whole
+    .split(' ')
+    .any(
+      (String word) =>
+          _businessWords.contains(word) || _workWords.contains(word),
+    );
+
+bool _isChatter(String text) {
+  final List<String> words = text.split(' ');
+  bool felt = false;
+  for (final String word in words) {
+    if (copilotChatterWords.contains(word) || _laugh.hasMatch(word)) {
+      felt = true;
+    } else if (!_chatterFiller.contains(word)) {
+      return false;
+    }
+  }
+  return felt;
+}
+
+SmallTalkKind? smallTalkKind(String whole) {
+  if (_howAreYou.hasMatch(whole)) return SmallTalkKind.howAreYou;
+  if (_greeting.hasMatch(whole)) return SmallTalkKind.greeting;
+  if (_thanks.hasMatch(whole)) return SmallTalkKind.thanks;
+  if (_acknowledged.hasMatch(whole)) return SmallTalkKind.acknowledged;
+  if (_whoAreYou.hasMatch(whole)) return SmallTalkKind.whoAreYou;
+  if (_isChatter(whole)) return SmallTalkKind.chatter;
+  if (_aboutWork(whole)) return null;
+  if (_generalQuestion.hasMatch(whole) || _whoQuestion.hasMatch(whole)) {
+    return SmallTalkKind.offTopic;
+  }
+  return null;
+}
 
 final RegExp _topRetailers = RegExp(
   r'\b(?:top|best|biggest|highest|leading)(?:\s+(\d{1,2}))?\s+(?:selling\s+|buying\s+|performing\s+)?(?:retailers?|shops?|stores?|outlets?|customers?|kedai|peruncit)\b',
@@ -715,7 +1183,7 @@ final RegExp _progressCommand = RegExp(
   r"\b(?:salesm[ae]n|salesperson|salespeople|sales team|jurujual|team)(?:'s|s)?\s+(?:progress|activity|tracking)\b|\b(?:progress|activity)\s+(?:of|for)\s+(?:my\s+|the\s+)?(?:salesm[ae]n|salespeople|team|jurujual)\b|\bhow (?:are|is) my (?:salesm[ae]n|salespeople|team) doing\b",
 );
 final RegExp _approveCommand = RegExp(
-  r'^(?:(?:please|tolong|can you|could you|would you|i want to|i would like to|let me) )*(?:approve|accept|authori[sz]e|lulus(?:kan)?)\b(.*)$',
+  r'^(?:(?:please|tolong|can you|could you|would you|i want to|i would like to|let me|yeah|yes|yep|yup|ya|ok|okay|sure|alright|so|then|just|now|and|go ahead and) )*(?:approve|accept|authori[sz]e|lulus(?:kan)?)\b(.*)$',
 );
 final RegExp _createRouteCommand = RegExp(
   r'^(?:(?:please|tolong|can you|could you|would you|i want to|i would like to|let me|help me) )*(?:create|make|build|plan|set up|add|generate|buat|cipta)\s+(?:an? |the |new |weekly |another )*(?:route plans?|routes?|laluan)\b(.*)$',
@@ -734,7 +1202,8 @@ String? _actionName(String rest, String raw) {
 
 CopilotIntent? interpretExtraCommand(String text, String raw, DateTime now) {
   final String whole = _stripTail(text);
-  if (_smallTalk.hasMatch(whole)) return const SmallTalkIntent();
+  final SmallTalkKind? talk = smallTalkKind(whole);
+  if (talk != null) return SmallTalkIntent(talk);
 
   final taken = _takeRanges(whole, now);
   final CopilotRange? one = taken.ranges.length == 1

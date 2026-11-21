@@ -90,7 +90,11 @@ TEAM_SCOPE_ALLOWED = {
     ),
     "admin_dashboard/lib/voice/copilot/copilot_panel.dart": (
         1,
-        "Copilot salesperson picker over user rows",
+        "Copilot scope note: the viewer's assigned codes over user rows",
+    ),
+    "admin_dashboard/lib/voice/copilot/copilot_directory.dart": (
+        1,
+        "Scout people list over user rows, codes compared without letter case",
     ),
 }
 SALESMAN_RESOLVER_RE = re.compile(
