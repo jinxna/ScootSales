@@ -125,7 +125,7 @@ async function signInControlCentre(page, email, sink, seen = new Set()) {
   await B.fillField(page, page.getByLabel('Email', { exact: true }), email);
   await B.fillField(page, page.getByLabel('Password', { exact: true }), E.PASSWORD);
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await page.getByText(/^We sent a 6-digit code to /).first().waitFor({ timeout: 25000 });
+  await page.getByText(/^(We sent a 6-digit code|The code is on its way) to /).first().waitFor({ timeout: 25000 });
   await B.fillField(page, page.getByLabel('Code', { exact: true }), await mailedCode(sink, email, seen));
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByRole('button', { name: /^Account menu/ }).first().waitFor({ timeout: 25000 });
