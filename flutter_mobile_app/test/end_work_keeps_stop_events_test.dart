@@ -90,8 +90,20 @@ class _Snap implements DocumentSnapshot<Map<String, dynamic>> {
   @override
   bool get exists => _data != null;
   @override
+  SnapshotMetadata get metadata => _ServerMetadata();
+  @override
   dynamic noSuchMethod(Invocation i) =>
       throw UnimplementedError('snap ${i.memberName}');
+}
+
+class _ServerMetadata implements SnapshotMetadata {
+  @override
+  bool get hasPendingWrites => false;
+  @override
+  bool get isFromCache => false;
+  @override
+  dynamic noSuchMethod(Invocation i) =>
+      throw UnimplementedError('metadata ${i.memberName}');
 }
 
 class _Batch implements WriteBatch {

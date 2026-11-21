@@ -1012,9 +1012,13 @@ class RoutePlanService {
     if (requireServerRead && server == null) {
       return RouteProgressWriteState.pending;
     }
+    final Map<String, dynamic>? serverCanonical = server?.canonical;
     final Map<String, dynamic>? canonical =
-        server?.canonical ?? progress.canonicalStopFor(stop.stopId);
+        serverCanonical ?? progress.canonicalStopFor(stop.stopId);
     if (canonical != null && _canonicalMatchesEvent(canonical, event)) {
+      if (serverCanonical == null || server!.canonicalHasPendingWrites) {
+        return RouteProgressWriteState.pending;
+      }
       await _stopOutbox.remove(event);
       return RouteProgressWriteState.synced;
     }
@@ -1217,6 +1221,7 @@ class RoutePlanService {
         route: snapshots[0].data() ?? <String, dynamic>{},
         parent: snapshots[1].data() ?? <String, dynamic>{},
         canonical: snapshots[2].data(),
+        canonicalHasPendingWrites: snapshots[2].metadata.hasPendingWrites,
         session: snapshots[3].data() ?? <String, dynamic>{},
       );
     } on FirebaseException catch (error) {
@@ -1895,11 +1900,13 @@ class _StopServerState {
     required this.route,
     required this.parent,
     required this.canonical,
+    required this.canonicalHasPendingWrites,
     required this.session,
   });
 
   final Map<String, dynamic> route;
   final Map<String, dynamic> parent;
   final Map<String, dynamic>? canonical;
+  final bool canonicalHasPendingWrites;
   final Map<String, dynamic> session;
 }

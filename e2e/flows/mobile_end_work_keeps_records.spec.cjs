@@ -10,6 +10,7 @@ const { RETAILERS } = require('../lib/seed.cjs');
 
 const FAR_AWAY = { latitude: 2.3, longitude: 111.83, accuracy: 10 };
 const RESTART_PLAN = 'plan-e2e-end-work-restart';
+const WRITE_PLAN = 'plan-e2e-end-work-write-stream';
 const DAY_MS = 86400000;
 const near = (a, b) => Math.abs(a - b) < 1e-4;
 const millis = (value) => (value instanceof Date ? value.getTime() : new Date(value).getTime());
@@ -275,6 +276,53 @@ module.exports = {
       await mobile.unblockBackend(phone.page);
       result.startWorkWhileWaiting = await expectEndedWithItsSkip(fourthSession, [result.restart.stopId], 'Start Work case');
       await t.shot(phone, 'end-work-finished-after-start-work');
+    });
+
+    const writeRows = async () => (await db.list('route_stop_progress')).filter((row) => row.planId === WRITE_PLAN);
+    const writeChannel = (url) => url.pathname.endsWith('/google.firestore.v1.Firestore/Write/channel');
+    const refuseWrites = (route) => route.abort('internetdisconnected');
+    let fifthSession;
+
+    await t.step('a third route is published and the salesperson starts work on it', async () => {
+      const second = await db.get('route_plans', RESTART_PLAN);
+      await db.put('route_plans', RESTART_PLAN, { ...second, status: 'archived' });
+      const stop = second.days[0].stops[0];
+      await db.put('route_plans', WRITE_PLAN, {
+        ...second, planId: WRITE_PLAN, publishedAt: new Date(), status: 'published', totalStops: 1,
+        stopIds: ['write-1'], stopRetailerIds: { 'write-1': stop.retailerId },
+        days: [{ ...second.days[0], stops: [{ ...stop, stopId: 'write-1' }] }],
+      });
+      await mobile.routeDayForSunday(db, WRITE_PLAN);
+      await mobile.reopenHome(phone.page, phone.url);
+      fifthSession = await startWorkOnDevice(fourthSession, 'fifth work session');
+      await mobile.openAssignedRoute(phone.page);
+      await mobile.acceptAndStartRoute(phone.page);
+      await db.waitForQuery('route_plan_progress', (p) => p.planId === WRITE_PLAN && p.status === 'in_progress', { label: 'third route started' });
+    });
+
+    await t.step('write-stream case: the phone can read the server but its writes do not arrive, so End Work waits for the skip', async () => {
+      await phone.page.route(writeChannel, refuseWrites);
+      await skipStop(phone.page, 0);
+      await phone.page.waitForTimeout(8000);
+      assert.equal((await writeRows()).length, 0, 'the skip did not reach route_stop_progress while writes were refused');
+      await pressWorkButton(phone.page, 'End Work');
+      await phone.page.waitForTimeout(20000);
+      const waiting = await live();
+      assert.deepEqual([waiting.workSessionStatus, waiting.activeSessionId], ['active', fifthSession], 'the server session stays open while the skip write has not reached the server');
+      await B.see(phone.page, /End status is waiting to sync/, { timeout: 30000 });
+      await t.shot(phone, 'end-work-waiting-for-write');
+    });
+
+    await t.step('write-stream case: writes arrive again and, with no tap, the skip reaches the server and the session ends', async () => {
+      await phone.page.unroute(writeChannel, refuseWrites);
+      const ended = await db.waitForDoc('live_tracking', uid, (l) => l.workSessionStatus === 'ended' && l.activeSessionId === fifthSession, { timeout: 150000, label: 'fifth work session ended' });
+      const rows = await writeRows();
+      assert.deepEqual(rows.map((row) => row.status), ['skipped'], 'write-stream case: the skip is stored once');
+      assert.equal(rows[0].workSessionId, fifthSession);
+      assert.ok(millis(rows[0].updatedAt) <= millis(ended.workSessionEndedAt), 'write-stream case: the stop event was stored before the session ended');
+      await B.see(phone.page, /^Work ended on this device\.$/, { timeout: 30000 });
+      result.writeStream = { session: fifthSession, stopId: rows[0].stopId, stopStoredAt: new Date(millis(rows[0].updatedAt)).toISOString(), sessionEndedAt: new Date(millis(ended.workSessionEndedAt)).toISOString() };
+      await t.shot(phone, 'end-work-finished-after-write');
     });
 
     const out = path.join(__dirname, '..', 'output', 'mobile_end_work_keeps_records');
