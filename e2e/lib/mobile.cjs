@@ -125,6 +125,11 @@ async function openAssignedRoute(page) {
 
 async function acceptAndStartRoute(page) {
   const accept = page.getByRole('button', { name: 'Accept route' });
+  await page.waitForFunction(
+    () => [...document.querySelectorAll('flt-semantics[role="button"]')].filter((n) => n.textContent === 'Accept route').length === 1,
+    null,
+    { timeout: 30000 },
+  );
   await scrollIntoView(page, accept, { minHeight: 20 });
   await accept.click();
   const start = page.getByRole('button', { name: 'Start route' });
