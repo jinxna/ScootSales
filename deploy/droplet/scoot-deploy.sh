@@ -1160,6 +1160,7 @@ do_dashboard() {
   act rm -f "$WWW/$stamp/workspace.json"
   chmod -R u=rwX,go=rX "$WWW/$stamp"
   [ -f "$WWW/$stamp/index.html" ] || die "The copy in $WWW/$stamp has no index.html. The nginx files were not changed."
+  [ -f "$WWW/$stamp/privacy/index.html" ] || die "The copy in $WWW/$stamp has no privacy/index.html, so https://$DASHBOARD_HOST/privacy would show the sign-in page. Build the package again with PRIVACY_CONTACT_EMAIL set. The nginx files were not changed."
   ln -sfn "$WWW/$stamp" "$current.next"
   mv -T -f "$current.next" "$current"
   say "linked $current -> $WWW/$stamp"

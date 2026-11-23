@@ -46,9 +46,13 @@ fi
 PUBLIC_KEYS=$(setting PLATFORM_PUBLIC_KEYS)
 GEOAPIFY_KEY=$(setting GEOAPIFY_API_KEY)
 HIDDEN_DEVELOPER_EMAIL=$(setting HIDDEN_DEVELOPER_EMAIL)
+PRIVACY_CONTACT_EMAIL=$(setting PRIVACY_CONTACT_EMAIL)
 KEY_ENTRY='[a-z0-9][a-z0-9._-]{0,63}=[A-Za-z0-9_-]{43}'
 if [ -n "$PUBLIC_KEYS" ] && ! [[ "$PUBLIC_KEYS" =~ ^$KEY_ENTRY(,$KEY_ENTRY)*$ ]]; then
   die "PLATFORM_PUBLIC_KEYS in $SETTINGS_FILE is not in the form keyId=publicKey. Copy the line that 'scoot-deploy public-key' prints."
+fi
+if [ -n "$PUBLIC_KEYS" ] && [ -z "$PRIVACY_CONTACT_EMAIL" ]; then
+  die "PRIVACY_CONTACT_EMAIL is empty in $SETTINGS_FILE. Google Play needs the public privacy page at https://$DASHBOARD_HOST/privacy, and the page shows this contact address."
 fi
 API_URL=https://$CONTROL_HOST
 
@@ -90,6 +94,7 @@ if [ -n "$PUBLIC_KEYS" ]; then
   grep -q -F "$API_URL" "$DASHBOARD_DIR/main.dart.js" || die "The dashboard bundle does not contain $API_URL. The build settings were not applied."
   [ -n "$GEOAPIFY_KEY" ] || printf 'WARN: GEOAPIFY_API_KEY is empty in %s. Route Planner shows straight lines and estimates.\n' "$SETTINGS_FILE" >&2
   grep -q -F "$PUBLIC_KEYS" "$DASHBOARD_DIR/main.dart.js" || die "The dashboard bundle does not contain the public key. The build settings were not applied."
+  "$PYTHON" "$ROOT/scripts/build_privacy_page.py" --email "$PRIVACY_CONTACT_EMAIL" --out "$DASHBOARD_DIR" || die "The privacy page was not written."
 else
   printf 'The company dashboard is NOT in this package: PLATFORM_PUBLIC_KEYS is empty in %s.\n' "$SETTINGS_FILE"
 fi
