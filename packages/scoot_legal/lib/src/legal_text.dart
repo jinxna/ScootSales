@@ -11,7 +11,10 @@ enum LegalLanguage {
 
 const String legalVersion = '2.1';
 const String legalDate = '4 November 2026';
-const String legalContactEmail = '[REPLACE-CONTACT-EMAIL]';
+const String legalContactEmail = String.fromEnvironment(
+  'LEGAL_CONTACT_EMAIL',
+  defaultValue: '[REPLACE-CONTACT-EMAIL]',
+);
 
 class LegalSection {
   const LegalSection(this.heading, this.body);

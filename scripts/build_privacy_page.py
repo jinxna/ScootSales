@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "packages" / "scoot_legal" / "lib" / "src" / "legal_text.dart"
-EMAIL = re.compile(r"[A-Za-z0-9._+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}")
+EMAIL = re.compile(r"[A-Za-z0-9_+-]+(?:\.[A-Za-z0-9_+-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}")
 INTERPOLATION = re.compile(r"\$\{|\$[A-Za-z_]")
 CONTACT_TOKEN = "$legalContactEmail"
 LANGUAGES = (("privacyEnglish", "en", "English"), ("privacyMalay", "ms", "Bahasa Malaysia"))

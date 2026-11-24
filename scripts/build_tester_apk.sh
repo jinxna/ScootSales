@@ -8,6 +8,7 @@ API=${PLATFORM_API_URL:-https://control.scootsales.my}
 COPILOT=${COPILOT_URL:-https://scootsales.my}
 SITE=${COMPANY_SITE:-https://scootsales.my}
 KEYS=${COMPANY_REGISTRY_KEYS:-}
+CONTACT=${LEGAL_CONTACT_EMAIL:-}
 PACKAGE=my.scootsales.app
 KEY_ENTRY='[a-z0-9][a-z0-9._-]{0,63}=[A-Za-z0-9_-]{43}'
 
@@ -22,6 +23,7 @@ APKSIGNER=$( [ -f "$TOOLS/apksigner.bat" ] && echo "$TOOLS/apksigner.bat" || ech
 [[ "$KEYS" =~ ^$KEY_ENTRY(,$KEY_ENTRY)*$ ]] || fail "COMPANY_REGISTRY_KEYS is missing or not keyId=publicKey. Use the line that 'scoot-deploy public-key' prints on the droplet."
 [[ "$API" =~ ^https://[a-z0-9.-]+$ ]] || fail "PLATFORM_API_URL must be an https origin with no path, got '$API'."
 [[ "$COPILOT" =~ ^https://[a-z0-9.-]+$ ]] || fail "COPILOT_URL must be an https origin with no path, got '$COPILOT'."
+[[ "$CONTACT" =~ ^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*@([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$ ]] || fail "LEGAL_CONTACT_EMAIL is missing or not an email address. Use the PRIVACY_CONTACT_EMAIL value from deploy/droplet/.env.control. The privacy policy and terms show it."
 
 VERSION_LINE=$(grep -E '^version: ' "$APP/pubspec.yaml" | head -1)
 [[ "$VERSION_LINE" =~ ^version:\ ([0-9]+\.[0-9]+\.[0-9]+)\+([0-9]+)$ ]] || fail "pubspec.yaml version line '$VERSION_LINE' is not x.y.z+N."
@@ -64,6 +66,7 @@ echo "building $APK"
   --dart-define "PLATFORM_API_URL=$API" \
   --dart-define "COMPANY_LOOKUP_URL=$API/v1/companies" \
   --dart-define "COPILOT_URL=$COPILOT" \
+  --dart-define "LEGAL_CONTACT_EMAIL=$CONTACT" \
   --dart-define "COMPANY_REGISTRY_KEYS=$KEYS") > "$STAGE/build.log" 2>&1 \
   || { tail -20 "$STAGE/build.log"; fail "flutter build failed, see $STAGE/build.log"; }
 cp "$APP/build/app/outputs/flutter-apk/app-release.apk" "$APK"
@@ -87,10 +90,10 @@ LIBS=$(mktemp -d)
 unzip -q -o "$APK" 'lib/*/libapp.so' -d "$LIBS"
 for LIB in "$LIBS"/lib/*/libapp.so; do
   ABI=$(basename "$(dirname "$LIB")")
-  for NEEDED in "$API" "$API/v1/companies" "$COPILOT" "$KEYS" "I have an invitation code"; do
-    grep -a -q -F "$NEEDED" "$LIB" || fail "$ABI app code does not contain '${NEEDED:0:40}'. A real phone would miss that feature."
+  for NEEDED in "$API" "$API/v1/companies" "$COPILOT" "$KEYS" "$CONTACT" "I have an invitation code"; do
+    grep -a -q -F -- "$NEEDED" "$LIB" || fail "$ABI app code does not contain '${NEEDED:0:40}'. A real phone would miss that feature."
   done
-  pass "$ABI holds the platform address, company lookup, Scout address, company key and the invitation button"
+  pass "$ABI holds the platform address, company lookup, Scout address, company key, privacy contact and the invitation button"
 done
 rm -rf "$LIBS"
 
