@@ -334,7 +334,7 @@ const SUPERVISOR_PAGES = [
   ['Team Overview', 'dashboard', 'Team Overview', DASHBOARD_MARKER],
   ['My Team', 'my_team', 'My Team', /Visits: \d/],
   ['Action Center', 'team_action_center', 'Action Center', /Outcome review/],
-  ['Weekly AI Summary', 'team_ai_summary', 'Weekly AI Summary', /No generated AI data is available|Not generated yet|No weekly AI summary yet/],
+  ['Weekly Summary', 'team_ai_summary', 'Weekly Summary', /No generated AI data is available|Not generated yet|No weekly summary yet/],
   ['Team Orders', 'team_orders', 'Team Orders', 'Status: All'],
   ['Team Visit Logs', 'team_visits', 'Team Visit Logs', /Follow-up/],
   ['Team Activity', 'team_activity', 'Team Activity', 'Live Status'],

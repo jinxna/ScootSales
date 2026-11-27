@@ -70,7 +70,7 @@ class _WeeklyAiSummaryPanelState extends State<WeeklyAiSummaryPanel> {
         }
         if (snapshot.hasError) {
           return _Message(
-            title: 'Weekly AI summaries could not be loaded',
+            title: 'Weekly summaries could not be loaded',
             subtitle: _summaryReadError(snapshot.error),
           );
         }
@@ -87,7 +87,7 @@ class _WeeklyAiSummaryPanelState extends State<WeeklyAiSummaryPanel> {
                 ),
               ),
               _Message(
-                title: 'No weekly AI summary yet',
+                title: 'No weekly summary yet',
                 subtitle: widget.currentUser.isSupervisor
                     ? 'No generated weekly summary is available for your assigned salespeople yet.'
                     : widget.currentUser.isBranchManager
@@ -217,7 +217,7 @@ class _WeeklyAiSummaryPanelState extends State<WeeklyAiSummaryPanel> {
       },
     );
     if (widget.embedded) return content;
-    return CmsPanel(title: 'Weekly AI Summary & Accuracy', child: content);
+    return CmsPanel(title: 'Weekly Summary & Accuracy', child: content);
   }
 }
 

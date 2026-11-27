@@ -53,7 +53,9 @@ enum CopilotServerFailure {
   salespeopleLimit(
     'The salespeople at your company have used their share of assistant requests for today. It resets at midnight, Malaysia time.',
   ),
-  assistantUnavailable('The assistant is not available now. Try again later.'),
+  assistantUnavailable(
+    'The assistant did not answer this time. Ask again, or try one of these.',
+  ),
   waking('The server is waking up. Try again in a few seconds.'),
   requestRefused(
     'The assistant refused this request. Change the question and try again.',

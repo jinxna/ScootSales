@@ -74,17 +74,17 @@ class RetailerSegment {
       isActive && (segment == 'at_risk' || attentionScore >= 55);
 
   String get label {
-    if (routePriority == 'urgent') return 'AI urgent';
-    if (routePriority == 'high') return 'AI priority';
+    if (routePriority == 'urgent') return 'Urgent';
+    if (routePriority == 'high') return 'Priority';
     switch (segment) {
       case 'at_risk':
-        return 'AI attention';
+        return 'Attention';
       case 'growth':
-        return 'AI growth';
+        return 'Growth';
       case 'stable':
-        return 'AI stable';
+        return 'Stable';
       default:
-        return 'AI low signal';
+        return 'Low signal';
     }
   }
 }

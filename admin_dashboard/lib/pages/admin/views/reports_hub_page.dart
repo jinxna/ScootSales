@@ -201,7 +201,7 @@ class _ReportsHubPageState extends State<ReportsHubPage>
                 Tab(text: 'Order Trend'),
                 Tab(text: 'Top Products'),
                 Tab(text: 'Top Retailers'),
-                if (!isBasicEdition) Tab(text: 'Weekly AI'),
+                if (!isBasicEdition) Tab(text: 'Weekly Summary'),
                 if (widget.currentUser.isAdmin) ...<Tab>[
                   const Tab(text: 'Data Hygiene'),
                   const Tab(text: 'Retailer Scorecard'),

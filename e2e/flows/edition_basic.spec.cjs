@@ -147,12 +147,12 @@ module.exports = {
         note('notification feed', { importShown: true, forecastShown: false, aiSummaryShown: false });
       });
 
-      await t.step('admin reports: no Weekly AI tab, Retailer Scorecard is the last tab, no Forecast note', async () => {
+      await t.step('admin reports: no Weekly Summary tab, Retailer Scorecard is the last tab, no Forecast note', async () => {
         await admin.goToPage(s.page, 'Reports');
         await B.see(s.page, 'Top retailers');
         await B.see(s.page, RETAILERS[0].name);
         await absent(B.semantic(s.page, /Forecast note/), 'Forecast note');
-        await absent(s.page.getByRole('tab', { name: /Weekly AI/ }), 'Weekly AI tab');
+        await absent(s.page.getByRole('tab', { name: /Weekly Summary/ }), 'Weekly Summary tab');
         await s.page.getByRole('tab', { name: /Top Retailers/ }).click();
         await B.semantic(s.page, /Include rejected/).waitFor({ timeout: 10000 });
         await s.page.getByRole('tab', { name: /Data Hygiene/ }).click();
@@ -226,12 +226,12 @@ module.exports = {
       });
 
       let sup;
-      await t.step('supervisor: sidebar has no Action Center, Weekly AI Summary or Demand Forecast', async () => {
+      await t.step('supervisor: sidebar has no Action Center, Weekly Summary or Demand Forecast', async () => {
         sup = await t.session('admin', { name: 'supervisor' });
         await B.loginAdmin(sup.page, sup.url, accounts.supervisor.email);
         await admin.waitForSupervisorShell(sup.page);
         await B.see(sup.page, 'Team Orders');
-        await absent(buttons(sup.page, /^(Action Center|Weekly AI Summary|Demand Forecast)/), 'AI entries in the supervisor sidebar');
+        await absent(buttons(sup.page, /^(Action Center|Weekly Summary|Demand Forecast)/), 'AI entries in the supervisor sidebar');
         await t.shot(sup, 'supervisor-sidebar');
         note('supervisor sidebar', { actionCenter: false, weeklyAiSummary: false, demandForecast: false });
       });

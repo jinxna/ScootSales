@@ -373,7 +373,7 @@ const LegalText termsEnglish = LegalText(
     LegalSection(
       '9. Forecasts, suggestions and Scout',
       'Forecasts, rankings, route suggestions, voice commands and Scout give decision support only. They can be wrong. They never change a published route or its progress by themselves. Scout only proposes an action. You confirm it before it runs. Your company decides what to do and is responsible for its business decisions.\n'
-          'The assistant may be unavailable. Then the dashboard shows: The assistant did not answer this time. The phone app shows: The assistant is not available now. Try again later.',
+          'The assistant may be unavailable. Then the dashboard shows: The assistant did not answer this time. The phone app shows: The assistant did not answer this time. Ask again, or try one of these.',
     ),
     LegalSection(
       '10. Availability and support',
@@ -469,7 +469,7 @@ const LegalText termsMalay = LegalText(
     LegalSection(
       '9. Ramalan, cadangan dan Scout',
       'Ramalan, kedudukan, cadangan laluan, arahan suara dan Scout hanya memberikan sokongan keputusan. Hasilnya boleh salah. Ciri-ciri ini tidak pernah mengubah laluan yang telah diterbitkan atau kemajuannya dengan sendiri. Scout hanya mencadangkan tindakan. Anda mengesahkannya sebelum ia dijalankan. Syarikat anda menentukan apa yang perlu dilakukan dan bertanggungjawab atas keputusan perniagaannya.\n'
-          'Pembantu mungkin tidak tersedia. Jika begitu, papan pemuka memaparkan: The assistant did not answer this time. Aplikasi telefon memaparkan: The assistant is not available now. Try again later.',
+          'Pembantu mungkin tidak tersedia. Jika begitu, papan pemuka memaparkan: The assistant did not answer this time. Aplikasi telefon memaparkan: The assistant did not answer this time. Ask again, or try one of these.',
     ),
     LegalSection(
       '10. Ketersediaan dan sokongan',

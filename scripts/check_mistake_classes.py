@@ -62,6 +62,9 @@ ASSISTANT_NAME_FILES = ["faq/faq.json", "flutter_mobile_app/ios/Runner/Info.plis
 ASSISTANT_NAME_SUFFIXES = {".dart", ".json", ".ts", ".tsx", ".js", ".mjs", ".cjs", ".css", ".html", ".plist", ".xml", ".md", ".txt", ".arb"}
 OLD_ASSISTANT_NAME = re.compile(r"\b(?:Copilot|COPILOT)\b")
 
+AI_LABEL_DIRS = ["admin_dashboard/lib", "packages"]
+OLD_AI_LABEL = re.compile(r"\b(?:[Ww]eekly AI|AI (?:urgent|priority|attention|growth|stable|low signal))\b")
+
 EMAIL = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+(?!(?:png|jpe?g|gif|svg|webp)\b)[A-Za-z]{2,}\b")
 RESERVED_EMAIL_DOMAIN = re.compile(r"(?:^|\.)(?:test|example|invalid|localhost)$|(?:^|\.)example\.(?:com|net|org)$", re.I)
 URL_USER_PART = re.compile(r"://(?:[^\s/@:]*:)?$")
@@ -483,6 +486,12 @@ def run(root: Path) -> list[str]:
     for path in name_files:
         problems += [f"{h}: the assistant is called Scout; keep `copilot` only in identifiers"
                      for h in line_hits(path, OLD_ASSISTANT_NAME, "old assistant name Copilot")]
+    for rel in AI_LABEL_DIRS:
+        for path in sorted((root / rel).rglob("*.dart")):
+            if SKIPPED_PARTS.intersection(path.parts):
+                continue
+            problems += [f"{h}: shown labels drop AI: say Weekly Summary, Urgent, Priority, Attention, Growth, Stable or Low signal"
+                         for h in line_hits(path, OLD_AI_LABEL, "old AI label")]
     for path in sorted((root / WORKFLOW_DIR).glob("*.y*ml")):
         problems += [f"{h}: add timeout-minutes; without it a hung step runs for 6 hours"
                      for h in jobs_without_time_limit(path)]

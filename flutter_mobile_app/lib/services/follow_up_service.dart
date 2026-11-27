@@ -61,13 +61,13 @@ class FollowUpService {
     List<Map<String, dynamic>> rows;
     bool reachedServer = online;
     try {
-      rows = online ? await _current(owner) : await _saved(owner);
+      rows = online ? await _current(owner) : await _savedThroughCache(owner);
     } on FirebaseException {
       reachedServer = false;
-      rows = await _saved(owner);
+      rows = await _savedThroughCache(owner);
     } on TimeoutException {
       reachedServer = false;
-      rows = await _saved(owner);
+      rows = await _savedThroughCache(owner);
     }
     return (
       promises: openFollowUpPromises(<Map<String, dynamic>>[
@@ -163,6 +163,26 @@ class FollowUpService {
     ];
     await _save(uid, open);
     return open;
+  }
+
+  Future<List<Map<String, dynamic>>> _savedThroughCache(String uid) async =>
+      Future.wait(<Future<Map<String, dynamic>>>[
+        for (final Map<String, dynamic> row in await _saved(uid))
+          _savedRowThroughCache(row),
+      ]);
+
+  Future<Map<String, dynamic>> _savedRowThroughCache(
+    Map<String, dynamic> saved,
+  ) async {
+    try {
+      return await _cachedState(saved);
+    } on FirebaseException catch (error) {
+      debugPrint('Follow-up cache read failed: ${error.code}');
+      return saved;
+    } on TimeoutException {
+      debugPrint('Follow-up cache read timed out');
+      return saved;
+    }
   }
 
   Future<Map<String, dynamic>> _cachedState(Map<String, dynamic> saved) async {

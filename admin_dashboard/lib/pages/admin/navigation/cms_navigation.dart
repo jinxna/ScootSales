@@ -481,9 +481,9 @@ const List<CmsNavItem> _supervisorItems = <CmsNavItem>[
   ),
   CmsNavItem(
     page: DashboardPage.teamAiSummary,
-    label: 'Weekly AI Summary',
+    label: 'Weekly Summary',
     icon: ScootIcons.reports,
-    title: 'Weekly AI Summary',
+    title: 'Weekly Summary',
     section: sectionMyTeam,
     description: 'Team AI outcomes, forecast accuracy and weekly risk history.',
   ),

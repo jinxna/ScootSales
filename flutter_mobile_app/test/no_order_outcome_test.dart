@@ -72,8 +72,25 @@ class OutcomeDoc implements DocumentReference<Map<String, dynamic>> {
   }
 
   @override
+  Future<DocumentSnapshot<Map<String, dynamic>>> get([
+    GetOptions? options,
+  ]) async => OutcomeSnapshot(path.split('/').last, db.docs[path]);
+
+  @override
   dynamic noSuchMethod(Invocation i) =>
       throw UnimplementedError('doc ${i.memberName}');
+}
+
+class OutcomeSnapshot implements DocumentSnapshot<Map<String, dynamic>> {
+  OutcomeSnapshot(this.id, this._data);
+  @override
+  final String id;
+  final Map<String, dynamic>? _data;
+  @override
+  Map<String, dynamic>? data() => _data;
+  @override
+  dynamic noSuchMethod(Invocation i) =>
+      throw UnimplementedError('snapshot ${i.memberName}');
 }
 
 UserModel salesman() => UserModel(

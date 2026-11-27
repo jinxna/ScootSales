@@ -801,7 +801,8 @@ class GpsProvider extends ChangeNotifier {
       _workSession = active;
       _sessionNeedsSync = false;
       return true;
-    } catch (_) {
+    } catch (error) {
+      debugPrint('Start Work failed: ${error.runtimeType}: $error');
       if (!_isCurrentOwner(generation, user.uid)) return false;
       _sessionNeedsSync = true;
       _setState(GpsTrackingState.syncPending);

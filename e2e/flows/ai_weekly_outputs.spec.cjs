@@ -330,9 +330,9 @@ module.exports = {
         note('retailers replenishment', { retailer: RETAILER.name, productShown: restock.productName, productInCatalogue: false });
       });
 
-      await t.step('dashboard reports: the Weekly AI tab shows the weekly summary and the insight counts', async () => {
+      await t.step('dashboard reports: the Weekly Summary tab shows the weekly summary and the insight counts', async () => {
         await admin.goToPage(planner.page, 'Reports');
-        await planner.page.getByRole('tab', { name: /Weekly AI/ }).click();
+        await planner.page.getByRole('tab', { name: /Weekly Summary/ }).click();
         await B.see(planner.page, /^Week of /, { timeout: 30000 });
         await B.see(planner.page, /Unresolved insights/);
         await B.see(planner.page, /Based on the [1-9]\d* insight\(s\) currently visible/, { timeout: 30000 });
