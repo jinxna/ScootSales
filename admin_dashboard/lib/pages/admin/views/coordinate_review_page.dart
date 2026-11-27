@@ -37,7 +37,7 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
       RetailerCoordinateProposalService();
   final TextEditingController _searchController = TextEditingController();
 
-  List<_CoordinateRow> _rows = <_CoordinateRow>[];
+  List<CoordinateReviewRow> _rows = <CoordinateReviewRow>[];
   StreamSubscription<List<Map<String, dynamic>>>? _retailerSubscription;
   late Stream<List<Map<String, dynamic>>> _proposalStream;
   bool _loading = true;
@@ -109,41 +109,7 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
           return status != 'retired';
         })
         .toList(growable: false);
-    final Map<String, int> coordinateCounts = <String, int>{};
-    for (final Map<String, dynamic> retailer in retailers) {
-      final LatLng? point = readLatLng(retailer);
-      if (point == null) continue;
-      final String key = _coordinateKey(point.latitude, point.longitude);
-      coordinateCounts[key] = (coordinateCounts[key] ?? 0) + 1;
-    }
-    final List<_CoordinateRow> rows =
-        retailers
-            .map((Map<String, dynamic> retailer) {
-              final LatLng? point = readLatLng(retailer);
-              final bool hasFields = hasCoordinateFields(retailer);
-              final bool duplicate =
-                  point != null &&
-                  (coordinateCounts[_coordinateKey(
-                            point.latitude,
-                            point.longitude,
-                          )] ??
-                          0) >
-                      1;
-              return _CoordinateRow(
-                data: retailer,
-                point: point,
-                missing: point == null && !hasFields,
-                invalid: point == null && hasFields,
-                needsReview: retailerNeedsCoordinateReview(retailer),
-                duplicate: duplicate,
-              );
-            })
-            .toList(growable: false)
-          ..sort((_CoordinateRow a, _CoordinateRow b) {
-            final int issueOrder = b.issueCount.compareTo(a.issueCount);
-            if (issueOrder != 0) return issueOrder;
-            return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-          });
+    final List<CoordinateReviewRow> rows = coordinateReviewRows(retailers);
     if (!mounted) return;
     setState(() {
       _rows = rows;
@@ -152,28 +118,10 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
     });
   }
 
-  List<_CoordinateRow> get _visibleRows {
-    final String query = _searchController.text.trim().toLowerCase();
-    return _rows
-        .where((_CoordinateRow row) {
-          final bool filterMatch = switch (_filter) {
-            'missing' => row.missing,
-            'invalid' => row.invalid,
-            'duplicate' => row.duplicate,
-            'valid' => row.point != null && !row.duplicate && !row.needsReview,
-            'all' => true,
-            _ => row.issueCount > 0,
-          };
-          if (!filterMatch) return false;
-          if (query.isEmpty) return true;
-          return row.name.toLowerCase().contains(query) ||
-              row.id.toLowerCase().contains(query) ||
-              row.address.toLowerCase().contains(query);
-        })
-        .toList(growable: false);
-  }
+  List<CoordinateReviewRow> get _visibleRows =>
+      coordinateReviewVisible(_rows, _filter, _searchController.text);
 
-  Future<void> _edit(_CoordinateRow row) async {
+  Future<void> _edit(CoordinateReviewRow row) async {
     final CoordinateEditOutcome? outcome = await showCoordinateEditDialog(
       context,
       retailer: row.data,
@@ -199,7 +147,7 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
   }
 
   Future<void> _saveIfPointUnchanged(
-    _CoordinateRow row,
+    CoordinateReviewRow row,
     Map<String, dynamic> payload,
   ) {
     return _repository.mergeDocumentIfUnchanged(
@@ -221,7 +169,7 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
     showCmsToast(context, message, isError: true);
   }
 
-  Future<void> _markReviewed(_CoordinateRow row) async {
+  Future<void> _markReviewed(CoordinateReviewRow row) async {
     final LatLng? point = row.point;
     if (point == null) return;
     try {
@@ -251,8 +199,8 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
   }) async {
     final String proposalId = '${proposal['docId'] ?? ''}'.trim();
     final String retailerId = '${proposal['retailerId'] ?? ''}'.trim();
-    final _CoordinateRow? retailer = _rows.cast<_CoordinateRow?>().firstWhere(
-      (_CoordinateRow? row) => row?.id == retailerId,
+    final CoordinateReviewRow? retailer = _rows.cast<CoordinateReviewRow?>().firstWhere(
+      (CoordinateReviewRow? row) => row?.id == retailerId,
       orElse: () => null,
     );
     final double? latitude = (proposal['candidateLatitude'] as num?)
@@ -308,7 +256,7 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
     }
   }
 
-  Future<void> _openMap(_CoordinateRow row) async {
+  Future<void> _openMap(CoordinateReviewRow row) async {
     final LatLng? point = row.point;
     final String query = point == null
         ? row.address.trim()
@@ -337,7 +285,7 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
     final StringBuffer csv = StringBuffer(
       'retailerId,name,address,latitude,longitude,missing,invalid,duplicate\n',
     );
-    for (final _CoordinateRow row in _visibleRows) {
+    for (final CoordinateReviewRow row in _visibleRows) {
       csv.writeln(
         <String>[
           csvCell(row.id),
@@ -358,20 +306,20 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
 
   @override
   Widget build(BuildContext context) {
-    final List<_CoordinateRow> visible = _visibleRows;
+    final List<CoordinateReviewRow> visible = _visibleRows;
     final List<RetailerMapPoint> mapPoints = <RetailerMapPoint>[
-      for (final _CoordinateRow row in visible)
+      for (final CoordinateReviewRow row in visible)
         if (row.point != null &&
             (row.needsReview || row.id == _selectedId.value))
           RetailerMapPoint.fromRow(row.data),
     ];
-    final int missing = _rows.where((_CoordinateRow row) => row.missing).length;
-    final int invalid = _rows.where((_CoordinateRow row) => row.invalid).length;
+    final int missing = _rows.where((CoordinateReviewRow row) => row.missing).length;
+    final int invalid = _rows.where((CoordinateReviewRow row) => row.invalid).length;
     final int duplicates = _rows
-        .where((_CoordinateRow row) => row.duplicate)
+        .where((CoordinateReviewRow row) => row.duplicate)
         .length;
     final int needsReview = _rows
-        .where((_CoordinateRow row) => row.needsReview)
+        .where((CoordinateReviewRow row) => row.needsReview)
         .length;
     return CmsPanel(
       title: 'Retailer coordinates',
@@ -424,7 +372,7 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
                   onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.search),
-                    hintText: 'Search retailer, ID, or address',
+                    hintText: 'Search every retailer by name, ID or address',
                   ),
                 );
                 return CustomScrollView(
@@ -510,10 +458,15 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
                     SliverToBoxAdapter(child: _proposalQueue()),
                     const SliverToBoxAdapter(child: Divider(height: 1)),
                     if (visible.isEmpty)
-                      const SliverFillRemaining(
+                      SliverFillRemaining(
                         hasScrollBody: false,
                         child: Center(
-                          child: Text('No retailers match this review filter.'),
+                          child: Text(
+                            _filter == 'issues' &&
+                                    _searchController.text.trim().isEmpty
+                                ? 'No coordinate problems. Choose All retailers to see every shop.'
+                                : 'No retailers match this search.',
+                          ),
                         ),
                       )
                     else
@@ -523,7 +476,7 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
                           int index,
                         ) {
                           if (index.isOdd) return const Divider(height: 1);
-                          final _CoordinateRow row = visible[index ~/ 2];
+                          final CoordinateReviewRow row = visible[index ~/ 2];
                           final Widget actions = narrow
                               ? PopupMenuButton<String>(
                                   tooltip: 'Retailer actions',
@@ -607,7 +560,7 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Text(
-                              '${row.id} · ${row.coordinateText}\n'
+                              '${row.id} · ${row.statusLabel} · ${row.coordinateText}\n'
                               '${row.issueLabel}',
                               maxLines: 3,
                               overflow: TextOverflow.ellipsis,
@@ -677,9 +630,9 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
                               proposals[index];
                           final String retailerId =
                               '${proposal['retailerId'] ?? ''}'.trim();
-                          final _CoordinateRow? retailer = _rows
+                          final CoordinateReviewRow? retailer = _rows
                               .where(
-                                (_CoordinateRow row) => row.id == retailerId,
+                                (CoordinateReviewRow row) => row.id == retailerId,
                               )
                               .firstOrNull;
                           final String name = retailer?.name ?? retailerId;
@@ -752,8 +705,8 @@ class _CoordinateReviewPageState extends State<CoordinateReviewPage> {
   }
 }
 
-class _CoordinateRow {
-  const _CoordinateRow({
+class CoordinateReviewRow {
+  const CoordinateReviewRow({
     required this.data,
     required this.point,
     required this.missing,
@@ -783,6 +736,8 @@ class _CoordinateRow {
       (needsReview ? 1 : 0) +
       (duplicate ? 1 : 0);
 
+  String get statusLabel => retailerCoordinateStatus(data).label;
+
   String get coordinateText => point == null
       ? 'No usable coordinate'
       : '${point!.latitude.toStringAsFixed(6)}, '
@@ -797,6 +752,70 @@ class _CoordinateRow {
     ];
     return labels.isEmpty ? 'Valid coordinate' : labels.join(' · ');
   }
+}
+
+List<CoordinateReviewRow> coordinateReviewRows(
+  List<Map<String, dynamic>> retailers,
+) {
+  final Map<String, int> coordinateCounts = <String, int>{};
+  for (final Map<String, dynamic> retailer in retailers) {
+    final LatLng? point = readLatLng(retailer);
+    if (point == null) continue;
+    final String key = _coordinateKey(point.latitude, point.longitude);
+    coordinateCounts[key] = (coordinateCounts[key] ?? 0) + 1;
+  }
+  return retailers
+      .map((Map<String, dynamic> retailer) {
+        final LatLng? point = readLatLng(retailer);
+        final bool hasFields = hasCoordinateFields(retailer);
+        final bool duplicate =
+            point != null &&
+            (coordinateCounts[_coordinateKey(
+                      point.latitude,
+                      point.longitude,
+                    )] ??
+                    0) >
+                1;
+        return CoordinateReviewRow(
+          data: retailer,
+          point: point,
+          missing: point == null && !hasFields,
+          invalid: point == null && hasFields,
+          needsReview: retailerNeedsCoordinateReview(retailer),
+          duplicate: duplicate,
+        );
+      })
+      .toList(growable: false)
+    ..sort((CoordinateReviewRow a, CoordinateReviewRow b) {
+      final int issueOrder = b.issueCount.compareTo(a.issueCount);
+      if (issueOrder != 0) return issueOrder;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+}
+
+List<CoordinateReviewRow> coordinateReviewVisible(
+  List<CoordinateReviewRow> rows,
+  String filter,
+  String search,
+) {
+  final String query = search.trim().toLowerCase();
+  return rows
+      .where((CoordinateReviewRow row) {
+        if (query.isNotEmpty) {
+          return row.name.toLowerCase().contains(query) ||
+              row.id.toLowerCase().contains(query) ||
+              row.address.toLowerCase().contains(query);
+        }
+        return switch (filter) {
+          'missing' => row.missing,
+          'invalid' => row.invalid,
+          'duplicate' => row.duplicate,
+          'valid' => row.point != null && !row.duplicate && !row.needsReview,
+          'all' => true,
+          _ => row.issueCount > 0,
+        };
+      })
+      .toList(growable: false);
 }
 
 String _coordinateKey(double lat, double lng) =>

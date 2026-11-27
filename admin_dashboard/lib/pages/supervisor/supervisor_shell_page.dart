@@ -56,7 +56,7 @@ class SupervisorShellPage extends StatefulWidget {
 
 class _SupervisorShellPageState extends State<SupervisorShellPage> {
   late String _selectedKey;
-  String? _plannerSalesmanUid;
+  final PlannerOpenRequests _plannerRequests = PlannerOpenRequests();
   void Function()? _cancelBrowserHistorySubscription;
   bool _copilotOpen = false;
   late final CopilotServerClient? _copilotServer =
@@ -176,11 +176,22 @@ class _SupervisorShellPageState extends State<SupervisorShellPage> {
       case MyTeamDestination.activity:
         _select('team_activity');
       case MyTeamDestination.routePlanner:
-        setState(
-          () => _plannerSalesmanUid = salesmanUid.isEmpty ? null : salesmanUid,
-        );
+        setState(() => _plannerRequests.post(salesmanUid: salesmanUid));
         _select('route_planner');
     }
+  }
+
+  Future<bool> _openPlannerFromCopilot(
+    String salesmanUid,
+    DateTime weekStart,
+  ) async {
+    if (!mounted) return false;
+    setState(
+      () =>
+          _plannerRequests.post(salesmanUid: salesmanUid, weekStart: weekStart),
+    );
+    _select('route_planner');
+    return true;
   }
 
   List<DashboardVoicePage> get _copilotPages =>
@@ -245,7 +256,7 @@ class _SupervisorShellPageState extends State<SupervisorShellPage> {
             pageTitle: current?.page == DashboardPage.dashboard
                 ? ''
                 : current?.title ?? pageNotAvailableTitle,
-            pageFact: current?.description ?? pageNotAvailableMessage,
+            pageFact: current?.headerFact ?? pageNotAvailableMessage,
             untitledPageName: current?.page == DashboardPage.dashboard
                 ? current?.title ?? ''
                 : '',
@@ -273,6 +284,7 @@ class _SupervisorShellPageState extends State<SupervisorShellPage> {
               onClose: _toggleCopilot,
               status: _copilotStatus,
               server: _copilotServer,
+              onPlannerRequested: _openPlannerFromCopilot,
             ),
             child: _selectable(
               _page == null ? _notAvailable() : _buildSelectedPage(_page!),
@@ -348,7 +360,7 @@ class _SupervisorShellPageState extends State<SupervisorShellPage> {
       case DashboardPage.routePlanner:
         return RoutePlannerPage(
           currentUser: widget.currentUser,
-          initialSalesmanUid: _plannerSalesmanUid,
+          openRequests: _plannerRequests,
           onNavigateRequested: _select,
         );
       case DashboardPage.notifications:

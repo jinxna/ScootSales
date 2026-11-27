@@ -6,8 +6,10 @@ import 'package:flutter/material.dart';
 
 import '../../models/action_centre_item.dart';
 import '../../theme/dso_colors.dart';
+import '../../widgets/weekly_bar_chart.dart';
 import 'copilot_controller.dart';
 import 'copilot_rank_why.dart';
+import 'copilot_scout.dart';
 import 'copilot_status.dart';
 
 Color? copilotStatusColor(DsoColors dso, CopilotServerState state) =>
@@ -597,9 +599,12 @@ class CopilotUserBubble extends StatelessWidget {
               bottomRight: Radius.circular(3),
             ),
           ),
-          child: Text(
-            text,
-            style: const TextStyle(fontSize: 13, color: Colors.white),
+          child: DefaultSelectionStyle(
+            selectionColor: Colors.white.withValues(alpha: 0.45),
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 13, color: Colors.white),
+            ),
           ),
         ),
       ),
@@ -811,6 +816,37 @@ class _CopilotTypingDotsState extends State<CopilotTypingDots>
   }
 }
 
+const Map<String, String> kBriefingSources = <String, String>{
+  'rule_based_sales_change':
+      "Rule on today's orders: the last 30 days are below 60% of the 30 days before",
+  'rule_based_visit_order_gap':
+      'Rule on visits and orders: the shop is due a visit, or its last order was 18 or more days ago',
+  'rule_based_salesman_sync':
+      'Rule on field activity: no visit or order synced for 2 or more days',
+  'rule_based_route_heartbeat':
+      'Rule on route tracking: no location from the phone for more than 15 minutes',
+  'rule_based_route_idle':
+      'Rule on route tracking: no route activity for 90 minutes',
+  'rule_based_forecast': 'Saved demand forecast: it recommends extra stock',
+  'rule_based_data_quality':
+      'Rule on product data: a product has no usable price',
+  'special_requests': 'Special requests: no decision after 24 hours',
+  'conversation_outcomes': 'Visit outcomes: a callback is due today or overdue',
+  'route_workflow_state':
+      'Route plans: a draft or approved route is not published',
+  'coordinate_data_quality':
+      'Shop locations: a location is not verified, so routes cannot trust it',
+  'unscheduled_priority':
+      'Shop priority: a high-priority shop is on no active route',
+  'route_plan_progress': 'Route progress: the route records could not be read',
+  'demand_forecasts':
+      'Saved demand forecasts: the latest week has more products than this list reads',
+};
+
+String briefingSourceText(String source) =>
+    kBriefingSources[source] ??
+    (source.trim().isEmpty ? 'saved record' : source);
+
 class CopilotItemList extends StatelessWidget {
   const CopilotItemList({super.key, required this.items, this.onOpenItem});
 
@@ -884,6 +920,15 @@ class CopilotItemList extends StatelessWidget {
                               ),
                             ],
                           ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'From: ${briefingSourceText(items[i].source)}',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              height: 1.35,
+                              color: dso.muted,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -937,6 +982,16 @@ class CopilotRankWhyView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
+            'Details',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+              color: dso.muted,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
             card.title,
             style: TextStyle(
               fontSize: 12.5,
@@ -979,7 +1034,7 @@ class CopilotConfirmCard extends StatelessWidget {
     required this.onCancel,
   });
 
-  final PendingStatusChange pending;
+  final PendingAction pending;
   final bool busy;
   final VoidCallback onConfirm;
   final VoidCallback onCancel;
@@ -990,39 +1045,87 @@ class CopilotConfirmCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(
-          'Set "${pending.item.title}" to ${copilotStatusLabel(pending.status)}?',
-          style: TextStyle(
-            fontSize: 13,
-            height: 1.4,
-            fontWeight: FontWeight.w700,
-            color: dso.ink,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: <Widget>[
-            _Pill(
-              label: _capital(copilotStatusLabel(pending.shownStatus)),
-              bg: dso.surfaceSoft,
-              fg: dso.body,
+        ...switch (pending) {
+          PendingStatusChange(
+            :final ActionCentreItem item,
+            :final String status,
+            :final String shownStatus,
+          ) =>
+            <Widget>[
+              Text(
+                'Set "${item.title}" to ${copilotStatusLabel(status)}?',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  fontWeight: FontWeight.w700,
+                  color: dso.ink,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: <Widget>[
+                  _Pill(
+                    label: _capital(copilotStatusLabel(shownStatus)),
+                    bg: dso.surfaceSoft,
+                    fg: dso.body,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Icon(Icons.arrow_forward, size: 14, color: dso.body),
+                  ),
+                  _Pill(
+                    label: _capital(copilotStatusLabel(status)),
+                    bg: dso.brandSurface,
+                    fg: dso.accentText,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Changes only your own review status. It does not solve the problem.',
+                style: TextStyle(fontSize: 12, color: dso.body),
+              ),
+            ],
+          PendingOrderApproval(:final List<String> lines) => <Widget>[
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(top: 8),
+              decoration: BoxDecoration(
+                color: dso.card,
+                border: Border.all(color: dso.hairline),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  for (int i = 0; i < lines.length; i++)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        border: i == 0
+                            ? null
+                            : Border(top: BorderSide(color: dso.hairline)),
+                      ),
+                      child: Text(
+                        lines[i],
+                        style: TextStyle(fontSize: 12, color: dso.body),
+                      ),
+                    ),
+                ],
+              ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Icon(Icons.arrow_forward, size: 14, color: dso.body),
-            ),
-            _Pill(
-              label: _capital(copilotStatusLabel(pending.status)),
-              bg: dso.brandSurface,
-              fg: dso.accentText,
+            const SizedBox(height: 8),
+            Text(
+              'Each order gets the same checks as the Approve button. An order '
+              'above a product limit is skipped, so you can open it and decide.',
+              style: TextStyle(fontSize: 12, color: dso.body),
             ),
           ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Changes only your own review status. It does not solve the problem.',
-          style: TextStyle(fontSize: 12, color: dso.body),
-        ),
+        },
         const SizedBox(height: 10),
         Row(
           children: <Widget>[
@@ -1404,6 +1507,122 @@ class _CircleActionState extends State<_CircleAction>
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class CopilotDataUsed extends StatelessWidget {
+  const CopilotDataUsed(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final DsoColors dso = context.dso;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(
+        'Data used: $text',
+        style: TextStyle(fontSize: 11, height: 1.35, color: dso.muted),
+      ),
+    );
+  }
+}
+
+class CopilotScoutView extends StatelessWidget {
+  const CopilotScoutView({
+    super.key,
+    required this.card,
+    required this.enabled,
+    required this.onButton,
+  });
+
+  final ScoutCard card;
+  final bool enabled;
+  final ValueChanged<ScoutButton> onButton;
+
+  @override
+  Widget build(BuildContext context) {
+    final DsoColors dso = context.dso;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: dso.card,
+        border: Border.all(color: dso.hairline),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          for (final ScoutSection section in card.sections) ...<Widget>[
+            if (section.title != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 2),
+                child: Text(
+                  section.title!,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: dso.ink,
+                  ),
+                ),
+              ),
+            for (final String line in section.lines)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 1.5),
+                child: Text(
+                  line,
+                  style: TextStyle(fontSize: 12, height: 1.35, color: dso.body),
+                ),
+              ),
+          ],
+          for (final ScoutButton button in card.buttons)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: FilledButton(
+                onPressed: enabled ? () => onButton(button) : null,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 40),
+                  backgroundColor: dso.accent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Text(button.label),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class CopilotChartView extends StatelessWidget {
+  const CopilotChartView({super.key, required this.chart});
+
+  final ScoutChart chart;
+
+  @override
+  Widget build(BuildContext context) {
+    final DsoColors dso = context.dso;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: dso.card,
+        border: Border.all(color: dso.hairline),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: WeeklyBarChart(
+        key: ValueKey<String>('scout-chart-${chart.title}'),
+        title: chart.title,
+        weeks: chart.weeks,
+        barAreaHeight: 110,
       ),
     );
   }

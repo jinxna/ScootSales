@@ -40,8 +40,8 @@ module.exports = {
       expectEqual(await tree.count(), 1, 'S001 tree entries');
     });
 
-    await t.step('assignment codes match case-insensitively for display', async () => {
-      await B.see(bmS.page, /E2E Hier Seven\s+·\s+s777/);
+    await t.step('a code stored in another letter case shows the person\'s own code', async () => {
+      await B.see(bmS.page, /E2E Hier Seven\s+·\s+S777/);
     });
 
     await t.step('salespeople without a supervisor are counted as a warning', async () => {

@@ -90,13 +90,13 @@
       "topic": "Company status",
       "question": "How long can we get our data after a suspension?",
       "answer": [
-        "You have 30 days from the first stop. A stop is a suspension, an expiry or a cancellation.",
-        "If the company moves from one stopped state to another, the 30 days keep their start date.",
-        "If the company is reactivated and then stopped again, a new 30 days start.",
+        "You have 90 days from the first stop. A stop is a suspension, an expiry or a cancellation.",
+        "If the company moves from one stopped state to another, the 90 days keep their start date.",
+        "If the company is reactivated and then stopped again, a new 90 days start.",
         "In that time, an administrator can download the data export and give support access.",
         "Download the export early. Ask Scoot Sales for the exact end date."
       ],
-      "since": "2026-11-05"
+      "since": "2026-11-19"
     },
     {
       "id": "status-after-window",
@@ -105,12 +105,12 @@
         "admin"
       ],
       "topic": "Company status",
-      "question": "What happens after the 30 days?",
+      "question": "What happens after the 90 days?",
       "answer": [
         "The data export and support access stop.",
         "The data is not deleted automatically at that moment. Deletion is a separate step."
       ],
-      "since": "2026-11-05"
+      "since": "2026-11-19"
     },
     {
       "id": "status-held-work",
@@ -161,9 +161,9 @@
         "The ZIP also has a manifest with a checksum for each file.",
         "It does not include sign-in accounts, invoices, the audit log or live tracking positions.",
         "If you signed in more than 5 minutes ago, sign in again first.",
-        "The export works until the 30-day window after a suspension, expiry or cancellation ends."
+        "The export works until the 90-day window after a suspension, expiry or cancellation ends."
       ],
-      "since": "2026-11-05"
+      "since": "2026-11-19"
     },
     {
       "id": "data-gps-kept",
@@ -557,13 +557,15 @@
       "topic": "Routes, teams and permissions",
       "question": "How do I plan and publish a route?",
       "answer": [
-        "Open Route Planner. Add stops. Choose Save draft, then Approve, then Publish.",
+        "Open Route Planner. Choose the salesperson and the week.",
+        "Choose Generate draft route, or add stops by hand. Read the Things to check box.",
+        "Choose Save draft, then Approve, then Publish.",
         "A published route goes to the salesperson's phone. Published routes are locked.",
         "To change one, choose Withdraw to edit. You cannot withdraw it after the salesperson has accepted it.",
         "A route that goes back to draft loses its old approve and publish dates. Approve and publish it again.",
         "Administrators plan for everyone. Supervisors plan for their own team. Branch managers can only view routes."
       ],
-      "since": "2026-11-05"
+      "since": "2026-11-19"
     },
     {
       "id": "route-on-phone",
@@ -721,12 +723,15 @@
       "topic": "Assistant",
       "question": "What can the assistant do?",
       "answer": [
-        "It searches and exports orders. It ranks top retailers and products. It opens pages for you.",
-        "On Professional and Enterprise plans, it also gives a daily briefing, explains a ranking and can set the status of an Action Centre item.",
-        "It never approves, rejects or deletes anything.",
+        "Scout answers questions about your sales work. It searches and exports orders.",
+        "It explains why a shop is ranked or why a stop is on a route.",
+        "It lists the shops a salesperson should visit, the shops that are due, and who has no route this week.",
+        "It opens a page when you ask, for example \"open All Orders\".",
+        "On Professional and Enterprise plans, it also gives a daily briefing and can set the status of an Action Centre item.",
+        "It never approves, rejects or deletes anything. It changes an Action Centre status only after you confirm.",
         "Typed requests need internet. Without a connection, only the fixed commands work."
       ],
-      "since": "2026-11-05"
+      "since": "2026-11-19"
     },
     {
       "id": "assistant-not-available",
@@ -736,12 +741,13 @@
         "branch_manager"
       ],
       "topic": "Assistant",
-      "question": "The assistant says \"Assistant is not available now\". Why?",
+      "question": "The assistant says \"The assistant did not answer this time\". Why?",
       "answer": [
-        "Some requests use a shared daily allowance. The allowance can be used up, or the service can be busy.",
-        "Try again later. You lose nothing. You can still use the menu."
+        "Scout could not answer this request. Some requests use a shared daily allowance.",
+        "The allowance can be used up, the service can be busy, or the answer can take too long.",
+        "Ask again, or try one of the suggested requests. Nothing was changed. You can still use the menu."
       ],
-      "since": "2026-11-05"
+      "since": "2026-11-19"
     },
     {
       "id": "staff-approvals",
@@ -953,6 +959,310 @@
         "Support staff see a list of companies with support access open now. Each row shows the company, the task, the access and the end time."
       ],
       "since": "2026-11-05"
+    },
+    {
+      "id": "route-why-shop",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager",
+        "salesperson"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "Why is this shop on my route?",
+      "answer": [
+        "The route planner takes shops in the order of the weekly ranking.",
+        "The weekly ranking sorts a salesperson's shops by expected order value for the time a visit takes.",
+        "A weekly job makes the ranking from the last completed weeks (8 unless your company changed the setting).",
+        "Areas are ordered by their best-ranked shop.",
+        "Each stop can also show the reason the planner saved with it."
+      ],
+      "since": "2026-11-18"
+    },
+    {
+      "id": "route-ranked-for-week",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "What does \"Ranked for week X\" mean?",
+      "answer": [
+        "It names the week of the weekly ranking that the route was made from.",
+        "The planner does not use a ranking that is older than the week before.",
+        "With no ranking for the planner week or the week before, the planner still makes a route with its simpler estimate.",
+        "It then says that no weekly ranking was used."
+      ],
+      "since": "2026-11-18"
+    },
+    {
+      "id": "assistant-visit-brief",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager",
+        "salesperson"
+      ],
+      "topic": "Assistant",
+      "question": "What is the visit brief, and how fresh is it?",
+      "answer": [
+        "The visit brief is one summary for each shop.",
+        "Fixed rules make it from the last completed weeks (8 unless your company changed the setting).",
+        "It can show a stopped product, a declining product, a growing product, an unusual week, an overdue reorder and a suggested reorder quantity.",
+        "It also shows the result of the last visits.",
+        "The weekly job refreshes the brief."
+      ],
+      "since": "2026-11-18"
+    },
+    {
+      "id": "route-offline-brief",
+      "audiences": [
+        "salesperson"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "Can I see my route and brief with no signal?",
+      "answer": [
+        "Yes, for what the phone has already opened.",
+        "The phone keeps the route and the brief it has already opened.",
+        "They show with no signal.",
+        "New data arrives when the phone is online again."
+      ],
+      "since": "2026-11-18"
+    },
+    {
+      "id": "assistant-suggested-reorder",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager",
+        "salesperson"
+      ],
+      "topic": "Assistant",
+      "question": "What does \"Suggested reorder\" mean?",
+      "answer": [
+        "It is a suggestion from the shop's own order history.",
+        "The salesperson decides what to order.",
+        "Scout never places an order."
+      ],
+      "since": "2026-11-18"
+    },
+    {
+      "id": "assistant-scorecard",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Assistant",
+      "question": "What does the scorecard compare?",
+      "answer": [
+        "It compares the top 2 ranked shops with the other shops over 12 weeks.",
+        "It compares the forecast with what was ordered.",
+        "It also shows how many suggested reorders were ordered.",
+        "It compares. It does not prove a cause."
+      ],
+      "since": "2026-11-18"
+    },
+    {
+      "id": "route-generate-draft",
+      "audiences": [
+        "admin",
+        "supervisor"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "How do I make a draft route quickly?",
+      "answer": [
+        "Open Route Planner. Choose the salesperson and the week.",
+        "Choose Plan settings to see the settings row. Change a setting if you need to.",
+        "Choose Generate draft route. The planner makes a draft. Nothing is approved or published.",
+        "Read the Things to check box. Then save, approve and publish as usual."
+      ],
+      "since": "2026-11-19"
+    },
+    {
+      "id": "route-things-to-check",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "What is the \"Things to check\" box?",
+      "answer": [
+        "It lists points in the draft that a person should look at before publishing.",
+        "Examples: a shop put on a day with the nearest shops, or a shop with no usable map location.",
+        "It also tells you when a follow-up visit is not on the route, or when distances are straight-line estimates.",
+        "Choose Show next to a point to open that day. \"Nothing to check.\" means the list is empty."
+      ],
+      "since": "2026-11-19"
+    },
+    {
+      "id": "route-start-point",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "Where does a route start?",
+      "answer": [
+        "Each branch can have a start point. An administrator sets it in Branches.",
+        "The start point shows as the first row of each day in the plan.",
+        "With no start point, the planner says so and offers Open Branches.",
+        "A plan made before start points existed does not use one. Generate it again to use the start point."
+      ],
+      "since": "2026-11-19"
+    },
+    {
+      "id": "route-delete-draft",
+      "audiences": [
+        "admin",
+        "supervisor"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "How do I delete a draft route?",
+      "answer": [
+        "Open the draft in Route Planner, or find it in Saved plans. Choose Delete draft.",
+        "Check the details and choose Delete draft again. You cannot undo this.",
+        "Only drafts have this button. To change a published route, choose Withdraw to edit first."
+      ],
+      "since": "2026-11-19"
+    },
+    {
+      "id": "route-draft-everyone",
+      "audiences": [
+        "admin",
+        "supervisor"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "Can I make draft routes for all salespeople at once?",
+      "answer": [
+        "Yes. In Saved plans, choose Draft routes for everyone without one. Then choose Make drafts.",
+        "It makes one draft for each salesperson who has no route for that week.",
+        "Nothing is approved or published. Check each draft before you publish it."
+      ],
+      "since": "2026-11-19"
+    },
+    {
+      "id": "route-road-distances",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "Why do the distances change after I edit a route?",
+      "answer": [
+        "After each edit, the planner asks for road distances again. The total shows \"Updating road distances\" while it works.",
+        "When road distances are not available, the planner uses straight-line estimates. The Things to check box names those days."
+      ],
+      "since": "2026-11-19"
+    },
+    {
+      "id": "route-map-scroll",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "Why does the mouse wheel not zoom the route map?",
+      "answer": [
+        "Over the map, the mouse wheel scrolls the page. This keeps the page easy to scroll.",
+        "To move the map, drag it. To zoom in, double-click the map."
+      ],
+      "since": "2026-11-19"
+    },
+    {
+      "id": "orders-approve",
+      "audiences": [
+        "admin",
+        "supervisor"
+      ],
+      "topic": "Orders and visits",
+      "question": "How do I approve an order?",
+      "answer": [
+        "Open All Orders. Set the Status filter to Waiting to see the orders that wait for approval.",
+        "Choose an order to open it. Check the lines, then choose Approve.",
+        "A supervisor can approve orders from their own team only."
+      ],
+      "since": "2026-11-19"
+    },
+    {
+      "id": "orders-refused",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Orders and visits",
+      "question": "What does \"The database refused this action\" mean?",
+      "answer": [
+        "The database did not accept the change. The order is unchanged.",
+        "Usually your role or team does not allow this action. Ask an administrator."
+      ],
+      "since": "2026-11-19"
+    },
+    {
+      "id": "team-remove-user",
+      "audiences": [
+        "admin"
+      ],
+      "topic": "Routes, teams and permissions",
+      "question": "How do I remove a user from the dashboard?",
+      "answer": [
+        "Only an administrator can do it. Open Role Assignment, find the person and choose Remove Profile.",
+        "Follow the steps in the dialog. You can choose to suspend the account instead.",
+        "Remove Profile deletes the dashboard profile and frees the seat on your plan.",
+        "It also cancels open invitations and turns off the person's sign-in.",
+        "Orders, visits and routes that the person made stay in your records.",
+        "You cannot remove yourself. Move a supervisor's salespeople to another supervisor first."
+      ],
+      "since": "2026-11-19"
+    },
+    {
+      "id": "visit-overdue",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Orders and visits",
+      "question": "When is a shop overdue on Visit Logs?",
+      "answer": [
+        "A shop is overdue when its last visit was 7 or more days ago.",
+        "It is also overdue when its last order was 30 or more days ago."
+      ],
+      "since": "2026-11-19"
+    },
+    {
+      "id": "notifications-badge",
+      "audiences": [
+        "admin",
+        "supervisor",
+        "branch_manager"
+      ],
+      "topic": "Orders and visits",
+      "question": "What does \"40+\" on Notifications mean?",
+      "answer": [
+        "The badge counts unread notifications. It counts up to 40.",
+        "\"40+\" means 40 or more notifications are unread. Open Notifications to read them."
+      ],
+      "since": "2026-11-19"
+    },
+    {
+      "id": "retailer-assign",
+      "audiences": [
+        "admin"
+      ],
+      "topic": "Orders and visits",
+      "question": "How do I assign a shop to a salesperson?",
+      "answer": [
+        "Open Retailers and choose the shop to edit it.",
+        "Choose the salesperson in Assigned Salesman. Choose Update Retailer."
+      ],
+      "since": "2026-11-19"
     }
   ]
 }

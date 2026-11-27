@@ -80,7 +80,7 @@ def _reasons(data: Mapping[str, Any]) -> list[str]:
 
 def person_has_history(db: firestore.Client, uid: str, code: str,
                        transaction: firestore.Transaction | None = None) -> bool:
-    searches = [(collection, field, uid) for collection, field in HISTORY_RECORDS]
+    searches = [(collection, field, uid) for collection, field in HISTORY_RECORDS] if uid else []
     if code.strip():
         searches += [(collection, field, code) for collection, field in CODE_HISTORY_RECORDS]
     for collection, field, value in searches:

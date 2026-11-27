@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable, Mapping
 
@@ -34,7 +34,7 @@ from .overdue_reorder import detect_overdue_reorders
 from .replenishment import derive_replenishment
 from .retailer_segments import build_retailer_segments
 from .retailer_memory import build_retailer_memory
-from .visit_briefs import build_visit_briefs
+from .visit_briefs import build_visit_briefs, usual_order_weekdays
 
 _DAYS_PER_WEEK = 7.0
 
@@ -66,6 +66,7 @@ class GenerationResult:
     priority_rankings: tuple[dict[str, Any], ...] = ()
     replenishment: tuple[dict[str, Any], ...] = ()
     coverage_retailers: tuple[dict[str, Any], ...] = ()
+    usual_order_weekdays: dict[str, int] = field(default_factory=dict)
 
 
 def _missing_price_insight(
@@ -579,6 +580,7 @@ def build_generation(
         )
     )
     coverage_retailers = _coverage_retailers(data, run_id=run_id)
+    order_weekdays = usual_order_weekdays(orders, as_of=as_of)
     visit_briefs = build_visit_briefs(
         insights,
         as_of=as_of,
@@ -588,6 +590,8 @@ def build_generation(
         retailer_segments=retailer_segments,
         replenishment=replenishment,
         coverage_retailers=coverage_retailers,
+        order_weekdays=order_weekdays,
+        patterns=patterns,
     )
     summary_id = f"week_{observed_week.isoformat()}"
     weekly_summary = {
@@ -669,4 +673,5 @@ def build_generation(
         priority_rankings=priority_rankings,
         coverage_retailers=tuple(coverage_retailers),
         replenishment=replenishment,
+        usual_order_weekdays=order_weekdays,
     )

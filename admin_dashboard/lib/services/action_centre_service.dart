@@ -15,6 +15,7 @@ import 'outcome_review_service.dart';
 import '../utils/retailer_readiness.dart';
 import '../utils/order_data_utils.dart';
 import '../utils/visit_data_utils.dart';
+import '../utils/visit_overdue.dart';
 import 'route_attention_service.dart';
 import '../utils/money_format.dart';
 import '../security/team_scope.dart';
@@ -920,14 +921,12 @@ class ActionCentreService {
           !neverVisited) {
         continue;
       }
-      final int? daysSinceVisit = activity.lastVisit == null
-          ? null
-          : now.difference(activity.lastVisit!).inDays;
+      final int? daysSinceVisit = visitDaysAgo(activity.lastVisit, now);
       final int? daysSinceOrder = activity.lastOrder == null
           ? null
           : now.difference(activity.lastOrder!).inDays;
       final bool overdueVisit =
-          neverVisited || (daysSinceVisit != null && daysSinceVisit >= 7);
+          neverVisited || isVisitOverdue(activity.lastVisit, now);
       final bool overdueOrder = daysSinceOrder != null && daysSinceOrder >= 18;
       if (!overdueVisit && !overdueOrder) continue;
 

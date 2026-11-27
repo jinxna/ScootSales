@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/user_profile.dart';
 import 'order_data_utils.dart';
 
 const int kSupervisorTeamCap = 5;
@@ -128,8 +129,8 @@ String userRowCode(Map<String, dynamic> row) => _firstText(row, const <String>[
 String _normCode(String code) => code.trim().toUpperCase();
 
 bool _isSalesmanRow(Map<String, dynamic> row) {
-  final String role = _text(row['role'] ?? row['user_group']).toLowerCase();
-  return role.isEmpty || role == 'salesman';
+  final String role = _roleOf(row);
+  return role.isEmpty || role == UserProfile.roleSalesman;
 }
 
 TeamMemberStatus _statusOf(Map<String, dynamic> row) {
@@ -210,9 +211,7 @@ List<TeamMember> buildBranchRoster({
   final Set<String> seen = <String>{};
   final List<TeamMember> members = <TeamMember>[];
   for (final Map<String, dynamic> row in userRows) {
-    if (_text(row['role'] ?? row['user_group']).toLowerCase() != 'salesman') {
-      continue;
-    }
+    if (_roleOf(row) != UserProfile.roleSalesman) continue;
     final String code = userRowCode(row);
     final String identity = code.isNotEmpty
         ? _normCode(code)
@@ -403,6 +402,7 @@ class TeamTreeSupervisor {
     required this.code,
     required this.salesmen,
     this.uid = '',
+    this.docId = '',
     this.branchId = '',
     this.active = true,
   });
@@ -411,13 +411,17 @@ class TeamTreeSupervisor {
   final String code;
   final List<TeamTreeSalesman> salesmen;
   final String uid;
+  final String docId;
   final String branchId;
   final bool active;
 
   bool get hasRoom => salesmen.length < kSupervisorTeamCap;
 
   bool acceptsFrom(TeamTreeSupervisor? from, String branch) =>
-      uid != from?.uid && active && hasRoom && branchId.toLowerCase() == branch.toLowerCase();
+      uid != from?.uid &&
+      active &&
+      hasRoom &&
+      branchId.toLowerCase() == branch.toLowerCase();
 
   String get label => code.isEmpty ? name : '$name  ·  $code';
 }
@@ -436,10 +440,11 @@ bool _isInvited(Map<String, dynamic> row) =>
     _text(row['invitationState']).toLowerCase() == 'pending';
 
 bool _isActiveRow(Map<String, dynamic> row) =>
-    row['isActive'] != false && _text(row['status']).toLowerCase() != 'suspended';
+    row['isActive'] != false &&
+    _text(row['status']).toLowerCase() != 'suspended';
 
 String _roleOf(Map<String, dynamic> row) =>
-    _text(row['role'] ?? row['user_group']).toLowerCase();
+    UserProfile.canonicalRole(row['role'] ?? row['user_group']);
 
 String _branchOf(Map<String, dynamic> row) =>
     _firstText(row, const <String>['branchId', 'branch_id']);
@@ -460,7 +465,7 @@ TeamHierarchy buildTeamHierarchy({
   final Map<String, Map<String, dynamic>> salesmenByCode =
       <String, Map<String, dynamic>>{};
   for (final Map<String, dynamic> row in userRows) {
-    if (_roleOf(row) != 'salesman' || !inBranch(row)) continue;
+    if (_roleOf(row) != UserProfile.roleSalesman || !inBranch(row)) continue;
     final String code = _normCode(userRowCode(row));
     if (code.isNotEmpty) salesmenByCode.putIfAbsent(code, () => row);
   }
@@ -489,7 +494,7 @@ TeamHierarchy buildTeamHierarchy({
         final Map<String, dynamic>? row = salesmenByCode[_normCode(code)];
         salesmen.add(
           TeamTreeSalesman(
-            code: code,
+            code: row == null ? code : userRowCode(row),
             name: row == null ? '' : _nameOf(row),
             profileFound: row != null,
             uid: row == null ? '' : _text(row['uid']),
@@ -504,6 +509,7 @@ TeamHierarchy buildTeamHierarchy({
         code: userRowCode(sup),
         salesmen: salesmen,
         uid: _text(sup['uid']),
+        docId: _text(sup['docId']),
         branchId: _branchOf(sup),
         active: _isActiveRow(sup),
       ),

@@ -22,6 +22,7 @@ import '../utils/covered_query.dart';
 import '../utils/firestore_query_utils.dart' as firestore_query_utils;
 import '../utils/firestore_value_equality.dart';
 import '../utils/order_data_utils.dart';
+import '../utils/order_waiting_statuses.dart';
 import '../utils/product_catalogue_pager.dart';
 import '../utils/ref_counted_replay_stream.dart';
 import '../utils/visit_data_utils.dart';
@@ -1210,13 +1211,14 @@ class CmsRepository {
     required String orderDocumentId,
     required UserProfile currentUser,
     required Map<String, dynamic> order,
+    String? auditSource,
   }) async {
-    OrderAuthorization.ensureCanDecideOrder(
-      currentUser,
-      order,
-      action: OrderWriteAction.approve,
-    );
     try {
+      OrderAuthorization.ensureCanDecideOrder(
+        currentUser,
+        order,
+        action: OrderWriteAction.approve,
+      );
       await _writeOrderDecision(
         orderDocumentId: orderDocumentId,
         currentUser: currentUser,
@@ -1228,6 +1230,7 @@ class CmsRepository {
           'approvedByRole': currentUser.role,
         },
         issuePurchaseOrder: true,
+        auditSource: auditSource,
       );
     } catch (error, stackTrace) {
       AppLogger.error(
@@ -1254,12 +1257,12 @@ class CmsRepository {
     if (safeRemark.length > 500) {
       throw ArgumentError('The rejection remark is limited to 500 characters.');
     }
-    OrderAuthorization.ensureCanDecideOrder(
-      currentUser,
-      order,
-      action: OrderWriteAction.reject,
-    );
     try {
+      OrderAuthorization.ensureCanDecideOrder(
+        currentUser,
+        order,
+        action: OrderWriteAction.reject,
+      );
       await _writeOrderDecision(
         orderDocumentId: orderDocumentId,
         currentUser: currentUser,
@@ -1294,6 +1297,7 @@ class CmsRepository {
     required String timestampField,
     required Map<String, dynamic> actorFields,
     bool issuePurchaseOrder = false,
+    String? auditSource,
   }) async {
     if (!AppRuntime.firebaseReady) return;
     final String safeOrderDocumentId = orderDocumentId.trim();
@@ -1347,6 +1351,7 @@ class CmsRepository {
       summary:
           '${safeStatus == 'approved' ? 'Approved' : 'Rejected'} order $safeOrderDocumentId',
       actor: currentUser,
+      metadata: <String, dynamic>{'source': ?auditSource},
     );
   }
 
@@ -1363,6 +1368,15 @@ class CmsRepository {
   DocumentReference<Map<String, dynamic>> _purchaseOrderReference(
     String orderDocumentId,
   ) => _firestore.collection('purchase_orders').doc(orderDocumentId.trim());
+
+  Future<List<Map<String, dynamic>>> purchaseOrderLines(
+    String orderDocumentId,
+  ) async {
+    final Map<String, dynamic> order = await readPurchaseOrderSource(
+      () => _orderReference(orderDocumentId).get(),
+    );
+    return authoritativeOrderItems(order);
+  }
 
   static Map<String, dynamic> purchaseOrderData(
     String orderDocumentId,
@@ -1399,7 +1413,6 @@ class CmsRepository {
       'salesmanUid': ruleText('salesmanUid', 'salesman_uid'),
       'branchId': ruleText('branchId', 'branch_id'),
       'totalPrice': order['totalPrice'] ?? 0,
-      'lines': order['items'] ?? <dynamic>[],
       'status': 'issued',
       'issuedAt': FieldValue.serverTimestamp(),
       'issuedByUid': actor.uid,
@@ -1407,22 +1420,24 @@ class CmsRepository {
     };
   }
 
-  Future<void> issuePurchaseOrder({
+  Future<PurchaseOrderIssueResult?> issuePurchaseOrder({
     required String orderDocumentId,
     required UserProfile currentUser,
   }) async {
-    if (!AppRuntime.firebaseReady) return;
+    if (!AppRuntime.firebaseReady) return null;
     if (!currentUser.isActive || !currentUser.isAdmin) {
       throw StateError('Only an administrator can issue a purchase order.');
     }
     final String id = orderDocumentId.trim();
-    if (id.isEmpty) return;
+    if (id.isEmpty) return null;
     final DocumentReference<Map<String, dynamic>> orderRef = _orderReference(
       id,
     );
     final DocumentReference<Map<String, dynamic>> poRef =
         _purchaseOrderReference(id);
-    await _firestore.runTransaction((Transaction transaction) async {
+    return _firestore.runTransaction<PurchaseOrderIssueResult>((
+      Transaction transaction,
+    ) async {
       final DocumentSnapshot<Map<String, dynamic>> orderSnapshot =
           await transaction.get(orderRef);
       final Map<String, dynamic>? order = orderSnapshot.data();
@@ -1430,58 +1445,182 @@ class CmsRepository {
         throw StateError('Only an approved order can have a purchase order.');
       }
       if ((await transaction.get(poRef)).exists) {
-        throw StateError('A purchase order was already issued for this order.');
+        return PurchaseOrderIssueResult.alreadyIssued;
       }
       _requireConsistentCommercialFacts(order);
       transaction.set(poRef, purchaseOrderData(id, order, currentUser));
+      return PurchaseOrderIssueResult.issued;
     });
+  }
+
+  Query<Map<String, dynamic>>? _scopedPurchaseOrders(UserProfile currentUser) {
+    if (!AppRuntime.firebaseReady) return null;
+    final CollectionReference<Map<String, dynamic>> collection = _firestore
+        .collection('purchase_orders');
+    if (currentUser.isAdmin) return collection;
+    if (currentUser.isBranchManager && currentUser.branchId.trim().isNotEmpty) {
+      return collection.where(
+        'branchId',
+        isEqualTo: currentUser.branchId.trim(),
+      );
+    }
+    return null;
+  }
+
+  static DateTime? _purchaseOrderIssuedAt(Map<String, dynamic> row) {
+    final Object? issuedAt = row['issuedAt'];
+    return issuedAt is Timestamp ? issuedAt.toDate() : null;
   }
 
   Stream<List<Map<String, dynamic>>> watchPurchaseOrders({
     required UserProfile currentUser,
-    int limit = 500,
+    required DateTime from,
+    required DateTime before,
   }) {
-    if (!AppRuntime.firebaseReady) {
+    final Query<Map<String, dynamic>>? scope = _scopedPurchaseOrders(
+      currentUser,
+    );
+    if (scope == null) {
       return Stream<List<Map<String, dynamic>>>.value(<Map<String, dynamic>>[]);
+    }
+    final Query<Map<String, dynamic>> inRange = scope
+        .where('issuedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+        .where('issuedAt', isLessThan: Timestamp.fromDate(before))
+        .orderBy('issuedAt', descending: true);
+    final Stream<QuerySnapshot<Map<String, dynamic>>> snapshots =
+        currentUser.isAdmin
+        ? inRange.snapshots()
+        : firestore_query_utils.snapshotsWithIndexFallback(inRange, scope);
+    return snapshots.map((QuerySnapshot<Map<String, dynamic>> snapshot) {
+      final List<Map<String, dynamic>> rows =
+          snapshot.docs
+              .map(
+                (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+                    <String, dynamic>{...doc.data(), 'docId': doc.id},
+              )
+              .where((Map<String, dynamic> row) {
+                final DateTime? issuedAt = _purchaseOrderIssuedAt(row);
+                return issuedAt != null &&
+                    !issuedAt.isBefore(from) &&
+                    issuedAt.isBefore(before);
+              })
+              .toList()
+            ..sort(
+              (Map<String, dynamic> a, Map<String, dynamic> b) =>
+                  _purchaseOrderIssuedAt(
+                    b,
+                  )!.compareTo(_purchaseOrderIssuedAt(a)!),
+            );
+      return rows;
+    });
+  }
+
+  Stream<DateTime?> watchLatestPurchaseOrderIssuedAt({
+    required UserProfile currentUser,
+  }) {
+    final Query<Map<String, dynamic>>? scope = _scopedPurchaseOrders(
+      currentUser,
+    );
+    if (scope == null) return Stream<DateTime?>.value(null);
+    final Query<Map<String, dynamic>> newest = scope
+        .orderBy('issuedAt', descending: true)
+        .limit(1);
+    final Stream<QuerySnapshot<Map<String, dynamic>>> snapshots =
+        currentUser.isAdmin
+        ? newest.snapshots()
+        : firestore_query_utils.snapshotsWithIndexFallback(newest, scope);
+    return snapshots.map((QuerySnapshot<Map<String, dynamic>> snapshot) {
+      DateTime? latest;
+      for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
+          in snapshot.docs) {
+        final DateTime? issuedAt = _purchaseOrderIssuedAt(doc.data());
+        if (issuedAt != null && (latest == null || issuedAt.isAfter(latest))) {
+          latest = issuedAt;
+        }
+      }
+      return latest;
+    });
+  }
+
+  Future<Set<String>> purchaseOrderIdsAmong(
+    Iterable<String> orderDocumentIds,
+  ) async {
+    final Set<String> ids = orderDocumentIds
+        .map((String id) => id.trim())
+        .where((String id) => id.isNotEmpty)
+        .toSet();
+    if (!AppRuntime.firebaseReady || ids.isEmpty) return <String>{};
+    final CollectionReference<Map<String, dynamic>> collection = _firestore
+        .collection('purchase_orders');
+    final List<QuerySnapshot<Map<String, dynamic>>> found =
+        await Future.wait<QuerySnapshot<Map<String, dynamic>>>(
+          firestore_query_utils
+              .chunkFirestoreWhereIn<String>(ids)
+              .map(
+                (List<String> chunk) => collection
+                    .where(FieldPath.documentId, whereIn: chunk)
+                    .get(const GetOptions(source: Source.server)),
+              ),
+        );
+    return <String>{
+      for (final QuerySnapshot<Map<String, dynamic>> snapshot in found)
+        for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
+            in snapshot.docs)
+          doc.id,
+    };
+  }
+
+  Stream<Set<String>> watchPurchaseOrderIdsAmong(
+    Iterable<String> orderDocumentIds,
+  ) {
+    final Set<String> ids = orderDocumentIds
+        .map((String id) => id.trim())
+        .where((String id) => id.isNotEmpty)
+        .toSet();
+    if (!AppRuntime.firebaseReady || ids.isEmpty) {
+      return const Stream<Set<String>>.empty();
     }
     final CollectionReference<Map<String, dynamic>> collection = _firestore
         .collection('purchase_orders');
-    final Stream<QuerySnapshot<Map<String, dynamic>>> snapshots;
-    if (currentUser.isAdmin) {
-      snapshots = collection
-          .orderBy('issuedAt', descending: true)
-          .limit(limit)
-          .snapshots();
-    } else if (currentUser.isBranchManager &&
-        currentUser.branchId.trim().isNotEmpty) {
-      final Query<Map<String, dynamic>> branch = collection.where(
-        'branchId',
-        isEqualTo: currentUser.branchId.trim(),
-      );
-      snapshots = firestore_query_utils.snapshotsWithIndexFallback(
-        branch.orderBy('issuedAt', descending: true).limit(limit),
-        branch.limit(limit),
-      );
-    } else {
-      return Stream<List<Map<String, dynamic>>>.value(<Map<String, dynamic>>[]);
-    }
-    return snapshots.map((QuerySnapshot<Map<String, dynamic>> snapshot) {
-      final List<Map<String, dynamic>> rows = snapshot.docs
-          .map(
-            (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
-                <String, dynamic>{...doc.data(), 'docId': doc.id},
-          )
-          .toList();
-      rows.sort((Map<String, dynamic> a, Map<String, dynamic> b) {
-        final Object? left = a['issuedAt'];
-        final Object? right = b['issuedAt'];
-        if (left is Timestamp && right is Timestamp) {
-          return right.compareTo(left);
+    final List<StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>
+    subscriptions = <StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>[];
+    final Map<int, Set<String>> existingByChunk = <int, Set<String>>{};
+    late final StreamController<Set<String>> controller;
+    controller = StreamController<Set<String>>(
+      onListen: () {
+        final List<List<String>> chunks = firestore_query_utils
+            .chunkFirestoreWhereIn<String>(ids);
+        for (int index = 0; index < chunks.length; index += 1) {
+          subscriptions.add(
+            collection
+                .where(FieldPath.documentId, whereIn: chunks[index])
+                .snapshots()
+                .listen((QuerySnapshot<Map<String, dynamic>> snapshot) {
+                  if (snapshot.docs.isEmpty) return;
+                  existingByChunk[index] = <String>{
+                    for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
+                        in snapshot.docs)
+                      doc.id,
+                  };
+                  controller.add(<String>{
+                    for (final Set<String> found in existingByChunk.values)
+                      ...found,
+                  });
+                }, onError: controller.addError),
+          );
         }
-        return 0;
-      });
-      return rows;
-    });
+      },
+      onCancel: () async {
+        await Future.wait<void>(
+          subscriptions.map(
+            (StreamSubscription<QuerySnapshot<Map<String, dynamic>>> s) =>
+                s.cancel(),
+          ),
+        );
+        subscriptions.clear();
+      },
+    );
+    return controller.stream;
   }
 
   Stream<List<Map<String, dynamic>>> watchOrdersSince(DateTime since) {
@@ -1520,14 +1659,9 @@ class CmsRepository {
     'BRANCH MANAGER',
   ];
 
-  static const List<String> _pendingApprovalStatuses = <String>[
-    'submitted',
-    'pending',
-    'pending_approval',
-    'held_for_review',
-  ];
-
-  static const int _pendingCountCodeChunkSize = 10;
+  static final int _pendingCountCodeChunkSize =
+      firestore_query_utils.kFirestoreDisjunctionMax ~/
+      kWaitingForApprovalStatuses.length;
 
   Future<int> countPendingApprovalOrders() async {
     if (!AppRuntime.firebaseReady) return 0;
@@ -1545,12 +1679,42 @@ class CmsRepository {
       whereInChunkSize: _pendingCountCodeChunkSize,
     )) {
       final AggregateQuerySnapshot counted = await scoped
-          .where('status', whereIn: _pendingApprovalStatuses)
+          .where('status', whereIn: kWaitingForApprovalStatuses.toList())
           .count()
           .get();
       total += counted.count ?? 0;
     }
     return total;
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingApprovalOrders({
+    int limit = 50,
+  }) async {
+    if (!AppRuntime.firebaseReady) return <Map<String, dynamic>>[];
+    final _PreciseLocationScope scope = await _resolvePreciseLocationScope();
+    if (scope.resolutionFailed) {
+      throw StateError(
+        'Your access scope could not be resolved. Check your connection and try again.',
+      );
+    }
+    final Map<String, Map<String, dynamic>> byId =
+        <String, Map<String, dynamic>>{};
+    for (final Query<Map<String, dynamic>> scoped in _preciseLocationQueries(
+      _firestore.collection('orders'),
+      scope,
+      collectionName: 'orders',
+      whereInChunkSize: _pendingCountCodeChunkSize,
+    )) {
+      final QuerySnapshot<Map<String, dynamic>> snapshot = await scoped
+          .where('status', whereIn: kWaitingForApprovalStatuses.toList())
+          .limit(limit)
+          .get();
+      for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
+          in snapshot.docs) {
+        byId[doc.id] = <String, dynamic>{...doc.data(), 'docId': doc.id};
+      }
+    }
+    return byId.values.toList(growable: false);
   }
 
   Stream<int> watchPendingApprovalCount({
@@ -6447,3 +6611,5 @@ class _RetailerLookupResult {
   final Map<String, dynamic>? row;
   final bool ok;
 }
+
+enum PurchaseOrderIssueResult { issued, alreadyIssued }

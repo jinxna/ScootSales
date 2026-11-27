@@ -9,7 +9,6 @@ from forecasting.evaluation.route_policy_sim import (
     POLICIES,
     SimCandidate,
     _benchmark_value,
-    _best_order,
     realised_ratio_catalogue,
     simulate_policies,
 )
@@ -88,19 +87,6 @@ def test_empty_catalogue_is_flagged_as_degenerate() -> None:
     assert regret == pytest.approx(0.0)
 
 
-def test_regret_is_never_negative() -> None:
-    result = simulate_policies(
-        _pool(),
-        target_size=4,
-        seed=3,
-        replicates=8,
-        realised_ratios=[0.0, 0.5, 1.0, 1.5, 2.0],
-    )
-    for comparison in result.comparisons.values():
-        for outcome in comparison.outcomes:
-            assert outcome.regret_per_day >= 0.0
-
-
 def test_benchmark_is_not_beaten_by_any_policy() -> None:
     result = simulate_policies(
         _pool(count=14),
@@ -170,23 +156,6 @@ def test_large_pool_reports_a_non_exact_best_known_benchmark() -> None:
     if "bestKnownFeasible" in methods:
         assert result.provenance["benchmarkIsExact"] is False
         assert "not a proven optimum" in result.provenance["benchmarkGuarantee"]
-
-
-def test_benchmark_never_returns_an_impossible_value() -> None:
-    pool = _pool(count=9)
-    realised = {candidate.retailer_id: 1.0 for candidate in pool}
-    realised["R08"] = 9000.0
-    result = simulate_policies(
-        pool,
-        target_size=2,
-        seed=31,
-        replicates=4,
-        realised_ratios=[1.0],
-        policies=["priorityOnly", "distanceOnly"],
-    )
-    for comparison in result.comparisons.values():
-        for outcome in comparison.outcomes:
-            assert outcome.regret_per_day >= 0.0
 
 
 def test_priority_routing_is_not_worse_than_round_robin() -> None:

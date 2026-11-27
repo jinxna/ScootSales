@@ -48,7 +48,7 @@ import 'views/plans_cms_page.dart';
 import 'views/system_governance_page.dart';
 import 'views/system_health_page.dart';
 import 'views/trust_impact_page.dart';
-import '../../services/ai_alert_service.dart';
+import '../../services/notification_read_state_service.dart';
 import '../../widgets/dashboard_chrome.dart';
 import '../../../voice/dashboard_voice_catalog.dart';
 import '../../../voice/copilot/copilot_client.dart';
@@ -66,6 +66,7 @@ class AdminCmsShellPage extends StatefulWidget {
 
 class _AdminCmsShellPageState extends State<AdminCmsShellPage> {
   late String _selectedKey;
+  final PlannerOpenRequests _plannerRequests = PlannerOpenRequests();
   void Function()? _cancelBrowserHistorySubscription;
 
   bool _copilotOpen = false;
@@ -78,7 +79,7 @@ class _AdminCmsShellPageState extends State<AdminCmsShellPage> {
   OrderSubmissionAlerts? _orderAlerts;
   late final Stream<int>? _notificationBadge =
       !isBasicEdition && widget.currentUser.isAdmin
-      ? AiAlertService().watchAdminHighPriorityCount()
+      ? NotificationReadStateService().watchUnreadCount()
       : null;
 
   String get _sessionUid => widget.currentUser.uid ?? widget.currentUser.docId;
@@ -150,6 +151,19 @@ class _AdminCmsShellPageState extends State<AdminCmsShellPage> {
     setState(() => _selectedKey = safeKey);
   }
 
+  Future<bool> _openPlannerFromCopilot(
+    String salesmanUid,
+    DateTime weekStart,
+  ) async {
+    if (!mounted) return false;
+    setState(
+      () =>
+          _plannerRequests.post(salesmanUid: salesmanUid, weekStart: weekStart),
+    );
+    _select('route_planner');
+    return true;
+  }
+
   void _openCommandPalette() {
     showCmsCommandPalette(
       context: context,
@@ -184,7 +198,12 @@ class _AdminCmsShellPageState extends State<AdminCmsShellPage> {
               sections,
               badgeKey: DashboardPage.notifications.key,
               badgeCount: badge.data ?? 0,
-              badgeLabel: 'high priority',
+              badgeLabel: NotificationReadStateService.unreadBadgeLabel(
+                badge.data ?? 0,
+              ),
+              badgeText: NotificationReadStateService.unreadBadgeText(
+                badge.data ?? 0,
+              ),
             ),
             selectedId: page?.key,
             onSelect: _select,
@@ -197,7 +216,7 @@ class _AdminCmsShellPageState extends State<AdminCmsShellPage> {
             pageTitle: page == DashboardPage.dashboard
                 ? ''
                 : navItem?.title ?? pageNotAvailableTitle,
-            pageFact: navItem?.description ?? pageNotAvailableMessage,
+            pageFact: navItem?.headerFact ?? pageNotAvailableMessage,
             untitledPageName: page == DashboardPage.dashboard
                 ? navItem?.title ?? ''
                 : '',
@@ -224,6 +243,7 @@ class _AdminCmsShellPageState extends State<AdminCmsShellPage> {
               onClose: _toggleCopilot,
               status: _copilotStatus,
               server: _copilotServer,
+              onPlannerRequested: _openPlannerFromCopilot,
             ),
             child: _selectable(
               page == null ? _notAvailable() : _buildSelectedPage(page),
@@ -256,6 +276,7 @@ class _AdminCmsShellPageState extends State<AdminCmsShellPage> {
       case DashboardPage.routePlanner:
         return RoutePlannerPage(
           currentUser: widget.currentUser,
+          openRequests: _plannerRequests,
           onNavigateRequested: _select,
         );
       case DashboardPage.visitLogs:

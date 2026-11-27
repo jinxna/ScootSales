@@ -129,7 +129,6 @@ class SalesmanScorecardService {
     return _readScopedDocuments(
       'orders',
       currentUser,
-      salesmanField: 'staffId',
       orderBy: 'submittedAt',
       limit: kScorecardOrderReadLimit,
       source: 'orders',
@@ -169,7 +168,6 @@ class SalesmanScorecardService {
   Future<List<Map<String, dynamic>>> _readScopedDocuments(
     String collection,
     UserProfile currentUser, {
-    String salesmanField = 'salesmanCode',
     String? orderBy,
     required int limit,
     bool includeDocId = false,
@@ -179,7 +177,6 @@ class SalesmanScorecardService {
     final ScopedDashboardReadResult result = await _repository.readDocuments(
       collection: collection,
       currentUser: currentUser,
-      salesmanField: salesmanField,
       orderBy: orderBy,
       limit: limit,
       deadline: kScorecardReadTimeout,

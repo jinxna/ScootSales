@@ -186,25 +186,27 @@ async function stopTypingTrace(page) {
   });
 }
 
-async function fillField(page, locator, value) {
+async function fillField(page, locator, value, { shown = value } = {}) {
   const seen = [];
   await startTypingTrace(page);
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await locator.click();
     await page.keyboard.press('Control+A');
     await page.keyboard.press('Backspace');
+    if (attempt > 0) await page.waitForTimeout(300);
     const leftAfterClear = (await locator.inputValue()).length;
     await page.keyboard.type(value, { delay: 20 });
     const typed = await locator.inputValue();
-    if (typed === value) {
+    if (typed === shown) {
       await stopTypingTrace(page);
       return;
     }
-    seen.push({ leftAfterClear, length: typed.length, missingStart: value.endsWith(typed), missingEnd: value.startsWith(typed) });
+    seen.push({ leftAfterClear, length: typed.length, missingStart: shown.endsWith(typed), missingEnd: shown.startsWith(typed) });
     await page.waitForTimeout(400);
   }
   const trace = await stopTypingTrace(page);
-  throw new Error(`could not enter text into the field reliably: wanted ${value.length} characters, each try gave ${JSON.stringify(seen)}; events ${JSON.stringify(trace.slice(0, 120))}`);
+  const lastShown = shown === value ? '' : ` last shown "${await locator.inputValue()}" instead of "${shown}";`;
+  throw new Error(`could not enter text into the field reliably:${lastShown} wanted ${shown.length} characters shown, each try gave ${JSON.stringify(seen)}; events ${JSON.stringify(trace.slice(0, 120))}`);
 }
 
 async function focusedValue(locator, { timeout = 5000 } = {}) {

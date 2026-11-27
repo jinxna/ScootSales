@@ -1,0 +1,62 @@
+name: End-to-end restore web build
+description: Restore one E2E web build from the cache, keyed on the inputs of that build.
+
+inputs:
+  build:
+    description: admin, admin-cc, mobile, mobile-v4 or mobile-basic.
+    required: true
+  fingerprint:
+    description: Fingerprint printed by the e2e-key job.
+    required: true
+  lookup-only:
+    description: Only check that the build is cached.
+    default: "false"
+  fail-on-miss:
+    description: Fail the step when the build is not cached.
+    default: "false"
+
+outputs:
+  cache-hit:
+    description: "true when the build is cached."
+    value: ${{ steps.restore.outputs.cache-hit }}
+  key:
+    description: Cache key of the build.
+    value: ${{ steps.plan.outputs.key }}
+  path:
+    description: Folder of the build.
+    value: ${{ steps.plan.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Work out the cache key and folder
+      id: plan
+      shell: bash
+      env:
+        BUILD: ${{ inputs.build }}
+        FINGERPRINT: ${{ inputs.fingerprint }}
+        ADMIN_HASH: ${{ hashFiles('admin_dashboard/lib/**', 'admin_dashboard/web/**', 'admin_dashboard/assets/**', 'admin_dashboard/pubspec.yaml', 'admin_dashboard/pubspec.lock') }}
+        MOBILE_HASH: ${{ hashFiles('flutter_mobile_app/lib/**', 'flutter_mobile_app/web/**', 'flutter_mobile_app/assets/**', 'flutter_mobile_app/pubspec.yaml', 'flutter_mobile_app/pubspec.lock') }}
+        COMMON_HASH: ${{ hashFiles('packages/**', 'e2e/build.cjs', 'e2e/lib/platform.cjs', 'e2e/lib/lane.cjs', 'scripts/release_manifest.py', '.github/actions/e2e-setup/action.yml', '.github/actions/e2e-restore-build/action.yml', '.github/workflows/verify.yml') }}
+      run: |
+        case "${BUILD}" in
+          admin)        app_hash="${ADMIN_HASH}";  path="admin_dashboard/build/web_e2e" ;;
+          admin-cc)     app_hash="${ADMIN_HASH}";  path="admin_dashboard/build/web_control_signin_e2e" ;;
+          mobile)       app_hash="${MOBILE_HASH}"; path="flutter_mobile_app/build/web_e2e" ;;
+          mobile-v4)    app_hash="${MOBILE_HASH}"; path="flutter_mobile_app/build/web_e2e_v4" ;;
+          mobile-basic) app_hash="${MOBILE_HASH}"; path="flutter_mobile_app/build/web_e2e_basic" ;;
+          *) echo "::error::Unknown build ${BUILD}"; exit 1 ;;
+        esac
+        {
+          echo "key=e2e-web-${BUILD}-${FINGERPRINT}-${app_hash}-${COMMON_HASH}"
+          echo "path=${path}"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Restore the build
+      id: restore
+      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
+      with:
+        path: ${{ steps.plan.outputs.path }}
+        key: ${{ steps.plan.outputs.key }}
+        lookup-only: ${{ inputs.lookup-only }}
+        fail-on-cache-miss: ${{ inputs.fail-on-miss }}

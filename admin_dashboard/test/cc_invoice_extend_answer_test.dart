@@ -22,7 +22,10 @@ Map<String, Object?> _invoice(String number, {bool? canExtend}) =>
       'amountMinor': 10000,
       'outstandingMinor': 10000,
       'status': 'sent',
-      'dueAt': '2026-11-20T00:00:00Z',
+      'dueAt': DateTime.now()
+          .toUtc()
+          .add(const Duration(days: 30))
+          .toIso8601String(),
       'createdAt': '2026-11-01T00:00:00Z',
       if (canExtend != null) 'canExtend': canExtend,
     };

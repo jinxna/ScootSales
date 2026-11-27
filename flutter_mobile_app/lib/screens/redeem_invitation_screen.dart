@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:scoot_design/scoot_design.dart';
 
@@ -265,6 +266,9 @@ class _RedeemInvitationScreenState extends State<RedeemInvitationScreen> {
                   autocorrect: false,
                   enableSuggestions: false,
                   textCapitalization: TextCapitalization.characters,
+                  inputFormatters: const <TextInputFormatter>[
+                    InvitationCodeFormatter(),
+                  ],
                   textInputAction: TextInputAction.next,
                   onEditingComplete: _checkFocus.requestFocus,
                   style: ScootType.mono.copyWith(

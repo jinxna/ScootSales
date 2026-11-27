@@ -5,6 +5,7 @@ const B = require('../lib/browser.cjs');
 const WIDTHS = [1440, 900, 700, 470, 340];
 const CONTROLS = [/^(All dates|\d\d\/\d\d\/\d{4})/, /^Mark all as read/, /^All \d+/, /^System \d+/];
 const CHIPS = CONTROLS.slice(2);
+const NOTIFICATIONS_ENTRY = /^Notifications(, \d+ (or more )?unread)?(, current page)?$/;
 
 module.exports = {
   name: 'notifications_toolbar',
@@ -25,7 +26,7 @@ module.exports = {
     await t.step('admin opens Notifications', async () => {
       s = await t.session('admin');
       await B.loginAdmin(s.page, s.url, accounts.admin.email);
-      await s.page.getByRole('button', { name: 'Notifications', exact: true }).first().click();
+      await s.page.getByRole('button', { name: NOTIFICATIONS_ENTRY }).first().click();
       await B.see(s.page, /^System \d+/);
     });
 
@@ -37,7 +38,7 @@ module.exports = {
         await s.page.mouse.wheel(0, dy);
         await s.page.waitForTimeout(500);
       }
-      await s.page.getByRole('button', { name: /^Notifications(, current page)?$/ }).first().waitFor({ state: 'attached' });
+      await s.page.getByRole('button', { name: NOTIFICATIONS_ENTRY }).first().waitFor({ state: 'attached' });
     });
 
     for (const width of WIDTHS) {

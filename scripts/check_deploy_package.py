@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_SCRIPT = ROOT / "deploy" / "droplet" / "build-package.sh"
-DASHBOARD_LIB = ROOT / "admin_dashboard" / "lib"
+DASHBOARD = ROOT / "admin_dashboard"
 NOT_FOR_RELEASE = {
     "ADMIN_IDLE_TIMEOUT_MINUTES",
     "DASHBOARD_ROLE",
@@ -19,11 +19,21 @@ NOT_FOR_RELEASE = {
 }
 DEFINE_IN_CODE = re.compile(r"fromEnvironment\(\s*'([A-Z][A-Z0-9_]*)'")
 DEFINE_IN_BUILD = re.compile(r"--dart-define=([A-Z][A-Z0-9_]*)=")
+PATH_DEPENDENCY = re.compile(r"^\s+path:\s*(\S+)\s*$", re.MULTILINE)
+
+
+def dashboard_sources() -> list[Path]:
+    pubspec = (DASHBOARD / "pubspec.yaml").read_text(encoding="utf-8")
+    folders = [DASHBOARD / "lib"] + [(DASHBOARD / path / "lib").resolve() for path in PATH_DEPENDENCY.findall(pubspec)]
+    missing = [folder for folder in folders if not folder.is_dir()]
+    if missing:
+        sys.exit(f"FAIL: admin_dashboard/pubspec.yaml names a path package with no lib folder: {missing[0]}")
+    return [path for folder in folders for path in sorted(folder.rglob("*.dart"))]
 
 
 def main() -> int:
     in_code: dict[str, Path] = {}
-    for path in sorted(DASHBOARD_LIB.rglob("*.dart")):
+    for path in dashboard_sources():
         for name in DEFINE_IN_CODE.findall(path.read_text(encoding="utf-8")):
             in_code.setdefault(name, path)
     in_build = set(DEFINE_IN_BUILD.findall(BUILD_SCRIPT.read_text(encoding="utf-8")))

@@ -499,9 +499,9 @@ class _NotificationsFeedPanelState extends State<_NotificationsFeedPanel> {
                             activitySnap.data ?? <Map<String, dynamic>>[],
                           ),
                         );
-                    final int unreadCount = notifications
-                        .where((Map<String, dynamic> item) => !_isRead(item))
-                        .length;
+                    final int unreadCount = _readStateLoading
+                        ? 0
+                        : unreadNotificationCount(notifications, _readState);
                     final List<Map<String, dynamic>> filtered =
                         _selectedDateKey == 'all'
                         ? notifications

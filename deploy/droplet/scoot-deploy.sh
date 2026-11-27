@@ -5,6 +5,9 @@ CONTROL_HOST=${SCOOT_CONTROL_HOST:-control.scootsales.my}
 PRIMARY_DASHBOARD_HOST=${SCOOT_PRIMARY_DASHBOARD_HOST:-scootsales.my}
 DASHBOARD_HOST=$PRIMARY_DASHBOARD_HOST
 KNOWN_DASHBOARD_HOSTS=(scootsales.my hardware.scootsales.my)
+PROMO_HOST=site.scootsales.my
+PROMO_WWW=${SCOOT_PROMO_WWW:-/var/www/scootsales-site}
+KEEP_PROMO_RELEASES=3
 LOCK_DIR=
 BASE=${SCOOT_BASE:-/opt/scoot}
 ETC=${SCOOT_ETC:-/etc/scoot}
@@ -102,6 +105,12 @@ Actions
   dashboard-revert
                 Put back the newest backup made by  dashboard --apply  for the same host.
                 Give the same --dashboard-host as for the dashboard action.
+  promo         promo FOLDER: put the promotional website on site.scootsales.my. FOLDER is the
+                site-static folder made by  npm run export:static  in the promotion repo.
+                Copies it to a new release in /var/www/scootsales-site, leaves out product/
+                images that no page uses, points current at it and writes the nginx file.
+                Add --email EMAIL --agree-tos to get the HTTPS certificate when there is none.
+                Add the DNS A record for site.scootsales.my first.
   status        Show what is installed and running.
 
 Options
@@ -122,7 +131,7 @@ parse() {
   fi
   if [ $# -gt 0 ]; then
     case "$1" in
-      deploy|start|headers|scheduler-install|copilot-install|copilot-start|forecast-install|forecast-run|rollback|install-key|signing-key|public-key|create-owner|brevo|certificate|dashboard|dashboard-revert|status) ACTION=$1; shift ;;
+      deploy|start|headers|scheduler-install|copilot-install|copilot-start|forecast-install|forecast-run|rollback|install-key|signing-key|public-key|create-owner|brevo|certificate|dashboard|dashboard-revert|promo|status) ACTION=$1; shift ;;
       --rollback) ACTION=rollback; shift ;;
     esac
   fi
@@ -149,7 +158,7 @@ parse() {
     [[ "$DEFAULT_WORKSPACE" =~ ^[a-z0-9-]{2,32}$ ]] || die "Give the company code for --default-workspace: 2 to 32 lower-case letters, digits or dashes. Copy it from the company page in the Control Centre."
   fi
   case "$DASHBOARD_HOST" in
-    "$CONTROL_HOST"|www.scootsales.my)
+    "$CONTROL_HOST"|www.scootsales.my|"$PROMO_HOST")
       die "$DASHBOARD_HOST is not allowed as the dashboard host. Use scootsales.my or hardware.scootsales.my."
       ;;
   esac
@@ -404,7 +413,7 @@ render_nginx() {
   else
     template=$HERE/nginx-$kind.http.conf.tpl
   fi
-  rendered=$(sed -e "s|@@HOST@@|$host|g" -e "s|@@API_HOST@@|$CONTROL_HOST|g" "$template")
+  rendered=$(sed -e "s|@@HOST@@|$host|g" -e "s|@@API_HOST@@|$CONTROL_HOST|g" -e "s|@@ROOT@@|$PROMO_WWW/current|g" "$template")
   if [ -f "$NGINX_TARGET" ] && [ "$(cat "$NGINX_TARGET")" = "$rendered" ] && { [ -z "$NGINX_LINK" ] || [ -L "$NGINX_LINK" ]; }; then
     say "keep   $NGINX_TARGET (same)"
     return 0
@@ -1078,14 +1087,14 @@ cleanup_dashboard_action() {
   if [ -n "$LOCK_DIR" ]; then rm -rf "$LOCK_DIR"; fi
 }
 
-lock_dashboard_action() {
-  local lock=$BASE/state/dashboard.lock holder
+lock_action() {
+  local name=$1 lock=$BASE/state/$1.lock holder
   trap cleanup_dashboard_action EXIT
   [ "$APPLY" = 1 ] || return 0
   install -d -m 0700 "$BASE/state"
   if ! mkdir -m 0700 "$lock" 2>/dev/null; then
     holder=$(cat "$lock/pid" 2>/dev/null || true)
-    die "Another dashboard action holds the lock $lock${holder:+ (process $holder)}. Wait for it to end. If no such process runs, remove the folder with  rm -rf $lock  and run this again. Nothing was changed."
+    die "Another $name action holds the lock $lock${holder:+ (process $holder)}. Wait for it to end. If no such process runs, remove the folder with  rm -rf $lock  and run this again. Nothing was changed."
   fi
   LOCK_DIR=$lock
   printf '%s\n' "$$" >"$lock/pid"
@@ -1099,7 +1108,7 @@ do_dashboard() {
   if [ "$APPLY" = 1 ] && [ -z "$DEFAULT_WORKSPACE" ]; then
     die "Give the company that https://$DASHBOARD_HOST/ opens:  scoot-deploy dashboard$(host_flag) --default-workspace CODE --apply  (the code is on the company page in the Control Centre). Nothing was changed."
   fi
-  lock_dashboard_action
+  lock_action dashboard
   WORK=$(mktemp -d)
   discover_site
   report_certificates
@@ -1151,6 +1160,7 @@ do_dashboard() {
   act rm -f "$WWW/$stamp/workspace.json"
   chmod -R u=rwX,go=rX "$WWW/$stamp"
   [ -f "$WWW/$stamp/index.html" ] || die "The copy in $WWW/$stamp has no index.html. The nginx files were not changed."
+  [ -f "$WWW/$stamp/privacy/index.html" ] || die "The copy in $WWW/$stamp has no privacy/index.html, so https://$DASHBOARD_HOST/privacy would show the sign-in page. Build the package again with PRIVACY_CONTACT_EMAIL set. The nginx files were not changed."
   ln -sfn "$WWW/$stamp" "$current.next"
   mv -T -f "$current.next" "$current"
   say "linked $current -> $WWW/$stamp"
@@ -1189,7 +1199,7 @@ do_dashboard_revert() {
   current=$(site_current)
   prefix=$(backup_prefix)
   need_root_always
-  lock_dashboard_action
+  lock_action dashboard
   bk=$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name "$prefix-[0-9]*" 2>/dev/null | sort | tail -n 1)
   [ -n "$bk" ] || die "No backup of $DASHBOARD_HOST found in $BACKUP_DIR. Nothing was changed."
   [ -s "$bk/manifest" ] || die "The backup $bk has no file list. Nothing was changed."
@@ -1238,6 +1248,100 @@ do_dashboard_revert() {
   fi
   systemctl reload nginx
   say "Reverted and reloaded nginx. The files from before the revert are in $snap."
+}
+
+promo_unused() {
+  local src=$1 file name
+  [ -d "$src/product" ] || return 0
+  for file in "$src"/product/*; do
+    [ -f "$file" ] || continue
+    name=${file#"$src"/product/}
+    grep -rqF --include='*.html' --include='*.css' --include='*.js' "product/$name" "$src" || printf '%s\n' "$name"
+  done
+}
+
+prune_promo() {
+  local current dir keep=$KEEP_PROMO_RELEASES
+  [ -d "$PROMO_WWW/releases" ] || return 0
+  [ "$APPLY" = 1 ] || keep=$((keep - 1))
+  current=$(readlink -f "$PROMO_WWW/current" 2>/dev/null || true)
+  for dir in $(find "$PROMO_WWW/releases" -mindepth 1 -maxdepth 1 -type d | sort -r | tail -n +$((keep + 1))); do
+    [ "$(readlink -f "$dir")" = "$current" ] || act rm -rf "$dir"
+  done
+}
+
+do_promo() {
+  local src=${POS[0]:-} id dest size free probe name port owners owner unused=()
+  need_root
+  [ -n "$src" ] || die "Give the folder with the built site, for example:  promo /root/site-static"
+  [ -f "$src/index.html" ] || die "$src/index.html is missing. Copy the site-static folder made by  npm run export:static. Nothing was changed."
+  if [ -n "$EMAIL" ] || [ "$AGREE" = 1 ]; then
+    { [ -n "$EMAIL" ] && [ "$AGREE" = 1 ]; } || die "Give both --email EMAIL and --agree-tos to get the certificate. Nothing was changed."
+  fi
+  [ ! -L "$src" ] || die "$src is a link. Give the real folder. Nothing was changed."
+  [ -z "$(find "$src" -mindepth 1 \( -type l -o -name '.*' \) -print -quit)" ] || die "$src holds a link or a hidden file. Upload only the files made by  npm run export:static. Nothing was changed."
+  if [ "$SKIP_NGINX" = 1 ]; then
+    [ -z "$EMAIL" ] || die "--skip-nginx and --email cannot be used together. Nothing was changed."
+  else
+    for port in 80 443; do
+      owners=$(port_owners "$port")
+      for owner in $owners; do
+        [ "$owner" = nginx ] || die "Port $port is owned by '$owner', not by nginx. Serve $PROMO_WWW/current with that program, and run promo with --skip-nginx. Nothing was changed."
+      done
+    done
+    command -v nginx >/dev/null 2>&1 || die "nginx is not installed. Nothing was changed."
+    nginx -t >/dev/null 2>&1 || die "The current nginx configuration fails nginx -t. Fix it first. Nothing was changed."
+    nginx_layout "$PROMO_HOST"
+  fi
+  lock_action promo
+  step "Files for $PROMO_HOST"
+  size=$(du -sm "$src" | awk '{ print $1 }')
+  probe=$PROMO_WWW
+  [ -d "$probe" ] || probe=/
+  free=$(df -Pm "$probe" | awk 'NR == 2 { print $4 }')
+  say "Site folder $src: ${size} MB. Free disk: ${free} MB."
+  [ "$free" -ge $((size + 200)) ] || die "The site needs ${size} MB and 200 MB must stay free. Nothing was changed."
+  mapfile -t unused < <(promo_unused "$src")
+  id=$(date -u +%Y%m%d-%H%M%S)
+  dest=$PROMO_WWW/releases/$id
+  [ ! -e "$dest" ] || die "$dest already exists. Run this again in one second."
+  act install -d -m 0755 "$PROMO_WWW/releases"
+  act cp -rT "$src" "$dest"
+  for name in "${unused[@]}"; do
+    say "leave out product/$name (no page uses it)"
+    act rm -f "$dest/product/$name"
+  done
+  act chmod -R u=rwX,go=rX "$dest"
+  act ln -sfn "$dest" "$PROMO_WWW/current.next"
+  act mv -T -f "$PROMO_WWW/current.next" "$PROMO_WWW/current"
+  prune_promo
+  if [ "$SKIP_NGINX" = 1 ]; then
+    say "skip   nginx and certificate (--skip-nginx). Serve $PROMO_WWW/current yourself."
+    return 0
+  fi
+  step "nginx for $PROMO_HOST"
+  act install -d -m 0755 /var/www/certbot
+  render_nginx "$PROMO_HOST" promo
+  if [ -f "/etc/letsencrypt/live/$PROMO_HOST/fullchain.pem" ]; then
+    say "Check:  curl -sI https://$PROMO_HOST/   (expect HTTP/1.1 200 and a Content-Security-Policy line)"
+    return 0
+  fi
+  if [ -z "$EMAIL" ]; then
+    say "note   $PROMO_HOST has no certificate yet. Until it has one, nginx answers 404 on http."
+    say "Next:  scoot-deploy promo $src --email EMAIL --agree-tos --apply"
+    return 0
+  fi
+  step "Certificate for $PROMO_HOST"
+  if ! command -v certbot >/dev/null 2>&1; then
+    act apt-get update -qq
+    act apt-get install -y -qq certbot
+  fi
+  if [ "$APPLY" = 1 ]; then
+    certificate_for "$PROMO_HOST" promo
+  else
+    say "DRY  certbot certonly --webroot -w /var/www/certbot -d $PROMO_HOST (needs the DNS A record)"
+    say "DRY  write the https nginx file from nginx-promo.https.conf.tpl, nginx -t && systemctl reload nginx"
+  fi
 }
 
 do_public_key() {
@@ -1310,9 +1414,10 @@ do_headers() {
     if [ -L "$link" ]; then hosts+=("${link#"$WWW"/current-}"); fi
   done
   hosts+=("$DASHBOARD_HOST")
+  if [ -f "/etc/letsencrypt/live/$PROMO_HOST/fullchain.pem" ]; then hosts+=("$PROMO_HOST"); fi
   mapfile -t hosts < <(printf '%s
 ' "${hosts[@]}" | awk '!seen[$0]++')
-  python3 -I "$HERE/check_headers.py" "${hosts[@]}" "--control-host=$CONTROL_HOST"
+  python3 -I "$HERE/check_headers.py" "${hosts[@]}" "--control-host=$CONTROL_HOST" "--promo-host=$PROMO_HOST"
 }
 
 scheduler_steps() {
@@ -1552,6 +1657,7 @@ main() {
     certificate) do_certificate ;;
     dashboard) do_dashboard ;;
     dashboard-revert) do_dashboard_revert ;;
+    promo) do_promo ;;
     status) do_status ;;
   esac
   if [ "$APPLY" != 1 ] && [ "$ACTION" != brevo ] && [ "$ACTION" != status ] && [ "$ACTION" != forecast-run ]; then

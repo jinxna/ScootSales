@@ -11,7 +11,10 @@ enum LegalLanguage {
 
 const String legalVersion = '2.1';
 const String legalDate = '4 November 2026';
-const String legalContactEmail = '[REPLACE-CONTACT-EMAIL]';
+const String legalContactEmail = String.fromEnvironment(
+  'LEGAL_CONTACT_EMAIL',
+  defaultValue: '[REPLACE-CONTACT-EMAIL]',
+);
 
 class LegalSection {
   const LegalSection(this.heading, this.body);
@@ -24,13 +27,11 @@ class LegalText {
   const LegalText({
     required this.title,
     required this.versionLabel,
-    required this.status,
     required this.sections,
   });
 
   final String title;
   final String versionLabel;
-  final String status;
   final List<LegalSection> sections;
 
   String get versionLine => '$versionLabel $legalVersion · $legalDate';
@@ -49,18 +50,14 @@ LegalText legalText(
 String legalTitle(LegalDocumentKind document) =>
     legalText(document, LegalLanguage.english).title;
 
-const String _englishStatus = 'Draft for legal review';
-const String _malayStatus = 'Terjemahan - draf untuk semakan undang-undang';
-
 const LegalText privacyEnglish = LegalText(
   title: 'Privacy Policy',
   versionLabel: 'Version',
-  status: _englishStatus,
   sections: <LegalSection>[
     LegalSection(
       '1. About this policy',
       'This policy explains how Scoot Sales handles personal data in the company dashboard, the salesperson phone app and the Control Centre. It follows the Personal Data Protection Act 2010 of Malaysia (PDPA), as amended in 2024.\n'
-          'This text is a draft. A lawyer must review it before it is final. If the English and Bahasa Malaysia texts differ, the English text applies until the review is complete.',
+          'If the English and Bahasa Malaysia texts differ, the English text applies.',
     ),
     LegalSection(
       '2. Who is responsible',
@@ -76,7 +73,7 @@ const LegalText privacyEnglish = LegalText(
           '• Signatures: a retailer contact can sign an order on the phone. The drawn signature is stored with the visit record.\n'
           '• Location: see section 5.\n'
           '• Billing data: company name, billing email, invoices, payments and receipts.\n'
-          '• Technical data: server logs, audit records and a hashed form of the network address. We use it to limit abuse.',
+          '• Technical data: server logs, audit records and your network address. We use a hashed form of the address to limit abuse. These limit records are deleted after 30 days.',
     ),
     LegalSection(
       '4. Why we use it',
@@ -101,12 +98,12 @@ const LegalText privacyEnglish = LegalText(
       'We use these providers. Each one receives only the data it needs.\n'
           '• Google Firebase (Authentication, Firestore database, App Check): stores your company’s data in the region chosen when its Firebase project was created, for example Singapore (asia-southeast1).\n'
           '• Brevo: sends our email (invitations, sign-in codes, invoices, receipts and notices). Brevo receives the recipient address and the email content.\n'
-          '• Google Gemini (dashboard Scout only): when you type a request into Scout, the sentence you typed and the names of the pages and actions open to you are sent to Google. We use a paid, billed API key. Under Google’s paid API terms, Google does not use this data to train its models. Do not type personal data into Scout that it does not need.\n'
+          '• Google Gemini (Scout on the dashboard and the assistant in the phone app): when you type a request, the sentence you typed and the names of the pages and actions open to you are sent to Google. We use a paid, billed API key. Under Google’s paid API terms, Google does not use this data to train its models. Our server does not store the sentence you typed. Do not type personal data that the assistant does not need.\n'
           '• Google sign-in (web only): if you press Continue with Google on the dashboard or the Control Centre, Google confirms who you are and gives us your name and email address.\n'
-          '• Firebase App Check with reCAPTCHA Enterprise (phone app): checks that requests come from our real app. It uses signals from your device or browser.\n'
+          '• Firebase App Check (phone app): checks that requests come from our real app. It uses Play Integrity on Android, App Attest on iOS and reCAPTCHA Enterprise in a browser. It uses signals from your device or browser.\n'
           '• DigitalOcean: runs our server in Singapore.\n'
-          '• OpenStreetMap-based map services: show maps. They receive the map area and your network address.\n'
-          '• Your phone’s speech service (Android or iOS): turns a voice command into text. We do not keep audio or transcripts.',
+          '• Map services: the dashboard uses Geoapify for maps and road distances, and the phone app uses OpenStreetMap for maps. They receive the map area and your network address. For road distances, Geoapify also receives the positions of the stops.\n'
+          '• Your browser’s speech service (dashboard voice commands): turns a spoken command into text. We do not keep audio or transcripts.',
     ),
     LegalSection(
       '7. Transfers outside Malaysia',
@@ -126,7 +123,7 @@ const LegalText privacyEnglish = LegalText(
           '• Control Centre staff sign in with a password and an emailed code, or with Google. A staff session ends after 12 hours.\n'
           '• Scoot Sales staff have no standing access to company data. A company administrator can give a read-only support grant for 5 to 60 minutes. Each grant is logged.\n'
           '• Risky staff actions need a second person to approve them.\n'
-          '• Our audit log is checked every day.\n'
+          '• An automatic job checks our audit log every hour.\n'
           'No system is fully safe. If a breach happens, we follow our incident plan and the PDPA.',
     ),
     LegalSection(
@@ -148,7 +145,7 @@ const LegalText privacyEnglish = LegalText(
     ),
     LegalSection(
       '12. Data export',
-      'A company administrator can download a data export. It is a ZIP file with CSV and JSON files. It covers users, products, retailers, orders, routes, route progress, visit outcomes and score sheets.',
+      'A company administrator can download a data export. It is a ZIP file with CSV and JSON files. It covers users and their access records, products, retailers, orders, routes, route and stop progress, visit outcomes and score sheets.',
     ),
     LegalSection(
       '13. Your rights',
@@ -185,12 +182,11 @@ const LegalText privacyEnglish = LegalText(
 const LegalText privacyMalay = LegalText(
   title: 'Dasar Privasi',
   versionLabel: 'Versi',
-  status: _malayStatus,
   sections: <LegalSection>[
     LegalSection(
       '1. Tentang dasar ini',
       'Dasar ini menerangkan cara Scoot Sales mengendalikan data peribadi dalam papan pemuka syarikat, aplikasi telefon jurujual dan Pusat Kawalan. Dasar ini mematuhi Akta Perlindungan Data Peribadi 2010 Malaysia (PDPA), seperti yang dipinda pada tahun 2024.\n'
-          'Teks ini ialah draf. Seorang peguam mesti menyemaknya sebelum ia muktamad. Jika teks bahasa Inggeris dan Bahasa Malaysia berbeza, teks bahasa Inggeris terpakai sehingga semakan selesai.',
+          'Jika teks bahasa Inggeris dan Bahasa Malaysia berbeza, teks bahasa Inggeris terpakai.',
     ),
     LegalSection(
       '2. Siapa yang bertanggungjawab',
@@ -206,7 +202,7 @@ const LegalText privacyMalay = LegalText(
           '• Tandatangan: wakil peruncit boleh menandatangani pesanan pada telefon. Tandatangan yang dilukis disimpan bersama rekod lawatan.\n'
           '• Lokasi: lihat bahagian 5.\n'
           '• Data bil: nama syarikat, e-mel bil, invois, bayaran dan resit.\n'
-          '• Data teknikal: log pelayan, rekod audit dan bentuk cincang alamat rangkaian. Kami menggunakannya untuk menghadkan penyalahgunaan.',
+          '• Data teknikal: log pelayan, rekod audit dan alamat rangkaian anda. Kami menggunakan bentuk cincang alamat itu untuk menghadkan penyalahgunaan. Rekod had ini dipadam selepas 30 hari.',
     ),
     LegalSection(
       '4. Mengapa kami menggunakannya',
@@ -231,12 +227,12 @@ const LegalText privacyMalay = LegalText(
       'Kami menggunakan penyedia ini. Setiap penyedia menerima hanya data yang diperlukannya.\n'
           '• Google Firebase (Authentication, pangkalan data Firestore, App Check): menyimpan data syarikat anda di rantau yang dipilih semasa projek Firebase syarikat dibuat, contohnya Singapura (asia-southeast1).\n'
           '• Brevo: menghantar e-mel kami (jemputan, kod log masuk, invois, resit dan notis). Brevo menerima alamat penerima dan kandungan e-mel.\n'
-          '• Google Gemini (Scout papan pemuka sahaja): apabila anda menaip permintaan dalam Scout, ayat yang anda taip dan nama halaman serta tindakan yang terbuka kepada anda dihantar kepada Google. Kami menggunakan kunci API berbayar. Di bawah terma API berbayar Google, Google tidak menggunakan data ini untuk melatih modelnya. Jangan taip data peribadi yang tidak diperlukan ke dalam Scout.\n'
+          '• Google Gemini (Scout pada papan pemuka dan pembantu dalam aplikasi telefon): apabila anda menaip permintaan, ayat yang anda taip dan nama halaman serta tindakan yang terbuka kepada anda dihantar kepada Google. Kami menggunakan kunci API berbayar. Di bawah terma API berbayar Google, Google tidak menggunakan data ini untuk melatih modelnya. Pelayan kami tidak menyimpan ayat yang anda taip. Jangan taip data peribadi yang tidak diperlukan oleh pembantu.\n'
           '• Log masuk Google (web sahaja): jika anda menekan Continue with Google pada papan pemuka atau Pusat Kawalan, Google mengesahkan identiti anda dan memberikan nama dan alamat e-mel anda kepada kami.\n'
-          '• Firebase App Check dengan reCAPTCHA Enterprise (aplikasi telefon): menyemak bahawa permintaan datang daripada aplikasi kami yang sebenar. Ia menggunakan isyarat daripada peranti atau pelayar anda.\n'
+          '• Firebase App Check (aplikasi telefon): menyemak bahawa permintaan datang daripada aplikasi kami yang sebenar. Ia menggunakan Play Integrity pada Android, App Attest pada iOS dan reCAPTCHA Enterprise dalam pelayar. Ia menggunakan isyarat daripada peranti atau pelayar anda.\n'
           '• DigitalOcean: menjalankan pelayan kami di Singapura.\n'
-          '• Perkhidmatan peta berasaskan OpenStreetMap: memaparkan peta. Perkhidmatan ini menerima kawasan peta dan alamat rangkaian anda.\n'
-          '• Perkhidmatan pertuturan telefon anda (Android atau iOS): menukar arahan suara kepada teks. Kami tidak menyimpan audio atau transkrip.',
+          '• Perkhidmatan peta: papan pemuka menggunakan Geoapify untuk peta dan jarak jalan, dan aplikasi telefon menggunakan OpenStreetMap untuk peta. Perkhidmatan ini menerima kawasan peta dan alamat rangkaian anda. Untuk jarak jalan, Geoapify juga menerima kedudukan hentian.\n'
+          '• Perkhidmatan pertuturan pelayar anda (arahan suara papan pemuka): menukar arahan yang disebut kepada teks. Kami tidak menyimpan audio atau transkrip.',
     ),
     LegalSection(
       '7. Pemindahan ke luar Malaysia',
@@ -256,7 +252,7 @@ const LegalText privacyMalay = LegalText(
           '• Kakitangan Pusat Kawalan log masuk dengan kata laluan dan kod yang dihantar melalui e-mel, atau dengan Google. Sesi kakitangan tamat selepas 12 jam.\n'
           '• Kakitangan Scoot Sales tidak mempunyai akses tetap kepada data syarikat. Pentadbir syarikat boleh memberikan geran sokongan baca sahaja selama 5 hingga 60 minit. Setiap geran direkodkan.\n'
           '• Tindakan kakitangan yang berisiko memerlukan kelulusan orang kedua.\n'
-          '• Log audit kami disemak setiap hari.\n'
+          '• Satu tugas automatik menyemak log audit kami setiap jam.\n'
           'Tiada sistem yang selamat sepenuhnya. Jika berlaku pelanggaran, kami mengikut pelan insiden kami dan PDPA.',
     ),
     LegalSection(
@@ -278,7 +274,7 @@ const LegalText privacyMalay = LegalText(
     ),
     LegalSection(
       '12. Eksport data',
-      'Pentadbir syarikat boleh memuat turun eksport data. Eksport ialah fail ZIP dengan fail CSV dan JSON. Eksport merangkumi pengguna, produk, peruncit, pesanan, laluan, kemajuan laluan, hasil lawatan dan helaian skor.',
+      'Pentadbir syarikat boleh memuat turun eksport data. Eksport ialah fail ZIP dengan fail CSV dan JSON. Eksport merangkumi pengguna dan rekod akses mereka, produk, peruncit, pesanan, laluan, kemajuan laluan dan hentian, hasil lawatan dan helaian skor.',
     ),
     LegalSection(
       '13. Hak anda',
@@ -315,12 +311,11 @@ const LegalText privacyMalay = LegalText(
 const LegalText termsEnglish = LegalText(
   title: 'Terms & Conditions',
   versionLabel: 'Version',
-  status: _englishStatus,
   sections: <LegalSection>[
     LegalSection(
       '1. About these terms',
       'These terms apply to the Scoot Sales company dashboard, the salesperson phone app and the Control Centre. They are an agreement between Scoot Sales and the company that subscribes ("your company"). Every user must also follow them.\n'
-          'This text is a draft. A lawyer must review it before it is final. If the English and Bahasa Malaysia texts differ, the English text applies until the review is complete.',
+          'If the English and Bahasa Malaysia texts differ, the English text applies.',
     ),
     LegalSection(
       '2. The service',
@@ -378,7 +373,7 @@ const LegalText termsEnglish = LegalText(
     LegalSection(
       '9. Forecasts, suggestions and Scout',
       'Forecasts, rankings, route suggestions, voice commands and Scout give decision support only. They can be wrong. They never change a published route or its progress by themselves. Scout only proposes an action. You confirm it before it runs. Your company decides what to do and is responsible for its business decisions.\n'
-          'Scout may be unavailable. Then it shows: Assistant is not available now. Try again later.',
+          'The assistant may be unavailable. Then the dashboard shows: The assistant did not answer this time. The phone app shows: The assistant did not answer this time. Ask again, or try one of these.',
     ),
     LegalSection(
       '10. Availability and support',
@@ -390,8 +385,8 @@ const LegalText termsEnglish = LegalText(
       'Your company owns the data that it puts into Scoot Sales. We process it only to provide the service and as your company instructs, under the data processing agreement and the Privacy Policy. Scoot Sales staff do not look at company data unless the law requires it or an administrator gives a support grant.',
     ),
     LegalSection(
-      '12. Liability (draft)',
-      'We provide the service as it is, as far as the law allows. We are not liable for loss of profit, indirect loss, or loss of data that your company could have exported. Our total liability in any 12 months is limited to the fees that your company paid in those 12 months. Nothing in these terms limits a liability that the law does not allow us to limit. This section needs review by a lawyer.',
+      '12. Liability',
+      'We provide the service as it is, as far as the law allows. We are not liable for loss of profit, indirect loss, or loss of data that your company could have exported. Our total liability in any 12 months is limited to the fees that your company paid in those 12 months. Nothing in these terms limits a liability that the law does not allow us to limit.',
     ),
     LegalSection(
       '13. Changes to these terms',
@@ -412,12 +407,11 @@ const LegalText termsEnglish = LegalText(
 const LegalText termsMalay = LegalText(
   title: 'Terma & Syarat',
   versionLabel: 'Versi',
-  status: _malayStatus,
   sections: <LegalSection>[
     LegalSection(
       '1. Tentang terma ini',
       'Terma ini terpakai kepada papan pemuka syarikat Scoot Sales, aplikasi telefon jurujual dan Pusat Kawalan. Terma ini ialah perjanjian antara Scoot Sales dan syarikat yang melanggan ("syarikat anda"). Setiap pengguna juga mesti mematuhinya.\n'
-          'Teks ini ialah draf. Seorang peguam mesti menyemaknya sebelum ia muktamad. Jika teks bahasa Inggeris dan Bahasa Malaysia berbeza, teks bahasa Inggeris terpakai sehingga semakan selesai.',
+          'Jika teks bahasa Inggeris dan Bahasa Malaysia berbeza, teks bahasa Inggeris terpakai.',
     ),
     LegalSection(
       '2. Perkhidmatan',
@@ -475,7 +469,7 @@ const LegalText termsMalay = LegalText(
     LegalSection(
       '9. Ramalan, cadangan dan Scout',
       'Ramalan, kedudukan, cadangan laluan, arahan suara dan Scout hanya memberikan sokongan keputusan. Hasilnya boleh salah. Ciri-ciri ini tidak pernah mengubah laluan yang telah diterbitkan atau kemajuannya dengan sendiri. Scout hanya mencadangkan tindakan. Anda mengesahkannya sebelum ia dijalankan. Syarikat anda menentukan apa yang perlu dilakukan dan bertanggungjawab atas keputusan perniagaannya.\n'
-          'Scout mungkin tidak tersedia. Jika begitu, ia memaparkan: Assistant is not available now. Try again later.',
+          'Pembantu mungkin tidak tersedia. Jika begitu, papan pemuka memaparkan: The assistant did not answer this time. Aplikasi telefon memaparkan: The assistant did not answer this time. Ask again, or try one of these.',
     ),
     LegalSection(
       '10. Ketersediaan dan sokongan',
@@ -487,8 +481,8 @@ const LegalText termsMalay = LegalText(
       'Syarikat anda memiliki data yang dimasukkannya ke dalam Scoot Sales. Kami memproses data itu hanya untuk menyediakan perkhidmatan dan mengikut arahan syarikat anda, di bawah perjanjian pemprosesan data dan Dasar Privasi. Kakitangan Scoot Sales tidak melihat data syarikat kecuali jika dikehendaki oleh undang-undang atau pentadbir memberikan geran sokongan.',
     ),
     LegalSection(
-      '12. Liabiliti (draf)',
-      'Kami menyediakan perkhidmatan seadanya, setakat yang dibenarkan oleh undang-undang. Kami tidak bertanggungjawab atas kehilangan keuntungan, kerugian tidak langsung, atau kehilangan data yang boleh dieksport oleh syarikat anda. Jumlah liabiliti kami dalam mana-mana tempoh 12 bulan dihadkan kepada yuran yang dibayar oleh syarikat anda dalam tempoh 12 bulan tersebut. Tiada apa-apa dalam terma ini yang mengehadkan liabiliti yang tidak boleh dihadkan menurut undang-undang. Bahagian ini memerlukan semakan peguam.',
+      '12. Liabiliti',
+      'Kami menyediakan perkhidmatan seadanya, setakat yang dibenarkan oleh undang-undang. Kami tidak bertanggungjawab atas kehilangan keuntungan, kerugian tidak langsung, atau kehilangan data yang boleh dieksport oleh syarikat anda. Jumlah liabiliti kami dalam mana-mana tempoh 12 bulan dihadkan kepada yuran yang dibayar oleh syarikat anda dalam tempoh 12 bulan tersebut. Tiada apa-apa dalam terma ini yang mengehadkan liabiliti yang tidak boleh dihadkan menurut undang-undang.',
     ),
     LegalSection(
       '13. Perubahan pada terma ini',

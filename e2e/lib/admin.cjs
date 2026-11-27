@@ -150,15 +150,7 @@ async function submitUserForm(page) {
 
 async function searchDirectory(page, text) {
   const box = await page.getByRole('textbox', { name: /Search by name/ }).elementHandle({ timeout: 20000 });
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    await box.click();
-    await page.keyboard.press('Control+A');
-    await page.keyboard.press('Backspace');
-    await page.keyboard.type(text, { delay: 20 });
-    if ((await box.inputValue()) === text) return;
-    await page.waitForTimeout(400);
-  }
-  throw new Error('could not enter text into the directory search reliably');
+  await B.fillField(page, box, text);
 }
 
 async function collapseInvitations(page) {

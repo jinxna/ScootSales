@@ -92,6 +92,8 @@ class RouteHeartbeatPacer {
   }
 }
 
+const int _publishedRouteReadLimit = 200;
+
 class RoutePlanService {
   RoutePlanService({FirebaseFirestore? firestore})
     : _db = firestore ?? FirebaseFirestore.instance;
@@ -112,7 +114,7 @@ class RoutePlanService {
           .collection('route_plans')
           .where(field, isEqualTo: value)
           .where('status', isEqualTo: 'published')
-          .limit(30);
+          .limit(_publishedRouteReadLimit);
 
   static Map<String, String> _routeSources(UserModel user) => <String, String>{
     'salesmanUid': user.uid.trim(),
@@ -766,6 +768,95 @@ class RoutePlanService {
     }
   }
 
+  Future<bool> sendWaitingStopEvents({
+    required String uid,
+    required UserModel? user,
+    required WorkSession session,
+  }) async {
+    bool waiting(RouteStopLifecycleEvent event) =>
+        event.workSessionId == session.sessionId &&
+        event.workSessionGeneration == session.generation &&
+        event.state == RouteStopOutboxState.pending;
+    final List<RouteStopLifecycleEvent> events = (await _stopOutbox.readForUid(
+      uid,
+    )).where(waiting).toList(growable: false);
+    if (events.isEmpty) return true;
+    if (user == null || user.uid.trim() != uid || !_store.isActive(uid)) {
+      return false;
+    }
+    final Map<String, AssignedRoutePlan>? plans = await _plansForStopEvents(
+      user,
+      events.map((RouteStopLifecycleEvent event) => event.planId).toSet(),
+    );
+    if (plans == null) return false;
+    final RouteProgress serverOnly = RouteProgress.fromMap(null);
+    final Set<String> blockedStops = <String>{};
+    for (final RouteStopLifecycleEvent event in events) {
+      final String stopKey = '${event.planId}|${event.stopId}';
+      if (blockedStops.contains(stopKey)) continue;
+      final AssignedRoutePlan? plan = plans[event.planId];
+      final AssignedRouteStop? stop = plan?.stops
+          .where((AssignedRouteStop item) => item.stopId == event.stopId)
+          .cast<AssignedRouteStop?>()
+          .firstWhere(
+            (AssignedRouteStop? item) => item != null,
+            orElse: () => null,
+          );
+      if (plan == null || stop == null) {
+        await _holdOrNeedsAttention(
+          event,
+          'The assigned stop is no longer in the route.',
+        );
+        continue;
+      }
+      final RouteProgressWriteState written = await _stopOutbox
+          .serializeSession<RouteProgressWriteState>(
+            session,
+            () => _flushStopEvent(
+              event,
+              plan: plan,
+              stop: stop,
+              user: user,
+              progress: serverOnly,
+              requireServerRead: true,
+            ),
+          );
+      if (written == RouteProgressWriteState.pending &&
+          (await _stopOutbox.readForUid(uid)).any(
+            (RouteStopLifecycleEvent row) =>
+                row.eventId == event.eventId && waiting(row),
+          )) {
+        blockedStops.add(stopKey);
+      }
+    }
+    return !(await _stopOutbox.readForUid(uid)).any(waiting);
+  }
+
+  Future<Map<String, AssignedRoutePlan>?> _plansForStopEvents(
+    UserModel user,
+    Set<String> planIds,
+  ) async {
+    final Map<String, AssignedRoutePlan> plans = <String, AssignedRoutePlan>{
+      for (final AssignedRoutePlan plan in await _loadRouteCache(user.uid))
+        if (planIds.contains(plan.id)) plan.id: plan,
+    };
+    if (plans.keys.toSet().containsAll(planIds)) return plans;
+    try {
+      for (final AssignedRoutePlan plan
+          in await readAssignedPublishedRoutesFromServer(
+            user,
+          ).timeout(const Duration(seconds: 6))) {
+        if (planIds.contains(plan.id)) plans[plan.id] = plan;
+      }
+    } on TimeoutException {
+      return null;
+    } on FirebaseException catch (error) {
+      if (_isOfflineError(error)) return null;
+      if (error.code != 'permission-denied') rethrow;
+    }
+    return plans;
+  }
+
   Future<String?> stopEventAttentionReason({
     required AssignedRoutePlan plan,
     required UserModel user,
@@ -898,18 +989,36 @@ class RoutePlanService {
         localSession != null &&
         localSession.sessionId == event.workSessionId &&
         localSession.generation == event.workSessionGeneration &&
-        localSession.isAcknowledged &&
-        !localSession.endPendingSync;
-    final _StopServerState? server = preloadedServer != null
-        ? await preloadedServer
-        : await _readStopServerState(plan: plan, user: user, stop: stop);
+        (localSession.isAcknowledged
+            ? !localSession.endPendingSync
+            : localSession.generation > 0 &&
+                  localSession.status == WorkSessionLocalStatus.ended &&
+                  localSession.endPendingSync);
+    final _StopServerState? server;
+    try {
+      server = preloadedServer != null
+          ? await preloadedServer
+          : await _readStopServerState(plan: plan, user: user, stop: stop);
+    } on FirebaseException catch (error) {
+      if (error.code != 'permission-denied') rethrow;
+      if (!current()) return RouteProgressWriteState.pending;
+      return await _heldOrUndecided(event, error) ??
+          await _markStopEventAttention(
+            event,
+            HeldWorkPolicy.rejectionText('not_on_plan', companyOpen: true),
+          );
+    }
     if (!current()) return RouteProgressWriteState.pending;
     if (requireServerRead && server == null) {
       return RouteProgressWriteState.pending;
     }
+    final Map<String, dynamic>? serverCanonical = server?.canonical;
     final Map<String, dynamic>? canonical =
-        server?.canonical ?? progress.canonicalStopFor(stop.stopId);
+        serverCanonical ?? progress.canonicalStopFor(stop.stopId);
     if (canonical != null && _canonicalMatchesEvent(canonical, event)) {
+      if (serverCanonical == null || server!.canonicalHasPendingWrites) {
+        return RouteProgressWriteState.pending;
+      }
       await _stopOutbox.remove(event);
       return RouteProgressWriteState.synced;
     }
@@ -1014,21 +1123,25 @@ class RoutePlanService {
         return RouteProgressWriteState.pending;
       }
       if (error.code == 'permission-denied') {
-        final CompanyLifecycle? lifecycle = await CompanyLifecycleMonitor
-            .instance
-            .refresh(upload: false);
-        if (HeldWorkPolicy.classify(error, lifecycle?.access) ==
-            WriteFailure.held) {
-          return _holdStopEvent(attempt);
-        }
-        if (lifecycle == null && CompanyApi.instance.enabled) {
-          return RouteProgressWriteState.pending;
-        }
-        final _StopServerState? refreshed = await _readStopServerState(
-          plan: plan,
-          user: user,
-          stop: stop,
+        final RouteProgressWriteState? kept = await _heldOrUndecided(
+          attempt,
+          error,
         );
+        if (kept != null) return kept;
+        final _StopServerState? refreshed;
+        try {
+          refreshed = await _readStopServerState(
+            plan: plan,
+            user: user,
+            stop: stop,
+          );
+        } on FirebaseException catch (readError) {
+          if (readError.code != 'permission-denied') rethrow;
+          return _markStopEventAttention(
+            attempt,
+            HeldWorkPolicy.rejectionText('not_on_plan', companyOpen: true),
+          );
+        }
         if (!current()) return RouteProgressWriteState.pending;
         if (refreshed != null &&
             _nonNegativeInt(refreshed.parent['selectionRevision']) !=
@@ -1108,6 +1221,7 @@ class RoutePlanService {
         route: snapshots[0].data() ?? <String, dynamic>{},
         parent: snapshots[1].data() ?? <String, dynamic>{},
         canonical: snapshots[2].data(),
+        canonicalHasPendingWrites: snapshots[2].metadata.hasPendingWrites,
         session: snapshots[3].data() ?? <String, dynamic>{},
       );
     } on FirebaseException catch (error) {
@@ -1486,6 +1600,25 @@ class RoutePlanService {
     return RouteProgressWriteState.pending;
   }
 
+  Future<RouteProgressWriteState?> _heldOrUndecided(
+    RouteStopLifecycleEvent event,
+    FirebaseException refusal,
+  ) async {
+    final CompanyLifecycle? lifecycle = await CompanyLifecycleMonitor.instance
+        .refresh(upload: false);
+    if (HeldWorkPolicy.classify(refusal, lifecycle?.access) ==
+        WriteFailure.held) {
+      return _holdStopEvent(event);
+    }
+    if (lifecycle == null && CompanyApi.instance.enabled) {
+      return RouteProgressWriteState.pending;
+    }
+    if (HeldWorkPolicy.pauseIsLanding(lifecycle)) {
+      return RouteProgressWriteState.pending;
+    }
+    return null;
+  }
+
   Future<RouteProgressWriteState> _holdOrNeedsAttention(
     RouteStopLifecycleEvent event,
     String reason,
@@ -1767,11 +1900,13 @@ class _StopServerState {
     required this.route,
     required this.parent,
     required this.canonical,
+    required this.canonicalHasPendingWrites,
     required this.session,
   });
 
   final Map<String, dynamic> route;
   final Map<String, dynamic> parent;
   final Map<String, dynamic>? canonical;
+  final bool canonicalHasPendingWrites;
   final Map<String, dynamic> session;
 }

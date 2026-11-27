@@ -161,3 +161,86 @@ def test_release_bundle_can_import_server_with_deadline_helper(tmp_path):
     result = subprocess.run([sys.executable, '-c', 'from tools.voice.dashboard_llm.server import app'],
                             cwd=output, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
+
+
+@contextmanager
+def gemini_upstream(hold):
+    seen_ports = []
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = 'HTTP/1.1'
+
+        def log_message(self, *_):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers['Content-Length']))
+            seen_ports.append(self.client_address[1])
+            time.sleep(hold)
+            data = b'{"candidates": [{"content": {"parts": [{"functionCall": {"name": "daily_briefing", "args": {}}}]}}]}'
+            try:
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except OSError:
+                pass
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f'http://127.0.0.1:{server.server_port}', seen_ports
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def hosted_only_state(url, seconds):
+    from tools.voice.dashboard_llm.server import app
+    provider = GeminiGenerator('synthetic-token', base_url=url, seconds_between_calls=0, retries=0, timeout=seconds)
+    return app.State(lambda _: {'sub': 'u'}, lambda *_: ('', 0.0), 0.5, set(), fallback=provider,
+                     gemini_seconds=seconds)
+
+
+QUESTION = {'text': 'who are my staff', 'pages': [], 'actions': ['daily_briefing']}
+
+
+def model_call_lines(captured):
+    return [line for line in captured.err.splitlines() if line.startswith('Scout model call:')]
+
+
+def test_a_model_timeout_is_reported_as_timeout_and_logged_with_its_phase(monkeypatch, capsys):
+    from tools.voice.dashboard_llm.server import app
+    monkeypatch.setattr(app, 'GEMINI_MIN_SECONDS', 0.1)
+    with gemini_upstream(hold=1.5) as (url, _):
+        state = hosted_only_state(url, 0.3)
+        try:
+            answer = app.decide(state, QUESTION, uid='u', deadline=time.monotonic() + 5, company='co')
+        finally:
+            state.close()
+    assert (answer['call'], answer['unavailable'], answer['unavailableReason']) == (None, True, 'timeout')
+    assert 250 <= answer['latencyMs'] < 1200
+    lines = model_call_lines(capsys.readouterr())
+    assert len(lines) == 1
+    assert 'outcome=timeout' in lines[0] and 'phase=wait' in lines[0] and 'latency_ms=' in lines[0]
+    assert 'who are my staff' not in lines[0] and 'synthetic-token' not in lines[0]
+
+
+def test_an_answered_model_call_logs_one_line_with_its_latency_and_reuses_the_connection(capsys):
+    from tools.voice.dashboard_llm.server import app
+    with gemini_upstream(hold=0) as (url, ports):
+        state = hosted_only_state(url, 3)
+        try:
+            answers = [app.decide(state, QUESTION, uid=f'u{n}', deadline=time.monotonic() + 5, company='co')
+                       for n in range(2)]
+        finally:
+            state.close()
+    assert [a['call'] for a in answers] == [{'name': 'daily_briefing', 'args': {}}] * 2
+    assert [a['unavailableReason'] for a in answers] == [None, None]
+    assert len(ports) == 2 and ports[0] == ports[1]
+    lines = model_call_lines(capsys.readouterr())
+    assert len(lines) == 2
+    assert all('outcome=answered' in line and 'latency_ms=' in line for line in lines)
+    assert all('who are my staff' not in line for line in lines)

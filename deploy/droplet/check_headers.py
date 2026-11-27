@@ -11,21 +11,24 @@ sys.path.insert(0, str(HERE))
 import nginx_site
 
 CONTROL_TEMPLATE = HERE / "nginx-control.https.conf.tpl"
+PROMO_TEMPLATE = HERE / "nginx-promo.https.conf.tpl"
 ADD_HEADER = re.compile(r'^\s*add_header\s+(\S+)\s+"(.*)"\s+always;\s*$')
 
 
-def control_expected() -> dict[str, str]:
+def template_expected(template: Path) -> dict[str, str]:
     found = {}
-    for line in CONTROL_TEMPLATE.read_text(encoding="utf-8").splitlines():
+    for line in template.read_text(encoding="utf-8").splitlines():
         match = ADD_HEADER.match(line)
         if match:
             found[match.group(1)] = match.group(2)
     return found
 
 
-def expected_for(host: str, control_host: str) -> dict[str, str]:
+def expected_for(host: str, control_host: str, promo_host: str) -> dict[str, str]:
     if host == control_host:
-        return control_expected()
+        return template_expected(CONTROL_TEMPLATE)
+    if host == promo_host:
+        return template_expected(PROMO_TEMPLATE)
     return dict(nginx_site.SECURITY_HEADERS)
 
 
@@ -64,18 +67,21 @@ def compare(expected: dict[str, str], live: dict[str, str]) -> list[str]:
 def main(argv: list[str]) -> int:
     args = [a for a in argv if not a.startswith("--")]
     control_host = "control.scootsales.my"
+    promo_host = "site.scootsales.my"
     address = "127.0.0.1"
     for flag in argv:
         if flag.startswith("--address="):
             address = flag.split("=", 1)[1]
         if flag.startswith("--control-host="):
             control_host = flag.split("=", 1)[1]
+        if flag.startswith("--promo-host="):
+            promo_host = flag.split("=", 1)[1]
     if not args:
-        print("Usage: check_headers.py HOST [HOST ...] [--address=IP] [--control-host=HOST] [--print-expected]")
+        print("Usage: check_headers.py HOST [HOST ...] [--address=IP] [--control-host=HOST] [--promo-host=HOST] [--print-expected]")
         return 2
     failed = 0
     for host in args:
-        expected = expected_for(host, control_host)
+        expected = expected_for(host, control_host, promo_host)
         if "--print-expected" in argv:
             print(f"{host}: expects {', '.join(expected)}")
             continue

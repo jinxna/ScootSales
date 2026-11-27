@@ -184,14 +184,12 @@ class _UserManagementCmsPageState extends State<UserManagementCmsPage> {
         return;
       }
 
-      final String employeeCode;
-      if (_employeeCodeController.text.trim().isNotEmpty) {
-        employeeCode = _employeeCodeController.text.trim().toUpperCase();
-      } else if (_originalEmployeeCode.isNotEmpty) {
-        employeeCode = _originalEmployeeCode;
-      } else {
-        employeeCode = await _generateEmployeeCode(_role);
-      }
+      final String employeeCode =
+          UserManagementRules.employeeCodeToSave(
+            typed: _employeeCodeController.text,
+            storedCode: _originalEmployeeCode,
+          ) ??
+          await _generateEmployeeCode(_role);
 
       final UserManagementSupervisorPlan plan = await _userManagementRepository
           .planSupervisorChanges(
@@ -650,16 +648,12 @@ class _UserManagementCmsPageState extends State<UserManagementCmsPage> {
     if (choice != UserManagementRemoveProfileChoice.remove) return;
 
     try {
+      final PlatformApiClient api = PlatformApiClient();
       if (uid.isEmpty) {
-        throw StateError(
-          '$displayName has no sign-in account, so this profile cannot be '
-          'removed here.',
-        );
+        await api.removeProfile(docId, idempotencyKey: const Uuid().v4());
+      } else {
+        await api.removeAccount(uid, idempotencyKey: const Uuid().v4());
       }
-      await PlatformApiClient().removeAccount(
-        uid,
-        idempotencyKey: const Uuid().v4(),
-      );
     } catch (error) {
       _showProfileMessage(
         userFacingError(error, action: 'remove $displayName'),
@@ -669,8 +663,10 @@ class _UserManagementCmsPageState extends State<UserManagementCmsPage> {
     }
 
     _showProfileMessage(
-      'Profile removed and sign-in turned off. Historical orders, routes and '
-      'visits were kept.',
+      uid.isEmpty
+          ? 'Profile removed.'
+          : 'Profile removed. This person can no longer sign in. Their orders, '
+                'routes and visits were kept.',
     );
     if (_editingId == docId) {
       _clearForm();

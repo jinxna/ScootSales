@@ -4,15 +4,16 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:scoot_design/scoot_design.dart';
-import 'package:latlong2/latlong.dart';
 
 import '../../../app/build_flags.dart';
+import '../../../models/ai_insight.dart';
+import '../../../models/conversation_outcome.dart';
 import '../../../models/route_plan.dart';
 import '../../../models/retailer_segment.dart';
 import '../../../models/user_profile.dart';
 import '../../../widgets/page_snack_bars.dart';
 import '../../../repositories/cms_repository.dart';
-import '../../../services/geoapify_routing_client.dart';
+import '../../../services/route_planner_signals_service.dart';
 import '../../../services/route_planning_service.dart';
 import '../../../services/retailer_segment_service.dart';
 import '../../../services/outcome_review_service.dart';
@@ -21,45 +22,77 @@ import '../../../models/retailer_priority_ranking.dart';
 import '../../../widgets/ai_freshness_chip.dart';
 import '../../../widgets/dso_filter_controls.dart';
 import '../../../utils/app_logger.dart';
+import '../../../utils/count_label.dart';
+import '../../../utils/person_display_name.dart';
 import '../../../utils/firestore_value_equality.dart';
 import '../../../utils/geo_field_utils.dart';
 import '../../../utils/order_data_utils.dart';
 import '../../../utils/retailer_readiness.dart';
 import '../../../utils/route_execution.dart';
 import '../../../utils/route_assignment_status.dart';
+import '../../../utils/route_ranking_selection.dart';
 import '../../../utils/route_regions.dart';
+import '../../../utils/route_service_time_input.dart';
+import '../../../utils/route_stop_order.dart';
 import '../../../utils/visit_priority.dart';
 import '../../../utils/route_travel_time.dart';
 import '../../../utils/user_facing_error.dart';
 import '../../../theme/dso_colors.dart';
 import '../widgets/cms_panel.dart';
 import 'route_planner/route_plan_workspace.dart';
+import 'route_planner/route_road_refresh.dart';
 
 enum _PlannerWorkspace { plan, priorities, savedPlans, health }
+
+class PlannerOpenRequest {
+  const PlannerOpenRequest({this.salesmanUid, this.weekStart});
+
+  final String? salesmanUid;
+  final DateTime? weekStart;
+}
+
+class PlannerOpenRequests {
+  PlannerOpenRequest? _pending;
+
+  void post({required String salesmanUid, DateTime? weekStart}) {
+    _pending = PlannerOpenRequest(
+      salesmanUid: salesmanUid.isEmpty ? null : salesmanUid,
+      weekStart: weekStart,
+    );
+  }
+
+  PlannerOpenRequest? take() {
+    final PlannerOpenRequest? request = _pending;
+    _pending = null;
+    return request;
+  }
+}
 
 class RoutePlannerPage extends StatefulWidget {
   const RoutePlannerPage({
     super.key,
     required this.currentUser,
     this.onNavigateRequested,
-    this.initialSalesmanUid,
-    this.initialWeekStart,
+    this.openRequests,
   });
 
   final UserProfile currentUser;
   final ValueChanged<String>? onNavigateRequested;
 
-  final String? initialSalesmanUid;
-  final DateTime? initialWeekStart;
+  final PlannerOpenRequests? openRequests;
 
   @override
   State<RoutePlannerPage> createState() => _RoutePlannerPageState();
 }
 
 @visibleForTesting
-int plannerInitialSalesmanIndex(List<String> uids, String? wantedUid) {
+int plannerInitialSalesmanIndex(
+  List<String> uids,
+  String? wantedUid, {
+  int fallback = 0,
+}) {
   final int i = wantedUid == null ? -1 : uids.indexOf(wantedUid);
-  return i < 0 ? 0 : i;
+  return i < 0 ? fallback : i;
 }
 
 @visibleForTesting
@@ -101,6 +134,20 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
   final RetailerSegmentService _segmentService = RetailerSegmentService();
   final OutcomeReviewService _outcomeService = OutcomeReviewService();
   final VisitPriorityService _priorityService = VisitPriorityService();
+  final RoutePlannerSignalsService _signalsService =
+      RoutePlannerSignalsService();
+
+  RoutePlannerSignals _signals = const RoutePlannerSignals();
+  Future<RoutePlannerSignals>? _signalsLoad;
+  DateTime? _signalsWeek;
+  final Set<String> _removedByManagerIds = <String>{};
+  bool _draftGeneratedHere = false;
+  Map<String, String> _userNames = <String, String>{};
+  Map<String, _TeamWeekRow> _teamWeek = <String, _TeamWeekRow>{};
+  int _teamWeekSeq = 0;
+  PlannerOpenRequest? _openRequest;
+  bool _keepRequestedWeek = false;
+  bool _planningWeek = false;
 
   static const Duration _loadTimeout = Duration(seconds: 12);
 
@@ -123,14 +170,55 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
   bool _generating = false;
   RoutePlan? _plan;
 
-  List<String> _roadNotes = <String>[];
-
   final Set<String> _manuallyRecomputedDayIds = <String>{};
+
+  late final RouteRoadRefresher _road = RouteRoadRefresher(
+    fetch: _fetchRoadDay,
+    currentDay: (String dayId) =>
+        _plan?.days.where((RouteDay day) => day.dayId == dayId).firstOrNull,
+    onRoad: _applyRoadDay,
+    onFailure: (String dayId, Object error, StackTrace stackTrace) =>
+        AppLogger.error(
+          'route_road_refresh_failed',
+          error: error,
+          stackTrace: stackTrace,
+        ),
+  )..addListener(_onRoadChanged);
+
+  Map<String, RouteStartPoint> _branchStarts = <String, RouteStartPoint>{};
+  Map<String, RouteLegTable> _legTables = <String, RouteLegTable>{};
+  String _orderHintKey = '';
+  RouteOrderHint? _orderHint;
 
   _PlannerWorkspace _workspace = _PlannerWorkspace.plan;
 
   int _selectedDay = 0;
   bool _saving = false;
+
+  bool get _planLocked => _saving || _generating;
+
+  Future<void> _whileLocked(
+    Future<void> Function() work, {
+    bool generating = false,
+  }) async {
+    void mark(bool locked) {
+      if (generating) {
+        _generating = locked;
+      } else {
+        _saving = locked;
+      }
+    }
+
+    setState(() => mark(true));
+    try {
+      await work();
+    } finally {
+      if (mounted) {
+        setState(() => mark(false));
+        _applyOpenRequest();
+      }
+    }
+  }
 
   List<RoutePlan> _existingPlans = <RoutePlan>[];
 
@@ -273,29 +361,47 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
   @override
   void initState() {
     super.initState();
-    _weekStart = plannerInitialWeekStart(widget.initialWeekStart, _weekStart);
+    _takeOpenRequest();
     _loadData();
+  }
+
+  PlannerOpenRequest? _takeOpenRequest() {
+    final PlannerOpenRequest? request = widget.openRequests?.take();
+    if (request == null) return null;
+    _openRequest = request;
+    _keepRequestedWeek = request.weekStart != null;
+    _weekStart = plannerInitialWeekStart(request.weekStart, _weekStart);
+    return request;
   }
 
   @override
   void didUpdateWidget(RoutePlannerPage old) {
     super.didUpdateWidget(old);
-    if (old.initialSalesmanUid == widget.initialSalesmanUid &&
-        old.initialWeekStart == widget.initialWeekStart) {
-      return;
-    }
-    if (_loading || _salesmen.isEmpty) return;
+    _applyOpenRequest();
+  }
+
+  void _applyOpenRequest() {
+    if (_planLocked) return;
+    final PlannerOpenRequest? request = _takeOpenRequest();
+    if (request == null || _loading || _salesmen.isEmpty) return;
     final _Salesman next =
         _salesmen[plannerInitialSalesmanIndex(
           _salesmen.map((_Salesman s) => s.uid).toList(),
-          widget.initialSalesmanUid,
+          request.salesmanUid,
         )];
     final bool salesmanChanged = next.uid != _selectedSalesman?.uid;
+    if (!salesmanChanged) _keepRequestedWeek = false;
     setState(() {
       _selectedSalesman = next;
-      _weekStart = plannerInitialWeekStart(widget.initialWeekStart, _weekStart);
-      if (salesmanChanged) _plan = null;
+      if (salesmanChanged) {
+        _plan = null;
+        _draftGeneratedHere = false;
+        _removedByManagerIds.clear();
+        _legTables = <String, RouteLegTable>{};
+      }
     });
+    _syncSignalsWeek();
+    unawaited(_loadTeamWeek());
     if (salesmanChanged) {
       _subscribeProgress();
       _loadExistingPlans();
@@ -306,6 +412,7 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
 
   @override
   void dispose() {
+    _road.dispose();
     _progressSubscription?.cancel();
     _retailerSubscription?.cancel();
     _assignedSubscription?.cancel();
@@ -374,25 +481,61 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
               timeout: _loadTimeout,
             ),
             firstRetailers.future.timeout(_loadTimeout),
+            _repository.getCollectionOnce('branches', timeout: _loadTimeout),
           ], eagerError: true);
       final List<_Salesman> salesmen = _scopeSalesmen(data[0]);
       final List<Map<String, dynamic>> retailers = data[1];
+      final Map<String, RouteStartPoint> branchStarts =
+          <String, RouteStartPoint>{};
+      for (final Map<String, dynamic> branch in data[2]) {
+        final RouteStartPoint? start = RouteStartPoint.tryParse(
+          name: branch['routeStartName'],
+          lat: branch['routeStartLat'],
+          lng: branch['routeStartLng'],
+        );
+        if (start == null) continue;
+        for (final String id in <String>{
+          _text(branch['docId']),
+          _text(branch['branchId']),
+        }) {
+          if (id.isNotEmpty) branchStarts[id] = start;
+        }
+      }
       final Map<String, RetailerSegment> segments = await segmentsFuture;
       if (!mounted) return;
       setState(() {
         _salesmen = salesmen;
+        _userNames = <String, String>{
+          for (final Map<String, dynamic> user in data[0])
+            if (_text(_first(user, const <String>['uid', 'docId'])).isNotEmpty)
+              _text(_first(user, const <String>['uid', 'docId'])): _text(
+                _first(user, const <String>[
+                  'name',
+                  'displayName',
+                  'display_name',
+                ]),
+              ),
+        };
         _retailers = retailers;
+        _branchStarts = branchStarts;
         _segments = segments;
+        final int withShops = salesmen.indexWhere(
+          (_Salesman s) =>
+              _candidateRetailersFor(s, _visibleRetailers).isNotEmpty,
+        );
         _selectedSalesman = salesmen.isNotEmpty
             ? salesmen[plannerInitialSalesmanIndex(
                 salesmen.map((_Salesman s) => s.uid).toList(),
-                widget.initialSalesmanUid,
+                _openRequest?.salesmanUid,
+                fallback: withShops < 0 ? 0 : withShops,
               )]
             : null;
         _loading = false;
       });
       _subscribeProgress();
       if (!isBasicEdition) _loadPriorityInputs();
+      unawaited(_loadSignals());
+      unawaited(_loadTeamWeek());
       if (_selectedSalesman != null) {
         _loadAssignedRetailers();
         unawaited(_loadFollowUps());
@@ -430,17 +573,22 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
               plan.status.toLowerCase() != 'archived',
         )
         .toList(growable: false);
+    final bool keepRequestedWeek = _keepRequestedWeek;
+    _keepRequestedWeek = false;
     setState(() {
       _existingPlans = visible;
-      if (_readOnly && widget.initialWeekStart == null && _plan == null) {
+      if (_readOnly && !keepRequestedWeek && _plan == null) {
         final RoutePlan? open = plannerPlanToOpen(visible, _weekStart);
         if (open != null) {
           _weekStart = _mondayOf(open.weekStart);
           _plan = open;
+          _draftGeneratedHere = false;
+          _legTables = <String, RouteLegTable>{};
           _selectedDay = _firstNonEmptyDay(open);
         }
       }
     });
+    _syncSignalsWeek();
   }
 
   Future<void> _loadFollowUps() async {
@@ -508,9 +656,11 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
       all.add(
         _Salesman(
           uid: _text(_first(u, const <String>['uid', 'docId'])),
-          name: _text(
-            _first(u, const <String>['name', 'displayName', 'display_name']),
-            fallback: code.isEmpty ? 'Salesman' : code,
+          name: personDisplayName(
+            _text(
+              _first(u, const <String>['name', 'displayName', 'display_name']),
+            ),
+            code,
           ),
           code: code,
           branchId: _text(u['branchId'] ?? u['branch_id']),
@@ -601,7 +751,13 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
   List<Map<String, dynamic>> _candidateRetailers() {
     final _Salesman? s = _selectedSalesman;
     if (s == null) return <Map<String, dynamic>>[];
-    final List<Map<String, dynamic>> visible = _visibleRetailers;
+    return _candidateRetailersFor(s, _visibleRetailers);
+  }
+
+  List<Map<String, dynamic>> _candidateRetailersFor(
+    _Salesman s,
+    List<Map<String, dynamic>> visible,
+  ) {
     final List<Map<String, dynamic>> assigned = visible.where((
       Map<String, dynamic> r,
     ) {
@@ -675,7 +831,7 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
 
   Future<void> _generate() async {
     final _Salesman? s = _selectedSalesman;
-    if (s == null) return;
+    if (s == null || _planLocked) return;
     final List<Map<String, dynamic>> retailers = _selectedRetailers();
     if (retailers.isEmpty) {
       showPageSnackBar(
@@ -685,196 +841,1206 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
       );
       return;
     }
-    setState(() => _generating = true);
-    try {
-      final Map<String, ServiceTimeStat> learnedServiceTimes = await _service
-          .loadLearnedServiceTimes(
-            salesmanUid: s.uid,
-            salesmanCode: s.code,
-            branchId: _branchManagerReadScope,
-            queryByUid: _queryByUid,
+    await _whileLocked(generating: true, () async {
+      try {
+        final RoutePlannerSignals signals = await _ensureSignals();
+        if (!mounted) return;
+        if (signals.rankingFailed) {
+          showPageSnackBar(
+            'The weekly ranking could not be read. Retry it before you '
+            'generate a route.',
           );
-      final RoutePlan plan = await _service.generateWeeklyRoute(
-        salesmanUid: s.uid,
-        salesmanCode: s.code,
-        salesmanName: s.name,
-        weekStart: _weekStart,
-        retailers: retailers,
-        branchId: s.branchId.isNotEmpty
-            ? s.branchId
-            : widget.currentUser.branchId,
-        createdByUid: widget.currentUser.uid ?? '',
-        createdByRole: widget.currentUser.role,
-        maxPerDay: _maxPerDay,
-        serviceMinutes: _serviceMinutes,
-        learnedServiceTimes: learnedServiceTimes,
-        lastVisitByRetailer: resolveLastVisitByRetailer(
+          return;
+        }
+        final _GeneratedRoute generated = await _generateFor(
+          s,
+          weekStart: _weekStart,
+          retailers: retailers,
           progressDocs: _progressDocs,
-          visitLogRows: _priorityInputs.visitLogRows,
-        ),
-      );
-      if (!mounted) return;
-      setState(() {
-        _plan = plan;
-        _roadNotes = plan.roadRouteNotes;
-        _manuallyRecomputedDayIds.clear();
-        _learnedServiceTimesForPlan = learnedServiceTimes;
-        _selectedDay = _firstNonEmptyDay(plan);
-        _showSettings = false;
-        _generating = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _generating = false);
-      showPageSnackBar('Could not generate the route plan.');
-    }
+          signals: signals,
+        );
+        if (!mounted) return;
+        final RoutePlan plan = generated.plan;
+        setState(() {
+          _plan = plan;
+          _draftGeneratedHere = true;
+          _removedByManagerIds.clear();
+          _legTables = generated.legTables;
+          _manuallyRecomputedDayIds.clear();
+          _road.reset();
+          _learnedServiceTimesForPlan = generated.learnedServiceTimes;
+          _selectedDay = _firstNonEmptyDay(plan);
+          _showSettings = false;
+        });
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'route_plan_generate_failed',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        if (!mounted) return;
+        showPageSnackBar('Could not generate the route plan.');
+      }
+    });
   }
 
-  Future<void> _save({String? status}) async {
-    final RoutePlan? plan = _plan;
-    if (plan == null) return;
-    setState(() => _saving = true);
-    try {
-      final RoutePlan toSave = status == null
-          ? plan
-          : plan.copyWith(status: status);
-      final String id = await _service.savePlan(toSave);
-      if (!mounted) return;
-      setState(() {
-        _plan = RoutePlan(
-          id: id,
-          weekStart: toSave.weekStart,
-          weekEnd: toSave.weekEnd,
-          status: toSave.status,
-          branchId: toSave.branchId,
-          createdByUid: toSave.createdByUid,
-          createdByRole: toSave.createdByRole,
-          salesmanUid: toSave.salesmanUid,
-          salesmanCode: toSave.salesmanCode,
-          salesmanName: toSave.salesmanName,
-          source: toSave.source,
-          planVersion: toSave.planVersion,
-          isDemo: toSave.isDemo,
-          optimisationMethod: toSave.optimisationMethod,
-          days: toSave.days,
-          approvedAt: toSave.approvedAt,
-          publishedAt: toSave.publishedAt,
-          createdAt: toSave.createdAt,
-          updatedAt: toSave.updatedAt,
+  Future<_GeneratedRoute> _generateFor(
+    _Salesman s, {
+    required DateTime weekStart,
+    required List<Map<String, dynamic>> retailers,
+    required List<Map<String, dynamic>> progressDocs,
+    required RoutePlannerSignals signals,
+  }) async {
+    final Map<String, ServiceTimeStat> learnedServiceTimes = await _service
+        .loadLearnedServiceTimes(
+          salesmanUid: s.uid,
+          salesmanCode: s.code,
+          branchId: _branchManagerReadScope,
+          queryByUid: _queryByUid,
         );
-        _saving = false;
-      });
-      unawaited(_loadExistingPlans());
-      if (!mounted) return;
-      final RouteAssignmentStatus assignment = routeAssignmentStatus(
-        status: toSave.status,
-        salesmanName: toSave.salesmanName,
+    final String branchId = s.branchId.isNotEmpty
+        ? s.branchId
+        : widget.currentUser.branchId;
+    final Map<String, RouteLegTable> legTables = <String, RouteLegTable>{};
+    final RetailerPriorityRanking? ranking = _weekRankingFor(
+      s,
+      signals,
+      weekStart,
+    );
+    final RoutePlan plan = await _service.generateWeeklyRoute(
+      salesmanUid: s.uid,
+      salesmanCode: s.code,
+      salesmanName: s.name,
+      weekStart: weekStart,
+      retailers: retailers,
+      branchId: branchId,
+      depot: _branchStarts[branchId],
+      onLegTable: (String dayId, RouteLegTable table) =>
+          legTables[dayId] = table,
+      createdByUid: widget.currentUser.uid ?? '',
+      createdByRole: widget.currentUser.role,
+      maxPerDay: _maxPerDay,
+      serviceMinutes: _serviceMinutes,
+      learnedServiceTimes: learnedServiceTimes,
+      lastVisitByRetailer: resolveLastVisitByRetailer(
+        progressDocs: progressDocs,
+        visitLogRows: _priorityInputs.visitLogRows,
+      ),
+      ranking: ranking == null
+          ? null
+          : buildRouteRankingInput(ranking, signals.insights),
+      usualOrderWeekdays: signals.usualOrderWeekdayByRetailer,
+      followUpDates: _followUpDatesFor(s, signals),
+      followUpRetailerNames: <String, String>{
+        for (final ConversationOutcome outcome in signals.followUps)
+          if (outcome.retailerName.trim().isNotEmpty)
+            outcome.retailerId.trim(): outcome.retailerName.trim(),
+      },
+    );
+    return _GeneratedRoute(plan, legTables, learnedServiceTimes);
+  }
+
+  Map<String, DateTime> _followUpDatesFor(
+    _Salesman s,
+    RoutePlannerSignals signals,
+  ) {
+    final Map<String, DateTime> earliest = <String, DateTime>{};
+    for (final ConversationOutcome outcome in signals.followUps) {
+      final bool own =
+          (s.uid.isNotEmpty && outcome.salesmanUid == s.uid) ||
+          (s.code.isNotEmpty && outcome.salesmanCode == s.code);
+      final DateTime? date = routeDateFromKey(outcome.followUpDate);
+      final String id = outcome.retailerId.trim();
+      if (!own || date == null || id.isEmpty) continue;
+      final DateTime? known = earliest[id];
+      if (known == null || date.isBefore(known)) earliest[id] = date;
+    }
+    return earliest;
+  }
+
+  void _placeFollowUp(RouteFollowUpNotPlaced entry) {
+    final RoutePlan? plan = _plan;
+    final DateTime? date = routeDateFromKey(entry.followUpDate);
+    final int? dayIndex = plan == null
+        ? null
+        : routeFollowUpDayIndex(date, _mondayOf(plan.weekStart));
+    if (plan == null ||
+        plan.status != 'draft' ||
+        dayIndex == null ||
+        _planLocked) {
+      return;
+    }
+    final Map<String, dynamic>? retailer = _candidateRetailers()
+        .where((Map<String, dynamic> r) => _retailerId(r) == entry.retailerId)
+        .firstOrNull;
+    if (retailer == null || !hasLatLng(retailer)) {
+      showPageSnackBar(
+        '${entry.retailerName} is not an active shop with coordinates.',
       );
-      showPageSnackBar(assignment.message);
+      return;
+    }
+    final RouteStop stop = _service.stopForRetailer(
+      retailer,
+      dayIndex: dayIndex,
+      takenStopIds: plan.stopIds.toSet(),
+      reason:
+          '${routeFollowUpLabel(date!, _mondayOf(plan.weekStart))}. '
+          '$kPlacedByManager',
+    );
+    _setDayStops(plan, dayIndex, <RouteStop>[
+      ...plan.days[dayIndex].stops,
+      stop,
+    ]);
+    _chooseFollowUp(entry, RouteFollowUpNotPlaced.placed);
+    setState(() => _selectedDay = dayIndex);
+  }
+
+  void _chooseFollowUp(RouteFollowUpNotPlaced entry, String choice) {
+    final RoutePlan? plan = _plan;
+    if (plan == null || plan.status != 'draft' || _planLocked) return;
+    setState(
+      () => _plan = plan.copyWith(
+        followUpsNotPlaced: <RouteFollowUpNotPlaced>[
+          for (final RouteFollowUpNotPlaced row in plan.followUpsNotPlaced)
+            row.retailerId == entry.retailerId ? row.withChoice(choice) : row,
+        ],
+      ),
+    );
+  }
+
+  RetailerPriorityRanking? _weekRankingFor(
+    _Salesman s,
+    RoutePlannerSignals signals,
+    DateTime weekStart,
+  ) => rankingForPlannerWeek(
+    signals.rankings,
+    salesmanUid: s.uid,
+    salesmanCode: s.code,
+    weekStart: weekStart,
+  );
+
+  bool _weekRankingNotUsed(
+    _Salesman s,
+    RoutePlannerSignals signals,
+    RoutePlan plan,
+  ) =>
+      plan.selectionMethod != kRouteSelectionRankingOrder &&
+      _weekRankingFor(s, signals, plan.weekStart) != null;
+
+  bool _ranksCandidateShops(RetailerPriorityRanking ranking) =>
+      buildRouteRankingInput(
+        ranking,
+        const <AiInsight>[],
+      ).ranksAnyOf(_candidateRetailers().map(_retailerId));
+
+  bool _hasUsableWeekRanking() {
+    final _Salesman? s = _selectedSalesman;
+    final RetailerPriorityRanking? ranking = s == null
+        ? null
+        : _weekRankingFor(s, _signals, _weekStart);
+    return ranking != null && _ranksCandidateShops(ranking);
+  }
+
+  Future<RoutePlannerSignals> _ensureSignals() {
+    final Future<RoutePlannerSignals>? load = _signalsLoad;
+    return load != null && _signalsWeek == _weekStart ? load : _loadSignals();
+  }
+
+  void _syncSignalsWeek() {
+    if (_signalsWeek != _weekStart) unawaited(_loadSignals());
+  }
+
+  Future<RoutePlannerSignals> _loadSignals() {
+    final Future<RoutePlannerSignals> load = _signalsService.load(
+      widget.currentUser,
+      withIntelligence: !isBasicEdition,
+      weekStart: _weekStart,
+    );
+    _signalsLoad = load;
+    _signalsWeek = _weekStart;
+    unawaited(() async {
+      final RoutePlannerSignals signals = await load;
+      if (!mounted || !identical(_signalsLoad, load)) return;
+      setState(() => _signals = signals);
+    }());
+    return load;
+  }
+
+  Future<RoutePlan?> _weekPlanFor(_Salesman s, DateTime monday) async {
+    final List<RoutePlan> plans = await _service.loadPlansForSalesman(
+      s.uid,
+      salesmanCode: s.code,
+      branchId: _branchManagerReadScope,
+      queryByUid: _queryByUid,
+      strict: true,
+    );
+    return _bestWeekPlan(plans, monday);
+  }
+
+  RoutePlan? _bestWeekPlan(Iterable<RoutePlan> plans, DateTime monday) {
+    const List<String> order = <String>['draft', 'approved', 'published'];
+    RoutePlan? best;
+    for (final RoutePlan plan in plans) {
+      final String status = plan.status.toLowerCase();
+      if (plan.isDemo ||
+          !order.contains(status) ||
+          _mondayOf(plan.weekStart) != monday) {
+        continue;
+      }
+      if (best == null ||
+          order.indexOf(status) > order.indexOf(best.status.toLowerCase())) {
+        best = plan;
+      }
+    }
+    return best;
+  }
+
+  Future<void> _loadTeamWeek() async {
+    final int seq = ++_teamWeekSeq;
+    final DateTime monday = _mondayOf(_weekStart);
+    final Map<String, _TeamWeekRow> rows = <String, _TeamWeekRow>{};
+    await Future.wait(
+      List<_Salesman>.of(_salesmen).map((_Salesman s) async {
+        try {
+          rows[s.uid] = _TeamWeekRow(plan: await _weekPlanFor(s, monday));
+        } catch (error, stackTrace) {
+          AppLogger.error(
+            'route_planner_team_week_failed',
+            error: error,
+            stackTrace: stackTrace,
+          );
+          rows[s.uid] = const _TeamWeekRow(failed: true);
+        }
+      }),
+    );
+    if (!mounted || seq != _teamWeekSeq) return;
+    setState(() => _teamWeek = rows);
+  }
+
+  void _setWeek(DateTime monday) {
+    if (_planLocked) return;
+    setState(() => _weekStart = monday);
+    _syncSignalsWeek();
+    unawaited(_loadTeamWeek());
+  }
+
+  Future<List<Map<String, dynamic>>> _teamRetailersFor(_Salesman s) async {
+    final bool selected = s.uid == _selectedSalesman?.uid;
+    final List<Map<String, dynamic>> assigned = selected
+        ? _assignedRetailers
+        : await _service
+              .watchRetailersAssignedTo(
+                salesmanCode: s.code,
+                salesmanUid: s.uid,
+                branchId: widget.currentUser.isAdmin
+                    ? ''
+                    : widget.currentUser.branchId,
+              )
+              .first
+              .timeout(_loadTimeout);
+    final Set<String> loaded = _retailers.map(_retailerId).toSet();
+    final List<Map<String, dynamic>> candidates = _candidateRetailersFor(
+      s,
+      <Map<String, dynamic>>[
+        ..._retailers,
+        ..._scopeRetailers(
+          assigned,
+        ).where((Map<String, dynamic> r) => !loaded.contains(_retailerId(r))),
+      ].where(isOperationalRetailerRecord).toList(growable: false),
+    );
+    final Iterable<Map<String, dynamic>> base = _verifiedOnly
+        ? candidates.where(isRetailerRouteReady)
+        : _withCoordinates(candidates);
+    return base
+        .where(
+          (Map<String, dynamic> r) =>
+              !selected || !_excludedRetailerIds.contains(_retailerId(r)),
+        )
+        .toList();
+  }
+
+  Future<void> _planTheWeek() async {
+    if (_planningWeek || _readOnly || _planLocked) return;
+    final DateTime monday = _mondayOf(_weekStart);
+    final int people = _salesmen.length;
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text('Draft routes for everyone without one?'),
+        content: Text(
+          'This makes up to ${countLabel(people, 'draft route')}, one for '
+          'each salesperson with no route for the week of '
+          '${_fmtDate(monday)}. Nothing is approved or published.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Make drafts'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _planningWeek = true);
+    final List<(String, String)> results = <(String, String)>[];
+    int made = 0;
+    final RoutePlannerSignals signals;
+    try {
+      signals = await _ensureSignals();
     } catch (error, stackTrace) {
       AppLogger.error(
-        'route_plan_save_failed',
+        'route_plan_week_signals_failed',
         error: error,
         stackTrace: stackTrace,
       );
       if (!mounted) return;
-      setState(() => _saving = false);
-      final String errorText = error.toString();
-      final bool duplicate = errorText.contains(
-        'published route already exists',
-      );
-      showPageSnackBar(
-        duplicate
-            ? 'Publishing blocked: a published route already exists for this salesman and week.'
-            : userFacingError(error, action: 'save the plan'),
-      );
+      setState(() => _planningWeek = false);
+      await _showPlanWeekResults(<(String, String)>[
+        (
+          'Everyone',
+          'No route was planned: '
+              '${userFacingError(error, action: 'read the planning data')}',
+        ),
+      ]);
+      return;
     }
-  }
-
-  Future<String?> _refreshRoadRoute(int dayIndex) async {
-    final RoutePlan? plan = _plan;
-    if (plan == null || plan.status == 'published') {
-      return 'Published plans are locked.';
-    }
-    final RouteDay day = plan.days[dayIndex];
-    if (day.stops.isEmpty) return 'This day has no stops.';
-    final List<RouteStop> all = <RouteStop>[
-      for (final RouteDay d in plan.days) ...d.stops,
-    ];
-    final LatLng anchor = LatLng(
-      all.fold<double>(0, (double a, RouteStop s) => a + s.lat) / all.length,
-      all.fold<double>(0, (double a, RouteStop s) => a + s.lng) / all.length,
-    );
-    try {
-      final RouteDay refreshed = await _service.refreshRoadGeometry(
-        day,
-        anchor: anchor,
-        serviceMinutes: _serviceMinutes,
-        learnedServiceTimes: _learnedServiceTimesForPlan,
-      );
-      if (!mounted) return null;
-      if (!identical(_plan, plan)) {
-        return 'The plan changed while routing. Try again.';
+    if (signals.rankingFailed) {
+      results.add((
+        'Everyone',
+        'The weekly ranking could not be read, so no route was planned. '
+            'Retry it, then try again.',
+      ));
+    } else {
+      for (final _Salesman s in List<_Salesman>.of(_salesmen)) {
+        try {
+          final RoutePlan? open = _plan;
+          if (s.uid == _selectedSalesman?.uid &&
+              open != null &&
+              open.id.isEmpty &&
+              _mondayOf(open.weekStart) == monday) {
+            results.add((s.name, 'Unsaved draft open. Save it to keep it.'));
+            continue;
+          }
+          final RoutePlan? existing = await _weekPlanFor(s, monday);
+          if (existing != null) {
+            final String status = existing.status.toLowerCase();
+            results.add((
+              s.name,
+              'Already has ${status == 'approved' ? 'an' : 'a'} $status route.',
+            ));
+            continue;
+          }
+          final List<Map<String, dynamic>> retailers = await _teamRetailersFor(
+            s,
+          );
+          if (retailers.isEmpty) {
+            results.add((s.name, 'No shops with coordinates to plan.'));
+            continue;
+          }
+          final List<Map<String, dynamic>> progress = await _service
+              .watchProgressForSalesman(
+                s.uid,
+                salesmanCode: s.code,
+                branchId: _branchManagerReadScope,
+                queryByUid: _queryByUid,
+              )
+              .first
+              .timeout(_loadTimeout);
+          final _GeneratedRoute generated = await _generateFor(
+            s,
+            weekStart: monday,
+            retailers: retailers,
+            progressDocs: progress,
+            signals: signals,
+          );
+          await _service.savePlan(generated.plan);
+          made++;
+          results.add((
+            s.name,
+            _weekRankingNotUsed(s, signals, generated.plan)
+                ? 'Draft made. $kWeeklyRankingNotUsed'
+                : 'Draft made.',
+          ));
+        } catch (error, stackTrace) {
+          AppLogger.error(
+            'route_plan_week_failed',
+            error: error,
+            stackTrace: stackTrace,
+          );
+          results.add((
+            s.name,
+            'Not planned: ${userFacingError(error, action: 'plan the route')}',
+          ));
+        }
       }
-      final List<RouteDay> days = List<RouteDay>.of(plan.days);
-      days[dayIndex] = refreshed;
-      _manuallyRecomputedDayIds.remove(day.dayId);
-      setState(() => _plan = plan.copyWith(days: days));
-      return null;
-    } on GeoapifyRoutingException catch (error) {
-      return error.message;
-    } catch (_) {
-      return 'Road route unavailable.';
     }
+    if (!mounted) return;
+    setState(() => _planningWeek = false);
+    await _loadTeamWeek();
+    if (!mounted) return;
+    final _Salesman? selected = _selectedSalesman;
+    if (selected != null && _plan == null) await _openTeamMember(selected);
+    showPageSnackBar('${countLabel(made, 'draft route')} made and saved.');
+    if (!mounted) return;
+    await _showPlanWeekResults(results);
   }
 
-  void _removeStop(int dayIndex, RouteStop stop) {
-    final RoutePlan? plan = _plan;
-    if (plan == null) return;
-    final List<RouteDay> days = List<RouteDay>.of(plan.days);
-    final RouteDay day = days[dayIndex];
-    final List<RouteStop> remaining = day.stops
-        .where((RouteStop s) => s.retailerId != stop.retailerId)
-        .toList();
-    days[dayIndex] = _service.recomputeDay(
-      day.copyWith(stops: remaining),
-      serviceMinutes: _serviceMinutes,
-      learnedServiceTimes: _learnedServiceTimesForPlan,
+  Future<void> _showPlanWeekResults(List<(String, String)> results) {
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        key: const ValueKey<String>('plan_week_results'),
+        title: const Text('Draft routes'),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Table(
+              columnWidths: const <int, TableColumnWidth>{
+                0: IntrinsicColumnWidth(),
+                1: FlexColumnWidth(),
+              },
+              defaultVerticalAlignment: TableCellVerticalAlignment.top,
+              children: <TableRow>[
+                const TableRow(
+                  children: <Widget>[
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(0, 0, 16, 8),
+                      child: Text(
+                        'Person',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        'Result',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+                for (final (String person, String result) in results)
+                  TableRow(
+                    children: <Widget>[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 4, 16, 4),
+                        child: Text(person),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Text(result),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: <Widget>[
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
     );
-    if (_isRoadTimingMethod(plan.metricSourceMethod)) {
-      _manuallyRecomputedDayIds.add(day.dayId);
+  }
+
+  Future<void> _selectSalesman(_Salesman? s) {
+    if (_planLocked) return Future<void>.value();
+    setState(() {
+      _selectedSalesman = s;
+      _excludedRetailerIds.clear();
+      _plan = null;
+      _road.reset();
+      _draftGeneratedHere = false;
+      _removedByManagerIds.clear();
+      _legTables = <String, RouteLegTable>{};
+      _learnedServiceTimesForPlan = const <String, ServiceTimeStat>{};
+      _dueFollowUpRetailerIds = <String>{};
+    });
+    _subscribeProgress();
+    final Future<void> plans = _loadExistingPlans();
+    _loadFollowUps();
+    _loadAssignedRetailers();
+    return plans;
+  }
+
+  void _openStoredPlan(RoutePlan plan) {
+    if (_planLocked) return;
+    setState(() {
+      _plan = plan;
+      _draftGeneratedHere = false;
+      _removedByManagerIds.clear();
+      _legTables = <String, RouteLegTable>{};
+      _weekStart = _mondayOf(plan.weekStart);
+      _manuallyRecomputedDayIds.clear();
+      _road.reset();
+      _learnedServiceTimesForPlan = const <String, ServiceTimeStat>{};
+      _selectedDay = _firstNonEmptyDay(plan);
+    });
+    _syncSignalsWeek();
+  }
+
+  Future<void> _openTeamMember(_Salesman s) async {
+    if (_planLocked) return;
+    final DateTime monday = _mondayOf(_weekStart);
+    if (s.uid != _selectedSalesman?.uid) {
+      await _selectSalesman(s);
+    } else {
+      if (_plan != null) return;
+      await _loadExistingPlans();
     }
+    if (!mounted || _selectedSalesman?.uid != s.uid) return;
+    final RoutePlan? open = _bestWeekPlan(_existingPlans, monday);
+    if (open == null) return;
+    _openStoredPlan(open);
+    setState(() {
+      _workspace = _PlannerWorkspace.plan;
+      _showSettings = false;
+    });
+  }
+
+  void _moveStop(int fromDay, RouteStop stop, int toDay) {
+    final RoutePlan? plan = _plan;
+    if (plan == null ||
+        plan.status != 'draft' ||
+        fromDay == toDay ||
+        _planLocked) {
+      return;
+    }
+    final RouteDay target = plan.days[toDay];
+    final RouteStop moved = stop.copyWith(
+      stopId: _service.freeStopId(
+        toDay,
+        stop.retailerId,
+        plan.stopIds.toSet()..remove(stop.stopId),
+      ),
+      dayId: target.dayId.isEmpty ? _service.dayIdFor(toDay) : target.dayId,
+      reason: routeReasonMovedByManager(stop.reason),
+    );
+    _setDayStops(
+      plan,
+      fromDay,
+      plan.days[fromDay].stops
+          .where((RouteStop s) => s.retailerId != stop.retailerId)
+          .toList(),
+    );
+    _setDayStops(_plan!, toDay, <RouteStop>[...target.stops, moved]);
+    showPageSnackBar('${stop.retailerName} moved to ${target.dayLabel}.');
+  }
+
+  void _setDayStops(RoutePlan plan, int dayIndex, List<RouteStop> stops) {
+    final RouteDay day = plan.days[dayIndex];
+    if (stops.isEmpty || day.orderMethod == kRouteOrderManual) {
+      _replaceDayStops(
+        plan,
+        dayIndex,
+        stops,
+        orderMethod: stops.isEmpty ? day.orderMethod : kRouteOrderManual,
+      );
+      return;
+    }
+    final RouteOrderResult best = shortestRouteDayOrder(
+      day.copyWith(stops: stops),
+      start: plan.startPoint,
+      legTable: _legTables[day.dayId],
+    );
+    _replaceDayStops(plan, dayIndex, <RouteStop>[
+      for (final int index in best.order) stops[index],
+    ], orderMethod: best.method);
+  }
+
+  Map<String, List<AiInsight>> _flaggedNotOnRoute(RoutePlan plan) {
+    final Set<String> onRoute = _retailerIdsOnRoute(plan);
+    final Set<String> candidates = _candidateRetailers()
+        .map(_retailerId)
+        .toSet();
+    final Map<String, List<AiInsight>> flagged = <String, List<AiInsight>>{};
+    for (final AiInsight insight in newestWeekRouteInsights(
+      _signals.insights,
+    )) {
+      final String id = insight.retailerId.trim();
+      if (!kRouteFlagInsightTypes.contains(insight.type) ||
+          onRoute.contains(id) ||
+          !candidates.contains(id)) {
+        continue;
+      }
+      flagged.putIfAbsent(id, () => <AiInsight>[]).add(insight);
+    }
+    return flagged;
+  }
+
+  Set<String> _retailerIdsOnRoute(RoutePlan plan) => <String>{
+    for (final RouteDay day in plan.days)
+      for (final RouteStop stop in day.stops) stop.retailerId.trim(),
+  };
+
+  void _addFlaggedShop(String retailerId, List<AiInsight> insights) {
+    final RoutePlan? plan = _plan;
+    if (plan == null || plan.status != 'draft' || _planLocked) return;
+    final Map<String, dynamic>? retailer = _candidateRetailers()
+        .where((Map<String, dynamic> r) => _retailerId(r) == retailerId)
+        .firstOrNull;
+    if (retailer == null || !hasLatLng(retailer)) {
+      showPageSnackBar(
+        'This shop has no coordinates. Set them in Coordinate Review first.',
+      );
+      return;
+    }
+    int dayIndex = _selectedDay.clamp(0, plan.days.length - 1);
+    if (plan.days[dayIndex].stops.length >= _maxPerDay) {
+      final int free = plan.days.indexWhere(
+        (RouteDay day) => day.stops.length < _maxPerDay,
+      );
+      if (free >= 0) dayIndex = free;
+    }
+    final RouteStop stop = _service.stopForRetailer(
+      retailer,
+      dayIndex: dayIndex,
+      takenStopIds: plan.stopIds.toSet(),
+      reason: '${routeInsightText(insights)} $kAddedByManager'.trim(),
+    );
+    _removedByManagerIds.remove(retailerId);
+    _setDayStops(plan, dayIndex, <RouteStop>[
+      ...plan.days[dayIndex].stops,
+      stop,
+    ]);
+    setState(() => _selectedDay = dayIndex);
+    showPageSnackBar(
+      '${stop.retailerName} added to ${plan.days[dayIndex].dayLabel}.',
+    );
+  }
+
+  List<_LeftOutShop> _rankedLeftOut(RoutePlan plan) {
+    final _Salesman? s = _selectedSalesman;
+    if (s == null || plan.rankingId.isEmpty) return const <_LeftOutShop>[];
+    final RetailerPriorityRanking? ranking = _weekRankingFor(
+      s,
+      _signals,
+      plan.weekStart,
+    );
+    if (ranking == null || ranking.rankingId != plan.rankingId) {
+      return const <_LeftOutShop>[];
+    }
+    final Set<String> onRoute = _retailerIdsOnRoute(plan);
+    final Map<String, Map<String, dynamic>> candidates =
+        <String, Map<String, dynamic>>{
+          for (final Map<String, dynamic> r in _candidateRetailers())
+            _retailerId(r): r,
+        };
+    final List<RankedRetailerOpportunity> rows =
+        ranking.ranking
+            .where(
+              (RankedRetailerOpportunity row) =>
+                  rankingRowScore(row) > 0 &&
+                  row.retailerId.trim().isNotEmpty &&
+                  !onRoute.contains(row.retailerId.trim()),
+            )
+            .toList()
+          ..sort(
+            (RankedRetailerOpportunity a, RankedRetailerOpportunity b) =>
+                a.rank.compareTo(b.rank),
+          );
+    return <_LeftOutShop>[
+      for (final RankedRetailerOpportunity row in rows)
+        _leftOutShop(row, candidates[row.retailerId.trim()], s),
+    ];
+  }
+
+  _LeftOutShop _leftOutShop(
+    RankedRetailerOpportunity row,
+    Map<String, dynamic>? retailer,
+    _Salesman s,
+  ) {
+    final String id = row.retailerId.trim();
+    if (retailer == null) {
+      return _LeftOutShop(
+        row.retailerName,
+        'not one of the active shops of ${s.name}',
+      );
+    }
+    if (!hasLatLng(retailer)) {
+      return _LeftOutShop(
+        row.retailerName,
+        'no coordinates',
+        coordinates: true,
+      );
+    }
+    if (_verifiedOnly && !isRetailerRouteReady(retailer)) {
+      return _LeftOutShop(
+        row.retailerName,
+        'coordinates not verified',
+        coordinates: true,
+      );
+    }
+    if (_excludedRetailerIds.contains(id)) {
+      return _LeftOutShop(row.retailerName, 'excluded by you');
+    }
+    if (_removedByManagerIds.contains(id)) {
+      return _LeftOutShop(row.retailerName, 'removed by you');
+    }
+    return _LeftOutShop(
+      row.retailerName,
+      _draftGeneratedHere ? 'no place left this week' : 'not on this route',
+    );
+  }
+
+  String _userName(String uid) {
+    if (uid == widget.currentUser.uid) return widget.currentUser.name;
+    final String name = _userNames[uid] ?? '';
+    return name.isEmpty ? 'a user who is no longer listed' : name;
+  }
+
+  _Salesman? _nextToPublish(RoutePlan plan) {
+    final int at = _salesmen.indexWhere(
+      (_Salesman s) => s.uid == plan.salesmanUid,
+    );
+    for (int step = 1; step < _salesmen.length; step++) {
+      final _Salesman next = _salesmen[(at + step) % _salesmen.length];
+      final _TeamWeekRow? row = _teamWeek[next.uid];
+      if (row == null || row.failed) continue;
+      if (row.plan?.status.toLowerCase() != 'published') return next;
+    }
+    return null;
+  }
+
+  Widget? _signalErrors() {
+    if (_signals.failed.isEmpty) return null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          for (final String source in _signals.failed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: _WarningNote(
+                text: source == RoutePlannerSignals.rankingSource
+                    ? 'Could not read the weekly ranking. No route can be '
+                          'generated until it is read.'
+                    : 'Could not read $source. The route does not use them '
+                          'until they are read.',
+              ),
+            ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => unawaited(_loadSignals()),
+              icon: const Icon(ScootIcons.refresh, size: 16),
+              label: const Text('Read again'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _planNotices(RoutePlan plan) {
+    final DsoColors dso = context.dso;
+    final TextStyle line = TextStyle(fontSize: 12.5, color: dso.body);
+    final String status = plan.status.toLowerCase();
+    final RoutePlan stored = _existingPlans
+        .where((RoutePlan p) => p.id.isNotEmpty && p.id == plan.id)
+        .firstWhere((_) => true, orElse: () => plan);
+    final bool draft = status == 'draft' && !_readOnly;
+    final Map<String, List<AiInsight>> flagged = draft
+        ? _flaggedNotOnRoute(plan)
+        : const <String, List<AiInsight>>{};
+    final List<_LeftOutShop> leftOut = draft
+        ? _rankedLeftOut(plan)
+        : const <_LeftOutShop>[];
+    final _Salesman? next = status == 'published' && !_readOnly
+        ? _nextToPublish(plan)
+        : null;
+    final List<RouteFollowUpNotPlaced> waiting = plan.followUpsNotPlaced
+        .where((RouteFollowUpNotPlaced row) => row.choice.isEmpty)
+        .toList(growable: false);
+    final List<RouteFollowUpNotPlaced> leftOutFollowUps = plan
+        .followUpsNotPlaced
+        .where(
+          (RouteFollowUpNotPlaced row) =>
+              row.choice == RouteFollowUpNotPlaced.leftOut,
+        )
+        .toList(growable: false);
+    String followUpText(RouteFollowUpNotPlaced row) {
+      final DateTime? date = routeDateFromKey(row.followUpDate);
+      return '${row.retailerName}, '
+          '${date == null ? row.followUpDate : _fmtDate(date)}';
+    }
+
+    final _Salesman? planSalesman = _selectedSalesman;
+    final List<Widget> rows = <Widget>[
+      if (draft &&
+          _draftGeneratedHere &&
+          planSalesman != null &&
+          _weekRankingNotUsed(planSalesman, _signals, plan))
+        Text(kWeeklyRankingNotUsed, style: line),
+      if (plan.rankingWeekKey.isNotEmpty)
+        Tooltip(
+          message:
+              '${plan.rankingWeekKey == routeWeekKey(plan.weekStart) ? 'The ranking is for the week you plan.' : 'The newest weekly ranking. You plan the week of ${_fmtDate(plan.weekStart)}.'}'
+              '${plan.selectionMethod == kRouteSelectionRankingOrder ? ' Days follow area. Areas are ordered by their best-ranked shop.' : ''}',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                'Ranked for week ${plan.rankingWeekKey}',
+                style: line.copyWith(fontSize: 11.5, color: dso.muted),
+              ),
+              const SizedBox(width: 4),
+              Icon(ScootIcons.info, size: 13, color: dso.muted),
+            ],
+          ),
+        ),
+      if (status != 'draft' && stored.approvedByUid.isNotEmpty)
+        Text('Approved by ${_userName(stored.approvedByUid)}', style: line),
+      if (status == 'published' && stored.publishedByUid.isNotEmpty)
+        Text(
+          'Published by ${_userName(stored.publishedByUid)}'
+          '${stored.publishedAt == null ? '' : ', ${_fmtDateTime(stored.publishedAt!)}'}',
+          style: line,
+        ),
+      if (next != null)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.tonal(
+            onPressed: _planLocked
+                ? null
+                : () => unawaited(_openTeamMember(next)),
+            child: Text('Next: ${next.name}'),
+          ),
+        ),
+      if (flagged.isNotEmpty)
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: <Widget>[
+            Text(
+              'Flagged, not on this route:',
+              style: line.copyWith(
+                fontWeight: FontWeight.w700,
+                color: dso.warningText,
+              ),
+            ),
+            for (final MapEntry<String, List<AiInsight>> shop
+                in flagged.entries) ...<Widget>[
+              Text(
+                '${shop.value.first.retailerName} '
+                '(${shop.value.map((AiInsight i) => '${i.typeLabel}: ${i.productName}').join(', ')})',
+                style: line,
+              ),
+              TextButton(
+                onPressed: _planLocked
+                    ? null
+                    : () => _addFlaggedShop(shop.key, shop.value),
+                child: Text('Add ${shop.value.first.retailerName}'),
+              ),
+            ],
+          ],
+        ),
+      if (waiting.isNotEmpty)
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: <Widget>[
+            Text(
+              '${waiting.length} follow-up${waiting.length == 1 ? '' : 's'} '
+              'not placed: ${waiting.map(followUpText).join('; ')}.',
+              style: line.copyWith(
+                fontWeight: FontWeight.w700,
+                color: dso.warningText,
+              ),
+            ),
+            if (draft)
+              for (final RouteFollowUpNotPlaced row in waiting) ...<Widget>[
+                TextButton(
+                  onPressed: _planLocked ? null : () => _placeFollowUp(row),
+                  child: Text('Place ${row.retailerName}'),
+                ),
+                TextButton(
+                  onPressed: _planLocked
+                      ? null
+                      : () => _chooseFollowUp(
+                          row,
+                          RouteFollowUpNotPlaced.leftOut,
+                        ),
+                  child: Text('Leave out ${row.retailerName} this week'),
+                ),
+              ],
+          ],
+        ),
+      if (leftOutFollowUps.isNotEmpty)
+        Text(
+          'Follow-up left out this week: '
+          '${leftOutFollowUps.map(followUpText).join('; ')}.',
+          style: line,
+        ),
+      if (leftOut.isNotEmpty)
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: <Widget>[
+            Text(
+              '${leftOut.length} ranked shop${leftOut.length == 1 ? '' : 's'} '
+              'left out: '
+              '${leftOut.map((_LeftOutShop shop) => '${shop.name} (${shop.cause})').join(', ')}.',
+              style: line,
+            ),
+            if (leftOut.any((_LeftOutShop shop) => shop.coordinates) &&
+                widget.onNavigateRequested != null)
+              TextButton(
+                onPressed: () =>
+                    widget.onNavigateRequested!.call('coordinate_review'),
+                child: const Text('Open Coordinate Review'),
+              ),
+          ],
+        ),
+    ];
+    if (rows.isEmpty) return null;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: dso.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: dso.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          for (int i = 0; i < rows.length; i++) ...<Widget>[
+            if (i > 0) const SizedBox(height: 6),
+            rows[i],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _save({String? status}) async {
+    if (_plan == null || _planLocked) return;
+    await _whileLocked(() async {
+      try {
+        await _road.flush();
+        if (!mounted) return;
+        final RoutePlan? plan = _plan;
+        if (plan == null) return;
+        final RoutePlan toSave = status == null
+            ? plan
+            : plan.copyWith(status: status);
+        final String id = await _service.savePlan(toSave);
+        if (!mounted) return;
+        setState(() => _plan = toSave.copyWith(id: id));
+        unawaited(_loadExistingPlans());
+        unawaited(_loadTeamWeek());
+        final RouteAssignmentStatus assignment = routeAssignmentStatus(
+          status: toSave.status,
+          salesmanName: toSave.salesmanName,
+        );
+        showPageSnackBar(assignment.message);
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'route_plan_save_failed',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        if (!mounted) return;
+        final String errorText = error.toString();
+        final bool duplicate = errorText.contains(
+          'published route already exists',
+        );
+        showPageSnackBar(
+          duplicate
+              ? 'Publishing blocked: a published route already exists for this salesman and week.'
+              : userFacingError(error, action: 'save the plan'),
+        );
+      }
+    });
+  }
+
+  void _onRoadChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<RouteDay> _fetchRoadDay(RouteDay day) =>
+      routeDayNeedsRoad(day, start: _plan?.startPoint)
+      ? _service.refreshRoadGeometry(
+          day,
+          start: _plan?.startPoint,
+          serviceMinutes: _serviceMinutes,
+          learnedServiceTimes: _learnedServiceTimesForPlan,
+        )
+      : Future<RouteDay>.value(day);
+
+  void _applyRoadDay(RouteDay road) {
+    final RoutePlan? plan = _plan;
+    if (plan == null || plan.status != 'draft') return;
+    final int index = plan.days.indexWhere(
+      (RouteDay day) => day.dayId == road.dayId,
+    );
+    if (index < 0 || !_sameStopOrder(plan.days[index], road)) return;
+    final List<RouteDay> days = List<RouteDay>.of(plan.days);
+    days[index] = road;
+    _manuallyRecomputedDayIds.remove(road.dayId);
     setState(
       () => _plan = plan.copyWith(
         days: days,
         optimisationMethod: _methodAfterManualEdit(plan, days),
       ),
+    );
+  }
+
+  static bool _sameStopOrder(RouteDay a, RouteDay b) =>
+      a.stops.map((RouteStop s) => s.retailerId).join('|') ==
+      b.stops.map((RouteStop s) => s.retailerId).join('|');
+
+  void _scheduleRoad(RoutePlan plan, RouteDay before) {
+    if (!_service.isRoadRoutingConfigured || plan.status != 'draft') return;
+    _road.schedule(before);
+  }
+
+  void _removeStop(int dayIndex, RouteStop stop) {
+    final RoutePlan? plan = _plan;
+    if (plan == null || _planLocked) return;
+    final RouteDay day = plan.days[dayIndex];
+    _removedByManagerIds.add(stop.retailerId.trim());
+    _replaceDayStops(
+      plan,
+      dayIndex,
+      day.stops
+          .where((RouteStop s) => s.retailerId != stop.retailerId)
+          .toList(),
+      orderMethod: kRouteOrderManual,
     );
   }
 
   void _reorderStop(int dayIndex, int oldIndex, int newIndex) {
     final RoutePlan? plan = _plan;
-    if (plan == null || plan.status != 'draft') return;
+    if (plan == null || plan.status != 'draft' || _planLocked) return;
     if (newIndex > oldIndex) newIndex -= 1;
     if (oldIndex == newIndex) return;
+    final List<RouteStop> stops = List<RouteStop>.of(plan.days[dayIndex].stops);
+    stops.insert(newIndex, stops.removeAt(oldIndex));
+    _replaceDayStops(plan, dayIndex, stops, orderMethod: kRouteOrderManual);
+  }
+
+  void _useShortestOrder(int dayIndex) {
+    final RoutePlan? plan = _plan;
+    if (plan == null || plan.status != 'draft' || _planLocked) return;
+    final RouteDay day = plan.days[dayIndex];
+    final RouteOrderResult best = shortestRouteDayOrder(
+      day,
+      start: plan.startPoint,
+      legTable: _legTables[day.dayId],
+    );
+    _replaceDayStops(plan, dayIndex, <RouteStop>[
+      for (final int index in best.order) day.stops[index],
+    ], orderMethod: best.method);
+  }
+
+  void _replaceDayStops(
+    RoutePlan plan,
+    int dayIndex,
+    List<RouteStop> stops, {
+    required String orderMethod,
+  }) {
+    if (_planLocked) return;
     final List<RouteDay> days = List<RouteDay>.of(plan.days);
     final RouteDay day = days[dayIndex];
-    final List<RouteStop> stops = List<RouteStop>.of(day.stops);
-    stops.insert(newIndex, stops.removeAt(oldIndex));
-    days[dayIndex] = _service.recomputeDay(
+    final List<RouteDay> changed = <RouteDay>[day];
+    if (plan.status == 'draft' && plan.predatesStartPoints) {
+      for (int i = 0; i < days.length; i++) {
+        if (i == dayIndex || days[i].stops.isEmpty) continue;
+        final RouteDay renewed = _service.recomputeDay(
+          days[i],
+          serviceMinutes: _serviceMinutes,
+          learnedServiceTimes: _learnedServiceTimesForPlan,
+          start: plan.startPoint,
+          legTable: _legTables[days[i].dayId],
+          orderMethod: kRouteOrderManual,
+        );
+        final RouteDay before = days[i];
+        days[i] = renewed;
+        if (_isRoadTimingMethod(plan.metricSourceMethod) &&
+            renewed.estimateSource == 'haversine_fallback') {
+          _manuallyRecomputedDayIds.add(days[i].dayId);
+        }
+        changed.add(before);
+      }
+    }
+    final RouteDay recomputed = _service.recomputeDay(
       day.copyWith(stops: stops),
       serviceMinutes: _serviceMinutes,
       learnedServiceTimes: _learnedServiceTimesForPlan,
+      start: plan.startPoint,
+      legTable: _legTables[day.dayId],
+      orderMethod: orderMethod,
     );
-    if (_isRoadTimingMethod(plan.metricSourceMethod)) {
+    days[dayIndex] = recomputed;
+    if (_isRoadTimingMethod(plan.metricSourceMethod) &&
+        recomputed.estimateSource == 'haversine_fallback') {
       _manuallyRecomputedDayIds.add(day.dayId);
     }
-    setState(
-      () => _plan = plan.copyWith(
-        days: days,
-        optimisationMethod: _methodAfterManualEdit(plan, days),
-      ),
+    final RoutePlan edited = plan.copyWith(
+      days: days,
+      optimisationMethod: _methodAfterManualEdit(plan, days),
     );
+    setState(() => _plan = edited);
+    for (final RouteDay before in changed) {
+      _scheduleRoad(edited, before);
+    }
+  }
+
+  RouteOrderHint? _orderHintFor(RoutePlan plan, RouteDay day) {
+    if (day.orderMethod != kRouteOrderManual || day.stops.length < 2) {
+      return null;
+    }
+    final RouteStartPoint? start = plan.startPoint;
+    final RouteLegTable? table = routeLegTableFor(
+      day,
+      start: start,
+      legTable: _legTables[day.dayId],
+    );
+    final String key = <Object?>[
+      day.dayId,
+      start?.lat,
+      start?.lng,
+      table != null,
+      for (final RouteStop stop in day.stops) ...<Object>[
+        stop.retailerId,
+        stop.lat,
+        stop.lng,
+      ],
+    ].join('|');
+    if (key == _orderHintKey) return _orderHint;
+    final RouteOrderResult best = shortestRouteDayOrder(
+      day,
+      start: start,
+      legTable: table,
+    );
+    final int extraMinutes =
+        routeDayTravelMinutes(day.stops, start: start, legTable: table) -
+        routeDayTravelMinutes(
+          <RouteStop>[for (final int index in best.order) day.stops[index]],
+          start: start,
+          legTable: table,
+        );
+    _orderHintKey = key;
+    _orderHint = extraMinutes < 1
+        ? null
+        : RouteOrderHint(
+            extraMinutes: extraMinutes,
+            straightLine: table == null,
+            exact: best.method == kRouteOrderExact,
+          );
+    return _orderHint;
   }
 
   String _methodAfterManualEdit(RoutePlan plan, List<RouteDay> days) {
@@ -904,6 +2070,7 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
   }
 
   Future<void> _pickWeek() async {
+    if (_planLocked) return;
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _weekStart,
@@ -912,7 +2079,7 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
       helpText: 'Pick any day in the target week',
     );
     if (picked == null) return;
-    setState(() => _weekStart = _mondayOf(picked));
+    _setWeek(_mondayOf(picked));
   }
 
   @override
@@ -950,18 +2117,6 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
     }
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints box) {
-        if (_workspace == _PlannerWorkspace.plan &&
-            box.hasBoundedHeight &&
-            box.maxWidth >= 720) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              _workspaceSwitcher(),
-              const SizedBox(height: 12),
-              Expanded(child: _planWorkspace(pinned: true)),
-            ],
-          );
-        }
         return SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1056,15 +2211,16 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
           _executionIntelligencePanel(),
         ];
       case _PlannerWorkspace.plan:
-        return <Widget>[_planWorkspace(pinned: false)];
+        return <Widget>[_planWorkspace()];
     }
   }
 
-  Widget _planWorkspace({required bool pinned}) {
+  Widget _planWorkspace() {
     final RoutePlan? plan = _plan;
     final Widget body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
+        ?_signalErrors(),
         AnimatedSize(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
@@ -1087,32 +2243,16 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
     final Widget? footer = plan == null || _generating
         ? null
         : _planFooter(plan);
-    if (!pinned) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          _commandBar(plan),
-          const SizedBox(height: 12),
-          body,
-          if (footer != null) ...<Widget>[const SizedBox(height: 12), footer],
-        ],
-      );
-    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         _commandBar(plan),
         const SizedBox(height: 12),
-        Expanded(child: SingleChildScrollView(child: body)),
+        body,
         if (footer != null) ...<Widget>[const SizedBox(height: 12), footer],
       ],
     );
   }
-
-  bool _planUsesRoadTiming(RoutePlan? plan) => plan == null
-      ? _service.isRoadRoutingConfigured
-      : _isRoadTimingMethod(plan.metricSourceMethod) &&
-            plan.metricSourceMethod != 'ManualHaversineRecompute';
 
   Widget _commandBar(RoutePlan? plan) {
     final DsoColors dso = context.dso;
@@ -1159,29 +2299,19 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
                         ),
                       )
                       .toList(),
-                  onChanged: (String? uid) {
-                    final _Salesman? s = _salesmen
-                        .where((_Salesman e) => e.uid == uid)
-                        .cast<_Salesman?>()
-                        .firstWhere((_) => true, orElse: () => null);
-                    setState(() {
-                      _selectedSalesman = s;
-                      _excludedRetailerIds.clear();
-                      _plan = null;
-                      _learnedServiceTimesForPlan =
-                          const <String, ServiceTimeStat>{};
-                      _dueFollowUpRetailerIds = <String>{};
-                    });
-                    _subscribeProgress();
-                    _loadExistingPlans();
-                    _loadFollowUps();
-                    _loadAssignedRetailers();
-                  },
+                  onChanged: _planLocked
+                      ? null
+                      : (String? uid) {
+                          final _Salesman? s = _salesmen
+                              .where((_Salesman e) => e.uid == uid)
+                              .cast<_Salesman?>()
+                              .firstWhere((_) => true, orElse: () => null);
+                          unawaited(_selectSalesman(s));
+                        },
                 ),
               ),
             ),
             _weekSwitcher(),
-            _estimateChip(plan),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -1200,13 +2330,11 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
                   ),
                 if (!_readOnly)
                   FilledButton.icon(
-                    onPressed: canGenerate && !_generating ? _generate : null,
+                    onPressed: canGenerate && !_generating && !_planLocked
+                        ? _generate
+                        : null,
                     icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-                    label: Text(
-                      plan == null
-                          ? 'Generate draft route'
-                          : 'Regenerate draft route',
-                    ),
+                    label: const Text('Generate draft route'),
                   ),
               ],
             ),
@@ -1225,13 +2353,13 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
         final Widget previousWeek = IconButton(
           tooltip: 'Previous week',
           visualDensity: VisualDensity.compact,
-          onPressed: () => setState(
-            () => _weekStart = _weekStart.subtract(const Duration(days: 7)),
-          ),
+          onPressed: _planLocked
+              ? null
+              : () => _setWeek(_weekStart.subtract(const Duration(days: 7))),
           icon: const Icon(Icons.chevron_left, size: 20),
         );
         final Widget dateButton = TextButton.icon(
-          onPressed: _pickWeek,
+          onPressed: _planLocked ? null : _pickWeek,
           icon: const Icon(ScootIcons.calendar, size: 15),
           label: Text(
             '${_fmtDate(_weekStart)} – ${_fmtDate(end)}',
@@ -1242,9 +2370,9 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
         final Widget nextWeek = IconButton(
           tooltip: 'Next week',
           visualDensity: VisualDensity.compact,
-          onPressed: () => setState(
-            () => _weekStart = _weekStart.add(const Duration(days: 7)),
-          ),
+          onPressed: _planLocked
+              ? null
+              : () => _setWeek(_weekStart.add(const Duration(days: 7))),
           icon: const Icon(ScootIcons.chevronRight, size: 20),
         );
 
@@ -1266,58 +2394,6 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
           ),
         );
       },
-    );
-  }
-
-  Widget _estimateChip(RoutePlan? plan) {
-    final DsoColors dso = context.dso;
-    final bool road = _planUsesRoadTiming(plan);
-    final String label = plan == null
-        ? road
-              ? 'Road estimate'
-              : 'Haversine estimate'
-        : _methodLabel(plan.metricSourceMethod);
-    final String detail = road
-        ? 'Distance and travel-time provenance comes from each route day. '
-              'Geoapify road routing or matrix metrics are labelled as road '
-              'estimates; days without road data use straight-line Haversine '
-              'fallbacks.'
-        : 'Distances are straight-line (Haversine) with an average driving '
-              'speed, so real road distance and time will be longer. Configure '
-              'Geoapify to use road travel times.';
-    final Color fg = road ? dso.successText : dso.warningText;
-    return Tooltip(
-      message: plan == null
-          ? detail
-          : '$detail\nThis plan: ${_methodLabel(plan.metricSourceMethod)}.',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: road ? dso.successSoft : dso.warningSoft,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(
-              road ? Icons.alt_route : Icons.straighten,
-              size: 15,
-              color: fg,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: fg,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(ScootIcons.info, size: 13, color: fg),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1665,16 +2741,36 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
       plan: plan,
       selectedDay: _selectedDay,
       onSelectDay: (int i) => setState(() => _selectedDay = i),
-      editable: plan.status == 'draft' && !_readOnly,
+      editable: plan.status == 'draft' && !_readOnly && !_planLocked,
       maxPerDay: _maxPerDay,
       coordinateStatusFor: statusFor,
       segmentBadgeFor: _segmentBadgeFor,
       onRemoveStop: _removeStop,
       onReorderStop: _reorderStop,
-      roadNotes: _roadNotes,
-      onDismissRoadNotes: () => setState(() => _roadNotes = <String>[]),
-      roadRoutingConfigured: _service.isRoadRoutingConfigured,
-      onRefreshRoadRoute: _readOnly ? null : _refreshRoadRoute,
+      orderHint: plan.status == 'draft' && !_readOnly
+          ? _orderHintFor(
+              plan,
+              plan.days[_selectedDay.clamp(0, plan.days.length - 1)],
+            )
+          : null,
+      onUseShortestOrder: _useShortestOrder,
+      header: _planNotices(plan),
+      onMoveStop: _moveStop,
+      roadStateFor: _road.stateOf,
+      lastRoadDayFor: _road.lastRoadDay,
+      onRetryRoad:
+          _readOnly ||
+              _planLocked ||
+              plan.status != 'draft' ||
+              !_service.isRoadRoutingConfigured
+          ? null
+          : (int dayIndex) {
+              if (_planLocked) return;
+              _road.retry(plan.days[dayIndex].dayId);
+            },
+      onOpenBranches: widget.onNavigateRequested == null || _readOnly
+          ? null
+          : () => widget.onNavigateRequested!.call('branches'),
     );
   }
 
@@ -1695,7 +2791,71 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
       onPublish: () => _confirmPublish(plan),
       onWithdraw: () => _withdraw(plan),
       onBackToDraft: () => _backToDraft(plan),
+      onDeleteDraft: _canDeleteDraft(plan)
+          ? () => unawaited(_confirmDeleteDraft(plan))
+          : null,
     );
+  }
+
+  bool _canDeleteDraft(RoutePlan plan) =>
+      widget.currentUser.isAdmin &&
+      plan.id.isNotEmpty &&
+      plan.status.toLowerCase() == 'draft';
+
+  Future<void> _confirmDeleteDraft(RoutePlan plan) async {
+    if (_planLocked) return;
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text('Delete this draft?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            _confirmRow('Salesman', plan.salesmanName),
+            _confirmRow(
+              'Week',
+              '${_fmtDate(plan.weekStart)} – ${_fmtDate(plan.weekEnd)}',
+            ),
+            _confirmRow('Stops', '${plan.totalStops}'),
+            const SizedBox(height: 10),
+            const Text('The draft is removed. You cannot undo this.'),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Keep draft'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete draft'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted || _planLocked) return;
+    String message = 'Draft deleted.';
+    await _whileLocked(() async {
+      try {
+        await _service.deleteDraftPlan(plan);
+        if (!mounted) return;
+        setState(() {
+          if (_plan?.id == plan.id) _plan = null;
+        });
+        await _loadExistingPlans();
+        unawaited(_loadTeamWeek());
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'route_plan_delete_draft_failed',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        message = userFacingError(error, action: 'delete the draft');
+      }
+    });
+    if (!mounted) return;
+    showPageSnackBar(message);
   }
 
   Widget _retailerPicker(List<Map<String, dynamic>> candidates) {
@@ -1784,6 +2944,19 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
     return CmsPanel(
       title: 'Saved plans for this salesman',
       expandBody: false,
+      trailing: _readOnly
+          ? null
+          : OutlinedButton.icon(
+              onPressed: _planningWeek || _salesmen.isEmpty || _planLocked
+                  ? null
+                  : () => unawaited(_planTheWeek()),
+              icon: const Icon(Icons.groups_outlined, size: 18),
+              label: Text(
+                _planningWeek
+                    ? 'Drafting routes\u2026'
+                    : 'Draft routes for everyone without one',
+              ),
+            ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: _existingPlans.isEmpty
@@ -1811,7 +2984,7 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           subtitle: Text(
-                            '${p.totalStops} stops | ${p.totalDistanceKm.toStringAsFixed(1)} km | ${_methodLabel(p.metricSourceMethod)}\n'
+                            '${countLabel(p.totalStops, 'stop')} | ${p.totalDistanceKm.toStringAsFixed(1)} km | ${_methodLabel(p.metricSourceMethod)}\n'
                             '${_progressSummary(p, progressByPlan[p.id])}',
                           ),
                           trailing: Wrap(
@@ -1820,17 +2993,25 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
                             children: <Widget>[
                               _statusChip(p.status),
                               TextButton(
-                                onPressed: () => setState(() {
-                                  _plan = p;
-                                  _weekStart = _mondayOf(p.weekStart);
-                                  _roadNotes = <String>[];
-                                  _manuallyRecomputedDayIds.clear();
-                                  _learnedServiceTimesForPlan =
-                                      const <String, ServiceTimeStat>{};
-                                  _selectedDay = _firstNonEmptyDay(p);
-                                }),
+                                onPressed: _planLocked
+                                    ? null
+                                    : () {
+                                        _openStoredPlan(p);
+                                        setState(
+                                          () => _workspace =
+                                              _PlannerWorkspace.plan,
+                                        );
+                                        unawaited(_loadTeamWeek());
+                                      },
                                 child: const Text('View'),
                               ),
+                              if (_canDeleteDraft(p))
+                                TextButton(
+                                  onPressed: _planLocked
+                                      ? null
+                                      : () => unawaited(_confirmDeleteDraft(p)),
+                                  child: const Text('Delete draft'),
+                                ),
                             ],
                           ),
                         ),
@@ -2030,7 +3211,7 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
       return _weeklyPrioritiesCache!;
     }
     final _Salesman? salesman = _selectedSalesman;
-    final RetailerPriorityRanking? ranking =
+    final RetailerPriorityRanking? published =
         salesman == null || _priorityInputs.priorityRankings.isEmpty
         ? null
         : RetailerPriorityRanking.newestActive(
@@ -2038,6 +3219,8 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
             salesmanUid: salesman.uid,
             salesmanCode: salesman.code,
           );
+    final RetailerPriorityRanking? ranking =
+        published != null && _ranksCandidateShops(published) ? published : null;
     final Set<String> candidateIds = <String>{
       for (final Map<String, dynamic> row in _candidateRetailers())
         _retailerId(row),
@@ -2188,11 +3371,12 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
               ),
             ),
             const SizedBox(width: 8),
-            FilledButton.tonalIcon(
-              onPressed: () => _seedSelectionFromPriorities(top),
-              icon: const Icon(Icons.playlist_add_check_outlined, size: 18),
-              label: const Text('Apply priorities'),
-            ),
+            if (!_hasUsableWeekRanking())
+              FilledButton.tonalIcon(
+                onPressed: () => _seedSelectionFromPriorities(top),
+                icon: const Icon(Icons.playlist_add_check_outlined, size: 18),
+                label: const Text('Apply priorities'),
+              ),
           ],
         ),
         if (!weekly.isAuthoritative)
@@ -2444,7 +3628,7 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
                 if (plan != null)
                   _statTile('Plan status', _titleCase(plan.status)),
                 if (plan != null)
-                  _statTile('Route days', '${plan.totalStops} stops'),
+                  _statTile('Route days', countLabel(plan.totalStops, 'stop')),
                 if (plan != null)
                   _statTile(
                     'Quality score',
@@ -2514,7 +3698,7 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
                 child: _WarningNote(
                   text:
                       'A ${duplicate.status} plan already exists for this week '
-                      '(${duplicate.totalStops} stops). Saving adds a separate '
+                      '(${countLabel(duplicate.totalStops, 'stop')}). Saving adds a separate '
                       'plan — review before publishing to avoid duplicates.',
                 ),
               ),
@@ -2629,18 +3813,16 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
           method == 'GeoapifyRouting' ||
           method == 'GeoapifyRoadMixedSources') {
         messages.add(
-          'Distance and travel-time metrics use the Geoapify road source recorded for each day.',
+          'Distances and travel times use the road source recorded for each day.',
         );
       } else if (method == 'OSRMTable') {
-        messages.add(
-          'Road travel times supplied by the configured OSRM service.',
-        );
+        messages.add('Road travel times from the road service.');
       } else if (_usesHaversineFallback(method)) {
         down(_HealthLevel.yellow);
         messages.add(
           method.contains('Mixed')
-              ? 'Part of this plan used local Haversine estimates (not exact).'
-              : 'Haversine estimate used (not exact).',
+              ? 'Some days use straight-line estimates (not exact).'
+              : 'Straight-line estimate used (not exact).',
         );
       } else if (method.isEmpty) {
         down(_HealthLevel.yellow);
@@ -2667,7 +3849,7 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
     final RoutePlan? plan = _plan;
     if (plan == null) {
       return _service.isRoadRoutingConfigured
-          ? 'Not run (Geoapify configured)'
+          ? 'Not run (road distances on)'
           : 'Not run (local estimate)';
     }
     final String method = plan.metricSourceMethod;
@@ -2677,23 +3859,23 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
     if (_isLegacyOrsMethod(method)) return 'Legacy';
     switch (method) {
       case 'GeoapifyRouteMatrix':
-        return 'Road (Geoapify)';
+        return 'Road';
       case 'GeoapifyRouting':
-        return 'Road (Geoapify routing)';
+        return 'Road';
       case 'GeoapifyRouteMatrixMixedHaversineFallback':
       case 'GeoapifyRoutingMixedHaversineFallback':
       case 'GeoapifyRoadMixedHaversineFallback':
         return 'Road (partial)';
       case 'GeoapifyRoadMixedSources':
-        return 'Road (mixed Geoapify sources)';
+        return 'Road';
       case 'GeoapifyConfiguredHaversineFallback':
-        return 'Geoapify failed — local estimate';
+        return 'Road failed, straight-line estimate';
       case 'OSRMTable':
-        return 'Road (OSRM)';
+        return 'Road';
       case 'OSRMTableMixedHaversineFallback':
         return 'Road (partial)';
       case 'OSRMConfiguredHaversineFallback':
-        return 'OSRM failed — local estimate';
+        return 'Road failed, straight-line estimate';
       case 'ManualHaversineRecompute':
         return 'Local estimate (manual edits)';
       case 'HaversineNearestNeighbour':
@@ -2773,29 +3955,31 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
   }
 
   Future<void> _withdraw(RoutePlan plan) async {
-    setState(() => _saving = true);
+    if (_planLocked) return;
     String message =
         'Route withdrawn. Edit it, then approve and publish again.';
     bool askReplace = false;
-    try {
-      await _service.withdrawPlan(plan);
-      if (!mounted) return;
-      setState(() => _plan = plan.copyWith(status: 'draft'));
-      await _loadExistingPlans();
-    } on RouteAlreadyAcceptedException {
-      askReplace = true;
-    } catch (error, stackTrace) {
-      AppLogger.error(
-        'route_plan_withdraw_failed',
-        error: error,
-        stackTrace: stackTrace,
-      );
-      message = userFacingError(error, action: 'withdraw the route');
-    }
+    await _whileLocked(() async {
+      try {
+        await _service.withdrawPlan(plan);
+        if (!mounted) return;
+        setState(() => _plan = plan.copyWith(status: 'draft'));
+        await _loadExistingPlans();
+        unawaited(_loadTeamWeek());
+      } on RouteAlreadyAcceptedException {
+        askReplace = true;
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'route_plan_withdraw_failed',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        message = userFacingError(error, action: 'withdraw the route');
+      }
+    });
     if (!mounted) return;
-    setState(() => _saving = false);
     if (askReplace) {
-      await _confirmReplace(plan);
+      if (_plan?.id == plan.id) await _confirmReplace(plan);
       return;
     }
     showPageSnackBar(message);
@@ -2825,25 +4009,26 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
-    setState(() => _saving = true);
+    if (confirmed != true || !mounted || _planLocked) return;
     String message =
         'Route replaced. Correct the new draft, then approve and publish it.';
-    try {
-      final String newId = await _service.replacePublishedPlan(plan);
-      if (!mounted) return;
-      setState(() => _plan = _draftCopyOf(plan, newId));
-      await _loadExistingPlans();
-    } catch (error, stackTrace) {
-      AppLogger.error(
-        'route_plan_replace_failed',
-        error: error,
-        stackTrace: stackTrace,
-      );
-      message = userFacingError(error, action: 'replace the route');
-    }
+    await _whileLocked(() async {
+      try {
+        final String newId = await _service.replacePublishedPlan(plan);
+        if (!mounted) return;
+        setState(() => _plan = _draftCopyOf(plan, newId));
+        await _loadExistingPlans();
+        unawaited(_loadTeamWeek());
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'route_plan_replace_failed',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        message = userFacingError(error, action: 'replace the route');
+      }
+    });
     if (!mounted) return;
-    setState(() => _saving = false);
     showPageSnackBar(message);
   }
 
@@ -2864,30 +4049,40 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
     optimisationMethod: plan.optimisationMethod,
     days: plan.days,
     roadRouteNotes: plan.roadRouteNotes,
+    startPoint: plan.startPoint,
+    selectionMethod: plan.selectionMethod,
+    rankingId: plan.rankingId,
+    rankingWeekKey: plan.rankingWeekKey,
   );
 
   Future<void> _backToDraft(RoutePlan plan) async {
-    setState(() => _saving = true);
+    if (_planLocked) return;
     String message = 'Route is a draft again. Edit it, then approve it.';
-    try {
-      await _service.updateStatus(plan.id, 'draft');
-      if (!mounted) return;
-      setState(() => _plan = plan.copyWith(status: 'draft'));
-      await _loadExistingPlans();
-    } catch (error, stackTrace) {
-      AppLogger.error(
-        'route_plan_back_to_draft_failed',
-        error: error,
-        stackTrace: stackTrace,
-      );
-      message = userFacingError(error, action: 'move the route back to draft');
-    }
+    await _whileLocked(() async {
+      try {
+        await _service.updateStatus(plan.id, 'draft');
+        if (!mounted) return;
+        setState(() => _plan = plan.copyWith(status: 'draft'));
+        await _loadExistingPlans();
+        unawaited(_loadTeamWeek());
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'route_plan_back_to_draft_failed',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        message = userFacingError(
+          error,
+          action: 'move the route back to draft',
+        );
+      }
+    });
     if (!mounted) return;
-    setState(() => _saving = false);
     showPageSnackBar(message);
   }
 
   Future<void> _confirmPublish(RoutePlan plan) async {
+    if (_planLocked) return;
     final RoutePlan? duplicate = _existingPlanForSelectedWeek();
     final String? startedWeekWarning = plannerStartedWeekWarning(
       plan.weekStart,
@@ -3154,6 +4349,26 @@ class _RoutePlannerPageState extends State<RoutePlannerPage>
     final RetailerSegment? segment = _segmentForRetailer(retailerId);
     return segment == null ? null : _AiSegmentBadge(segment: segment);
   }
+}
+
+class _GeneratedRoute {
+  const _GeneratedRoute(this.plan, this.legTables, this.learnedServiceTimes);
+  final RoutePlan plan;
+  final Map<String, RouteLegTable> legTables;
+  final Map<String, ServiceTimeStat> learnedServiceTimes;
+}
+
+class _TeamWeekRow {
+  const _TeamWeekRow({this.plan, this.failed = false});
+  final RoutePlan? plan;
+  final bool failed;
+}
+
+class _LeftOutShop {
+  const _LeftOutShop(this.name, this.cause, {this.coordinates = false});
+  final String name;
+  final String cause;
+  final bool coordinates;
 }
 
 class _Salesman {
@@ -3894,6 +5109,11 @@ String _fmtDate(DateTime d) {
   return '${d.day} ${months[d.month - 1]}';
 }
 
+String _fmtDateTime(DateTime d) {
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${_fmtDate(d)} ${d.year}, ${two(d.hour)}:${two(d.minute)}';
+}
+
 String _methodLabel(String method) {
   switch (method) {
     case 'ORS_TSP':
@@ -3901,29 +5121,20 @@ String _methodLabel(String method) {
     case 'ORS_ESTIMATED':
       return 'Legacy route estimated';
     case 'GeoapifyRouteMatrix':
-      return 'Geoapify road travel times';
     case 'GeoapifyRouting':
-      return 'Geoapify road routing';
-    case 'GeoapifyRouteMatrixMixedHaversineFallback':
-      return 'Geoapify road (part falls back on estimate)';
-    case 'GeoapifyRoutingMixedHaversineFallback':
-      return 'Geoapify road routing (part falls back on estimate)';
     case 'GeoapifyRoadMixedSources':
-      return 'Geoapify road metrics (matrix and routing)';
-    case 'GeoapifyRoadMixedHaversineFallback':
-      return 'Geoapify road metrics (part falls back on estimate)';
-    case 'GeoapifyConfiguredHaversineFallback':
-      return 'Geoapify unavailable — local estimate';
     case 'OSRMTable':
-      return 'OSRM road travel times';
+      return 'Road distances';
+    case 'GeoapifyRouteMatrixMixedHaversineFallback':
+    case 'GeoapifyRoutingMixedHaversineFallback':
+    case 'GeoapifyRoadMixedHaversineFallback':
     case 'OSRMTableMixedHaversineFallback':
-      return 'OSRM road (part falls back on estimate)';
+      return 'Road distances, some days straight-line';
+    case 'GeoapifyConfiguredHaversineFallback':
     case 'OSRMConfiguredHaversineFallback':
-      return 'OSRM unavailable — local estimate';
     case 'ManualHaversineRecompute':
-      return 'Local estimate (manual edits)';
     case 'HaversineNearestNeighbour':
-      return 'Haversine estimate';
+      return 'Straight-line estimate';
     case 'Demo':
       return 'Unavailable';
     default:

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/quantity_unit.dart';
 import 'project_local_store.dart';
 
 class CartDraftSnapshot {
@@ -285,6 +286,50 @@ class CartDraftCache {
       }
     }
     return null;
+  }
+
+  static int? setSuggestedQty({
+    required String salesmanUid,
+    required String retailerId,
+    required String productId,
+    required int suggestedQty,
+  }) {
+    if (!ProjectLocalStore().isActive(salesmanUid)) return null;
+    final String prefix = ProjectLocalStore().prefix(salesmanUid);
+    int? applied;
+    for (final MapEntry<String, CartDraftSnapshot> entry
+        in _drafts.entries.toList(growable: false)) {
+      final CartDraftSnapshot draft = entry.value;
+      if (!entry.key.startsWith(prefix) ||
+          draft.retailerId != retailerId ||
+          draft.pendingOrderId.trim().isNotEmpty ||
+          !draft.items.any(
+            (Map<String, dynamic> item) => item['productId'] == productId,
+          )) {
+        continue;
+      }
+      save(
+        entry.key,
+        draft.copyWith(
+          items: draft.items
+              .map((Map<String, dynamic> item) {
+                if (item['productId'] != productId) return item;
+                final int limit = maxQtyFor(item);
+                final int quantity = suggestedQty > limit
+                    ? limit
+                    : suggestedQty;
+                applied = quantity;
+                return <String, dynamic>{
+                  ...item,
+                  'qty': quantity,
+                  'suggestedReorderQty': suggestedQty,
+                };
+              })
+              .toList(growable: false),
+        ),
+      );
+    }
+    return applied;
   }
 
   static void save(String key, CartDraftSnapshot draft) {

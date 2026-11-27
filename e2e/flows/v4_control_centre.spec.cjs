@@ -141,7 +141,8 @@ module.exports = {
       }
     };
     const button = (s, name) => s.page.getByRole('button', { name, exact: typeof name === 'string' });
-    const text = (s, value) => s.page.getByText(value, { exact: true });
+    const text = (s, value) => s.page.getByText(value, { exact: true })
+      .and(s.page.locator(':not(flt-announcement-polite, flt-announcement-assertive)'));
     const iso = (date) => `${date.toISOString().slice(0, 19)}Z`;
     const klMidnightUtc = () => {
       const kl = new Date(Date.now() + 8 * 3600000);

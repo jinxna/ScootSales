@@ -35,7 +35,7 @@ module.exports = {
       await t.shot(s, 'retailers-list');
     });
 
-    const headerBox = async () => (await B.semantic(s.page, 'Salesperson').boundingBox());
+    const headerBox = async () => (await B.semantic(s.page, /^Salesperson$/).boundingBox());
 
     await t.step('the table fills at least 60% of the viewport height', async () => {
       const head = await headerBox();
@@ -55,6 +55,16 @@ module.exports = {
       const after = await headerBox();
       expect(Math.abs(after.y - before.y) < 2, `header moved from ${before.y} to ${after.y}`);
       await t.shot(s, 'retailers-scrolled');
+    });
+
+    await t.step('Edit opens the docked retailer panel and its close button shuts it with no change made', async () => {
+      await s.page.getByRole('button', { name: /^Edit E2E LAYOUT \d+$/ }).first().click();
+      await B.see(s.page, 'Edit Retailer');
+      await t.shot(s, 'retailer-edit-open');
+      await s.page.getByRole('button', { name: 'Close (Esc)' }).click();
+      await B.semantic(s.page, 'Edit Retailer').waitFor({ state: 'detached', timeout: 10000 });
+      expect(await B.semantic(s.page, /Discard/).count() === 0, 'a discard question showed with no change made');
+      await t.shot(s, 'retailer-edit-closed');
     });
 
     await t.step('Coverage is a third segment and shows the lifecycle panel', async () => {

@@ -46,9 +46,13 @@ fi
 PUBLIC_KEYS=$(setting PLATFORM_PUBLIC_KEYS)
 GEOAPIFY_KEY=$(setting GEOAPIFY_API_KEY)
 HIDDEN_DEVELOPER_EMAIL=$(setting HIDDEN_DEVELOPER_EMAIL)
+PRIVACY_CONTACT_EMAIL=$(setting PRIVACY_CONTACT_EMAIL)
 KEY_ENTRY='[a-z0-9][a-z0-9._-]{0,63}=[A-Za-z0-9_-]{43}'
 if [ -n "$PUBLIC_KEYS" ] && ! [[ "$PUBLIC_KEYS" =~ ^$KEY_ENTRY(,$KEY_ENTRY)*$ ]]; then
   die "PLATFORM_PUBLIC_KEYS in $SETTINGS_FILE is not in the form keyId=publicKey. Copy the line that 'scoot-deploy public-key' prints."
+fi
+if ! [[ "$PRIVACY_CONTACT_EMAIL" =~ ^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*@([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$ ]]; then
+  die "PRIVACY_CONTACT_EMAIL in $SETTINGS_FILE is empty or not an email address. The privacy policy and terms in every app, and the public page at https://$DASHBOARD_HOST/privacy, show this contact address."
 fi
 API_URL=https://$CONTROL_HOST
 
@@ -61,12 +65,14 @@ printf 'Building the Control Centre for Firebase project %s.\n' "$PROJECT_ID"
     "--dart-define=STAFF_FIREBASE_APP_ID=$APP_ID" \
     "--dart-define=STAFF_FIREBASE_PROJECT_ID=$PROJECT_ID" \
     "--dart-define=STAFF_FIREBASE_MESSAGING_SENDER_ID=$SENDER_ID" \
-    "--dart-define=STAFF_FIREBASE_AUTH_DOMAIN=$AUTH_DOMAIN"
+    "--dart-define=STAFF_FIREBASE_AUTH_DOMAIN=$AUTH_DOMAIN" \
+    "--dart-define=LEGAL_CONTACT_EMAIL=$PRIVACY_CONTACT_EMAIL"
 )
 
 BUILD_DIR=$ROOT/admin_dashboard/build/$BUILD_NAME
 [ -f "$BUILD_DIR/index.html" ] || die "The build did not produce $BUILD_DIR/index.html."
 grep -q -F "$PROJECT_ID" "$BUILD_DIR/main.dart.js" || die "The built bundle does not contain the Firebase project ID. The build settings were not applied."
+grep -q -F -- "$PRIVACY_CONTACT_EMAIL" "$BUILD_DIR/main.dart.js" || die "The Control Centre bundle does not contain the privacy contact address. The build settings were not applied."
 sed -i 's|<title>Scoot Sales</title>|<title>Scoot Sales Control Centre</title>|; s|\(name="apple-mobile-web-app-title" content="\)Scoot Sales"|\1Scoot Sales Control Centre"|' "$BUILD_DIR/index.html"
 [ ! -f "$BUILD_DIR/manifest.json" ] || sed -i 's|"name": "Scoot Sales"|"name": "Scoot Sales Control Centre"|; s|"short_name": "Scoot Sales"|"short_name": "Control Centre"|' "$BUILD_DIR/manifest.json"
 grep -q -F "<title>Scoot Sales Control Centre</title>" "$BUILD_DIR/index.html" || die "The Control Centre page title was not set."
@@ -82,7 +88,8 @@ if [ -n "$PUBLIC_KEYS" ]; then
       "--dart-define=PLATFORM_API_URL=$API_URL" \
       "--dart-define=PLATFORM_PUBLIC_KEYS=$PUBLIC_KEYS" \
       "--dart-define=GEOAPIFY_API_KEY=$GEOAPIFY_KEY" \
-      "--dart-define=HIDDEN_DEVELOPER_EMAIL=$HIDDEN_DEVELOPER_EMAIL"
+      "--dart-define=HIDDEN_DEVELOPER_EMAIL=$HIDDEN_DEVELOPER_EMAIL" \
+      "--dart-define=LEGAL_CONTACT_EMAIL=$PRIVACY_CONTACT_EMAIL"
   )
   DASHBOARD_DIR=$ROOT/admin_dashboard/build/$DASHBOARD_BUILD_NAME
   HAS_DASHBOARD=yes
@@ -90,6 +97,8 @@ if [ -n "$PUBLIC_KEYS" ]; then
   grep -q -F "$API_URL" "$DASHBOARD_DIR/main.dart.js" || die "The dashboard bundle does not contain $API_URL. The build settings were not applied."
   [ -n "$GEOAPIFY_KEY" ] || printf 'WARN: GEOAPIFY_API_KEY is empty in %s. Route Planner shows straight lines and estimates.\n' "$SETTINGS_FILE" >&2
   grep -q -F "$PUBLIC_KEYS" "$DASHBOARD_DIR/main.dart.js" || die "The dashboard bundle does not contain the public key. The build settings were not applied."
+  grep -q -F -- "$PRIVACY_CONTACT_EMAIL" "$DASHBOARD_DIR/main.dart.js" || die "The dashboard bundle does not contain the privacy contact address. The build settings were not applied."
+  "$PYTHON" "$ROOT/scripts/build_privacy_page.py" --email "$PRIVACY_CONTACT_EMAIL" --out "$DASHBOARD_DIR" || die "The privacy page was not written."
 else
   printf 'The company dashboard is NOT in this package: PLATFORM_PUBLIC_KEYS is empty in %s.\n' "$SETTINGS_FILE"
 fi
@@ -121,7 +130,7 @@ cp "$COPILOT_SRC/server/__init__.py" "$COPILOT_SRC/server/app.py" "$COPILOT_DST/
 cp -r "$BUILD_DIR" "$PACKAGE/web"
 if [ -n "$DASHBOARD_DIR" ]; then cp -r "$DASHBOARD_DIR" "$PACKAGE/dashboard"; fi
 find "$PACKAGE/web" "$PACKAGE/dashboard" -maxdepth 1 -name workspace.json -delete 2>/dev/null || true
-for file in scoot-deploy.sh nginx_site.py check_headers.py scoot-platform.service scoot-scheduler.service platform.env.tpl nginx-control.http.conf.tpl nginx-control.https.conf.tpl scoot-copilot.service copilot.env.tpl scoot-forecast.service scoot-forecast.timer scoot-forecast-hardware.service scoot-forecast-hardware.timer; do
+for file in scoot-deploy.sh nginx_site.py check_headers.py scoot-platform.service scoot-scheduler.service platform.env.tpl nginx-control.http.conf.tpl nginx-control.https.conf.tpl nginx-promo.http.conf.tpl nginx-promo.https.conf.tpl scoot-copilot.service copilot.env.tpl scoot-forecast.service scoot-forecast.timer scoot-forecast-hardware.service scoot-forecast-hardware.timer; do
   tr -d '\r' < "$DROPLET_DIR/$file" > "$PACKAGE/droplet/$file"
 done
 chmod 0755 "$PACKAGE/droplet/scoot-deploy.sh"
@@ -166,7 +175,7 @@ Run these commands from the repository root, one at a time.
    ssh -t root@$DROPLET_IP "scoot-deploy copilot-install"
 
 7. Tester phone app. Build it with the platform, company lookup and Scout values, or the phone cannot redeem invitations, reset passwords, read its company state or use Scout, and a tester from another company opens the wrong project:
-   cd flutter_mobile_app && flutter build apk --release --dart-define PLATFORM_API_URL=$API_URL --dart-define COMPANY_LOOKUP_URL=$API_URL/v1/companies --dart-define COPILOT_URL=https://$DASHBOARD_HOST --dart-define COMPANY_REGISTRY_KEYS=$([ -n "$PUBLIC_KEYS" ] && echo "$PUBLIC_KEYS" || echo "ADD_PLATFORM_PUBLIC_KEYS_TO_$(basename "$SETTINGS_FILE")")
+   PLATFORM_API_URL=$API_URL COPILOT_URL=https://$DASHBOARD_HOST COMPANY_SITE=https://$DASHBOARD_HOST LEGAL_CONTACT_EMAIL=$PRIVACY_CONTACT_EMAIL COMPANY_REGISTRY_KEYS=$([ -n "$PUBLIC_KEYS" ] && echo "$PUBLIC_KEYS" || echo "ADD_PLATFORM_PUBLIC_KEYS_TO_$(basename "$SETTINGS_FILE")") bash scripts/build_tester_apk.sh
    Keep the APK outside the repository.
 
 Commands 3 and 4 never change scootsales.my or hardware.scootsales.my. Only command 5 does, and it changes only the one dashboard host it names. scootsales.my is the default. For hardware.scootsales.my add  --dashboard-host hardware.scootsales.my  to both the dashboard command and dashboard-revert, and add the code of its company (--default-workspace CODE) to the dashboard command only. The two dashboard hosts must use their own nginx file; the script refuses when one file holds both. Each host has its own link to the dashboard files and its own backup. Only one dashboard action runs at a time.

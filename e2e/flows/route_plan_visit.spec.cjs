@@ -159,7 +159,7 @@ module.exports = {
       await bmS.page.getByRole('button', { name: 'Plan', exact: true }).click();
       await B.see(bmS.page, 'View only');
       await B.see(bmS.page, RETAILER.name);
-      for (const label of ['Generate draft route', 'Regenerate draft route', 'Save draft', 'Save changes', 'Approve', 'Publish']) {
+      for (const label of ['Generate draft route', 'Save draft', 'Save changes', 'Approve', 'Publish']) {
         expectEqual(await bmS.page.getByRole('button', { name: label, exact: true }).count(), 0, `"${label}" buttons shown to a branch manager`);
       }
       await t.shot(bmS, 'view-only');
@@ -235,6 +235,30 @@ module.exports = {
       expectEqual(stop.status, 'skipped', 'one-stop stop status');
       expectEqual(stop.salesmanCode, parent.salesmanCode, 'one-stop stop and parent salesmanCode');
       await t.shot(mobileS, 'one-stop-route-completed');
+    });
+    await t.step('more than 30 published plans: the current week is still read and started', async () => {
+      const base = await db.get('route_plans', codePlanId);
+      const onePlanId = `${planId}-one`;
+      const one = await db.get('route_plans', onePlanId);
+      await db.put('route_plans', onePlanId, { ...one, status: 'archived' });
+      const weekMs = 7 * 24 * 3600 * 1000;
+      const mine = { ...base, status: 'published', salesmanCode: accounts.salesman.code };
+      for (let i = 0; i < 35; i += 1) {
+        const oldId = `${planId}-old-${String(i).padStart(2, '0')}`;
+        await db.put('route_plans', oldId, { ...mine, planId: oldId, weekStart: new Date(base.weekStart.getTime() - (i + 2) * weekMs) });
+      }
+      const nowId = `${planId}-zz-now`;
+      await db.put('route_plans', nowId, { ...mine, planId: nowId });
+      const page = mobileS.page;
+      await page.waitForFunction(
+        () => [...document.querySelectorAll('flt-semantics[role="button"]')]
+          .filter((n) => n.textContent === 'Accept route' && n.getAttribute('aria-disabled') !== 'true').length === 1,
+        null,
+        { timeout: 30000 },
+      );
+      await openSeededRoute(page);
+      await db.waitForDoc('route_plan_progress', progressId(nowId), (p) => p.status === 'in_progress', { timeout: 30000, label: 'current week route started among 36 published plans' });
+      await t.shot(mobileS, 'current-week-among-many-plans');
     });
   },
 };

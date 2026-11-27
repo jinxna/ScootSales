@@ -12,7 +12,11 @@ class TrustImpactLoadResult {
     this.aiTimestamps = const <DateTime?>[],
     this.hasAiData = false,
     this.hasMissingAiTimestamp = false,
+    this.latestSummaries = const <Map<String, dynamic>>[],
+    this.salespersonNames = const <String, String>{},
   });
+  final List<Map<String, dynamic>> latestSummaries;
+  final Map<String, String> salespersonNames;
   final TrustImpactReport report;
   final List<String> failedSources;
   final List<DateTime?> aiTimestamps;
@@ -26,6 +30,50 @@ class TrustImpactService {
 
   final FirebaseFirestore _firestore;
   static const Duration _timeout = Duration(seconds: 12);
+  static const int _newestRowsPerScope = 12;
+
+  List<(String, String)> _summaryScopes(UserProfile user) {
+    if (user.isSupervisor) {
+      return user.assignedSalesmanCodes
+          .map((String value) => value.trim())
+          .where((String value) => value.isNotEmpty)
+          .toSet()
+          .map((String code) => ('salesman', code))
+          .toList(growable: false);
+    }
+    if (user.isBranchManager) {
+      final String branchId = user.branchId.trim();
+      return <(String, String)>[if (branchId.isNotEmpty) ('branch', branchId)];
+    }
+    if (user.isAdmin) return const <(String, String)>[('organization', 'all')];
+    return const <(String, String)>[];
+  }
+
+  Future<Map<String, dynamic>?> _newestSummary(
+    String scopeType,
+    String scopeKey,
+  ) async {
+    final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
+        .collection('weekly_ai_summaries')
+        .where('scopeType', isEqualTo: scopeType)
+        .where('scopeKey', isEqualTo: scopeKey)
+        .orderBy('weekStart', descending: true)
+        .limit(_newestRowsPerScope)
+        .get()
+        .timeout(_timeout);
+    final List<Map<String, dynamic>> production =
+        filterTrustImpactProductionRows(<Map<String, dynamic>>[
+          for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
+              in snapshot.docs)
+            <String, dynamic>{...doc.data(), 'docId': doc.id},
+        ]);
+    if (production.isEmpty && snapshot.docs.length == _newestRowsPerScope) {
+      throw StateError(
+        'no production summary in the newest rows of $scopeType $scopeKey',
+      );
+    }
+    return production.isEmpty ? null : production.first;
+  }
 
   Future<TrustImpactLoadResult> load(UserProfile user) async {
     final List<String> failed = <String>[];
@@ -125,11 +173,31 @@ class TrustImpactService {
       }
     }
 
+    Future<List<Map<String, dynamic>>> safeNewestSummaries() async {
+      try {
+        final List<Map<String, dynamic>?> newest =
+            await Future.wait(<Future<Map<String, dynamic>?>>[
+              for (final (String scopeType, String scopeKey) in _summaryScopes(
+                user,
+              ))
+                _newestSummary(scopeType, scopeKey),
+            ]);
+        return newest.whereType<Map<String, dynamic>>().toList(growable: false);
+      } catch (_) {
+        if (!failed.contains('weekly_ai_summaries')) {
+          failed.add('weekly_ai_summaries');
+        }
+        return const <Map<String, dynamic>>[];
+      }
+    }
+
+    final Future<List<Map<String, dynamic>>> newestSummaries =
+        safeNewestSummaries();
     final List<List<Map<String, dynamic>>> rows =
         await Future.wait(<Future<List<Map<String, dynamic>>>>[
           safeWeeklySummaries(),
           safe('visit_briefs', 'salesmanCode', 500),
-          safe('orders', 'staffId', 1000),
+          safe('orders', 'salesmanCode', 1000),
           safe('route_plans', 'salesmanCode', 200),
           safe('route_plan_progress', 'salesmanCode', 500),
           safe('ai_insights', 'salesmanCode', 500),
@@ -187,7 +255,16 @@ class TrustImpactService {
           'Stopped product evidence': <String>{'visit_briefs'},
           'Unverified or missing coordinates': <String>{'retailers'},
         };
+    final List<Map<String, dynamic>> latestSummaries = await newestSummaries;
+    final Map<String, String> salespersonNames = <String, String>{};
+    for (final Map<String, dynamic> plan in rows[3]) {
+      final String code = '${plan['salesmanCode'] ?? ''}'.trim();
+      final String name = '${plan['salesmanName'] ?? ''}'.trim();
+      if (code.isNotEmpty && name.isNotEmpty) salespersonNames[code] = name;
+    }
     return TrustImpactLoadResult(
+      latestSummaries: latestSummaries,
+      salespersonNames: salespersonNames,
       report: TrustImpactReport(
         metrics: metrics,
         abstentionReasons: derived.abstentionReasons,

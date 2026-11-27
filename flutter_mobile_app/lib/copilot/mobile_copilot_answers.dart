@@ -5,17 +5,21 @@ import 'package:intl/intl.dart';
 
 import '../edition.dart';
 import '../models/assigned_route_plan.dart';
+import '../models/follow_up_promise.dart';
+import '../models/stop_brief_view.dart' show plainStopReasonParts;
 import '../models/user_model.dart';
 import '../models/visit_brief.dart';
 import '../screens/overview_screen.dart'
     show assignedPlanForToday, assignedStopsForToday;
+import '../services/follow_up_service.dart';
+import '../services/last_order_service.dart';
 import '../services/route_plan_service.dart';
 import '../services/sales_visit_copilot_service.dart';
 import '../utils/assigned_route_lifecycle.dart' show isTerminalStopStatus;
 import '../utils/order_status.dart';
 import 'mobile_copilot_grammar.dart';
+import 'mobile_copilot_shop_facts.dart';
 import '../utils/data_number.dart';
-import '../utils/quantity_unit.dart';
 
 enum CopilotDestination { route, orders, planner, profile }
 
@@ -27,6 +31,7 @@ class CopilotAnswer {
     this.openLabel = '',
     this.refused = false,
     this.chips = const <String>[],
+    this.remember,
   });
 
   final String text;
@@ -37,6 +42,8 @@ class CopilotAnswer {
   final bool refused;
 
   final List<String> chips;
+
+  final ScoutMemory? remember;
 }
 
 const List<String> kCopilotStartChips = <String>[
@@ -61,6 +68,12 @@ const CopilotAnswer kCopilotNotUnderstood = CopilotAnswer(
   chips: kCopilotStartChips,
 );
 
+const CopilotAnswer kCopilotWhichShop = CopilotAnswer(
+  'Which shop do you mean?',
+  details: <String>['Say the shop name. Example: Why am I going to <shop>?'],
+  chips: kCopilotStartChips,
+);
+
 const CopilotAnswer kCopilotHelp = CopilotAnswer(
   kBasicEdition
       ? 'Ask about your own route and orders. On some screens I can '
@@ -68,11 +81,16 @@ const CopilotAnswer kCopilotHelp = CopilotAnswer(
       : 'Ask about your own route, orders and visit briefs. On some screens I can '
             'also do small tasks. I ask you before I change anything.',
   details: <String>[
-    'What is my next stop? How many stops are left today?',
-    'How much did I sell today? This week?',
-    'What did <retailer name> order last time?',
-    if (!kBasicEdition) 'Show the visit brief for <retailer name>',
-    'Open my route, orders, planner or profile',
+    'Route: What is my next stop? How many stops are left today? Why am I going to <shop>?',
+    if (!kBasicEdition)
+      'Shop: What should I say at <shop>? When does <shop> usually order? Show the visit brief for <shop>',
+    'Orders: What did <shop> order last time? How much did I sell today? This week?',
+    'Follow-ups: Who did I promise to visit again?',
+    if (kBasicEdition)
+      'After an answer you can ask: What did they order last time? And the next one?'
+    else
+      'After an answer you can ask: What should I say there? And the next one?',
+    'Open: my route, orders, planner or profile',
     if (kBasicEdition)
       'On a screen: search products, set a quantity (you confirm)'
     else
@@ -103,6 +121,12 @@ class MobileCopilotAnswers {
   final FirebaseFirestore _db;
 
   static const Duration _readTimeout = Duration(seconds: 8);
+  static const Duration _briefGlance = Duration(seconds: 2);
+  static const Set<CopilotIntentKind> _briefTopics = <CopilotIntentKind>{
+    CopilotIntentKind.whatToSay,
+    CopilotIntentKind.visitBrief,
+    CopilotIntentKind.usualOrderDay,
+  };
 
   Future<String> firstBriefRetailer() async {
     if (kBasicEdition) return '';
@@ -135,19 +159,29 @@ class MobileCopilotAnswers {
             open: CopilotDestination.orders,
           );
         case CopilotIntentKind.openRoute:
-          return _route(intent.thisWeek);
+          return await _route(intent.thisWeek);
         case CopilotIntentKind.nextStop:
-          return _nextStop();
+          return await _nextStop(
+            after: intent.nextOne ? intent.remembered : null,
+          );
         case CopilotIntentKind.stopsLeft:
-          return _stopsLeft();
+          return await _stopsLeft();
         case CopilotIntentKind.ordersThisWeek:
-          return _ordersThisWeek();
+          return await _ordersThisWeek();
         case CopilotIntentKind.visitBrief:
-          return _visitBrief(intent.retailer);
         case CopilotIntentKind.lastOrder:
-          return _lastOrder(intent.retailer);
+        case CopilotIntentKind.whyStop:
+        case CopilotIntentKind.whatToSay:
+        case CopilotIntentKind.usualOrderDay:
+          return await _shopAnswer(intent);
+        case CopilotIntentKind.followUps:
+          return await _followUps();
+        case CopilotIntentKind.followUp:
+          return _shopMenu(intent.retailer);
+        case CopilotIntentKind.whichShop:
+          return kCopilotWhichShop;
         case CopilotIntentKind.sales:
-          return _sales(intent.today);
+          return await _sales(intent.today);
         case CopilotIntentKind.unknown:
           return kCopilotNotUnderstood;
       }
@@ -159,11 +193,14 @@ class MobileCopilotAnswers {
     }
   }
 
-  static Future<List<T>> _firstNonEmpty<T>(Stream<List<T>> stream) async {
+  static Future<List<T>> _firstNonEmpty<T>(
+    Stream<List<T>> stream, [
+    Duration wait = _readTimeout,
+  ]) async {
     try {
       return await stream
           .firstWhere((List<T> items) => items.isNotEmpty)
-          .timeout(_readTimeout, onTimeout: () => <T>[]);
+          .timeout(wait, onTimeout: () => <T>[]);
     } catch (_) {
       return <T>[];
     }
@@ -222,7 +259,7 @@ class MobileCopilotAnswers {
     );
   }
 
-  Future<CopilotAnswer> _nextStop() async {
+  Future<CopilotAnswer> _nextStop({ScoutShop? after}) async {
     final List<AssignedRoutePlan> plans = await _plans();
     final AssignedRoutePlan? plan = assignedPlanForToday(plans);
     final List<AssignedRouteStop> stops = assignedStopsForToday(plans);
@@ -232,36 +269,78 @@ class MobileCopilotAnswers {
         chips: kCopilotStartChips,
       );
     }
-    final RouteProgress? progress = await _progress(plan);
     final List<AssignedRouteStop> ordered = <AssignedRouteStop>[...stops]
       ..sort(
         (AssignedRouteStop a, AssignedRouteStop b) =>
             a.sequence.compareTo(b.sequence),
       );
-    for (final AssignedRouteStop stop in ordered) {
-      if (isTerminalStopStatus(_status(progress, stop))) continue;
-      return CopilotAnswer(
-        'Your next stop is ${stop.retailerName}.',
-        details: <String>[
-          if (stop.address.isNotEmpty) stop.address,
-          if (stop.estimatedArrival.isNotEmpty)
-            'Expected arrival ${stop.estimatedArrival}',
-          if (stop.priorityReason.isNotEmpty) stop.priorityReason,
-        ],
-        open: CopilotDestination.route,
-        openLabel: 'Open route',
-        chips: <String>[
-          if (!kBasicEdition) 'Show the visit brief for ${stop.retailerName}',
-          'How many stops are left today?',
-          'Open my route',
-        ],
+    AssignedRouteStop? next;
+    if (after != null) {
+      final int at = ordered.indexWhere(
+        (AssignedRouteStop stop) =>
+            ScoutShopBook.sameShop(after, stop.retailerId, stop.retailerName),
+      );
+      if (at < 0) {
+        return CopilotAnswer(
+          '${after.name} is not on your route today.',
+          chips: kCopilotStartChips,
+        );
+      }
+      if (at + 1 >= ordered.length) {
+        return CopilotAnswer(
+          '${after.name} is the last stop today.',
+          chips: kCopilotStartChips,
+        );
+      }
+      next = ordered[at + 1];
+    } else {
+      final RouteProgress? progress = await _progress(plan);
+      for (final AssignedRouteStop stop in ordered) {
+        if (isTerminalStopStatus(_status(progress, stop))) continue;
+        next = stop;
+        break;
+      }
+    }
+    if (next == null) {
+      return const CopilotAnswer(
+        "All of today's stops are done.",
+        chips: kCopilotStartChips,
       );
     }
-    return const CopilotAnswer(
-      "All of today's stops are done.",
-      chips: kCopilotStartChips,
+    final ScoutShop shop = ScoutShop(
+      id: next.retailerId,
+      name: next.retailerName,
+    );
+    final VisitBrief? brief = kBasicEdition
+        ? null
+        : ScoutShopBook.briefFor(await _briefList(_briefGlance), shop);
+    final List<String> reason = plainStopReasonParts(next.priorityReason);
+    final List<VisitFocusItem> focus =
+        brief?.fieldFocusItems ?? const <VisitFocusItem>[];
+    return CopilotAnswer(
+      after == null
+          ? 'Your next stop is ${next.retailerName}.'
+          : 'After ${after.name}, the next stop is ${next.retailerName}.',
+      details: <String>[
+        if (next.address.isNotEmpty) next.address,
+        if (next.estimatedArrival.isNotEmpty)
+          'Expected arrival ${next.estimatedArrival}',
+        if (reason.isNotEmpty) 'Why: ${reason.join(', ')}',
+        if (focus.isNotEmpty) 'Focus: ${_focusLine(focus.first)}',
+      ],
+      open: CopilotDestination.route,
+      openLabel: 'Open route',
+      chips: <String>[
+        if (!kBasicEdition) 'Show the visit brief for ${next.retailerName}',
+        'How many stops are left today?',
+        'Open my route',
+      ],
+      remember: ScoutMemory(shop: shop, topic: CopilotIntentKind.nextStop),
     );
   }
+
+  static String _focusLine(VisitFocusItem item) =>
+      item.signal.isEmpty ? item.title : '${item.title}: ${item.signal}';
 
   Future<CopilotAnswer> _stopsLeft() async {
     final List<AssignedRoutePlan> plans = await _plans();
@@ -384,55 +463,281 @@ class MobileCopilotAnswers {
     );
   }
 
-  Future<CopilotAnswer> _lastOrder(String requested) async {
-    final QuerySnapshot<Map<String, dynamic>> snapshot = await _db
-        .collection('orders')
-        .where('salesmanUid', isEqualTo: user.uid)
-        .orderBy('submittedAt', descending: true)
-        .limit(200)
-        .get()
-        .timeout(_readTimeout);
-    final String wanted = normaliseCopilotText(requested);
-    Map<String, dynamic>? match;
-    for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
-        in snapshot.docs) {
-      final Map<String, dynamic> data = doc.data();
-      final String status = resolveMobileOrderStatus(data);
-      if (status == 'Cancelled' || status == 'Rejected') continue;
-      final String name = normaliseCopilotText(
-        (data['retailerName'] ?? data['outlet'] ?? '').toString(),
-      );
-      if (name.isEmpty) continue;
-      if (name == wanted ||
-          (wanted.length >= 3 &&
-              (name.contains(wanted) || wanted.contains(name)))) {
-        match = data;
-        break;
-      }
-    }
-    if (match == null) {
-      return CopilotAnswer(
-        'I could not find an order for "$requested" in your recent orders.',
+  Future<List<VisitBrief>> _briefList(Duration wait) =>
+      _firstNonEmpty(_briefs.watchAssignedBriefs(user), wait);
+
+  static String _questionFor(CopilotIntentKind kind, String shop) =>
+      switch (kind) {
+        CopilotIntentKind.whatToSay => 'What should I say at $shop?',
+        CopilotIntentKind.visitBrief => 'Show the visit brief for $shop',
+        CopilotIntentKind.lastOrder => 'What did $shop order last time?',
+        CopilotIntentKind.usualOrderDay => 'When does $shop usually order?',
+        _ => 'Why am I going to $shop?',
+      };
+
+  static String _notFound(
+    CopilotIntentKind kind,
+    String spoken,
+  ) => switch (kind) {
+    CopilotIntentKind.lastOrder =>
+      'I could not find an order for "$spoken" in your recent orders.',
+    CopilotIntentKind.visitBrief || CopilotIntentKind.whatToSay =>
+      'I could not find a visit brief for "$spoken" among your assigned retailers.',
+    CopilotIntentKind.whyStop => 'I could not find "$spoken" on your route.',
+    _ => 'I could not find a shop called "$spoken".',
+  };
+
+  static List<String> _afterShopChips(CopilotIntentKind asked) => <String>[
+    if (asked != CopilotIntentKind.whyStop) 'Why this stop?',
+    if (!kBasicEdition && asked != CopilotIntentKind.whatToSay)
+      'What should I say there?',
+    if (asked != CopilotIntentKind.lastOrder) 'What did they order last time?',
+    'And the next one?',
+  ];
+
+  CopilotAnswer _shopMenu(String spoken) => CopilotAnswer(
+    'What do you want to know about "$spoken"?',
+    chips: <String>[
+      _questionFor(CopilotIntentKind.whyStop, spoken),
+      if (!kBasicEdition) _questionFor(CopilotIntentKind.whatToSay, spoken),
+      _questionFor(CopilotIntentKind.lastOrder, spoken),
+    ],
+  );
+
+  Future<CopilotAnswer> _shopAnswer(CopilotIntent intent) async {
+    final CopilotIntentKind kind = intent.kind;
+    if (kBasicEdition && _briefTopics.contains(kind)) {
+      return const CopilotAnswer(
+        kNotInEditionMessage,
         chips: kCopilotStartChips,
       );
     }
-    final String retailer = (match['retailerName'] ?? match['outlet'])
-        .toString();
-    final DateTime? when = _when(match['submittedAt'] ?? match['createdAt']);
-    final List<Object?> items =
-        (match['items'] as List<Object?>?) ?? const <Object?>[];
-    final double total = dataNumberOrNull(match['totalPrice']) ?? 0;
+    final Future<List<AssignedRoutePlan>> plansRead = _plans();
+    final Future<List<VisitBrief>> briefsRead = kBasicEdition
+        ? Future<List<VisitBrief>>.value(const <VisitBrief>[])
+        : _briefList(_briefTopics.contains(kind) ? _readTimeout : _briefGlance);
+    final Future<Map<String, LastOrder>> ordersRead = LastOrderService(
+      firestore: _db,
+    ).lastOrders(user.uid, online: _isOnline());
+    final (
+      List<AssignedRoutePlan> plans,
+      List<VisitBrief> briefs,
+      Map<String, LastOrder> orders,
+    ) = await (
+      plansRead,
+      briefsRead,
+      ordersRead,
+    ).wait;
+    final ScoutShopBook book = ScoutShopBook(
+      plan: assignedPlanForToday(plans),
+      today: DateTime.now(),
+      briefs: briefs,
+      lastOrders: orders,
+    );
+
+    ScoutShop shop;
+    final ScoutShop? remembered = intent.remembered;
+    if (remembered != null && intent.nextOne) {
+      if (!book.isOnTodayRoute(remembered)) {
+        return CopilotAnswer(
+          '${remembered.name} is not on your route today.',
+          chips: kCopilotStartChips,
+        );
+      }
+      final AssignedRouteStop? next = book.stopAfter(remembered);
+      if (next == null) {
+        return CopilotAnswer(
+          '${remembered.name} is the last stop today.',
+          chips: kCopilotStartChips,
+        );
+      }
+      shop = book.shopOf(next);
+    } else if (remembered != null) {
+      shop = remembered;
+    } else {
+      final ShopMatch match = book.find(intent.retailer);
+      switch (match) {
+        case ShopFound():
+          shop = match.shop;
+        case ShopAmbiguous():
+          return CopilotAnswer(
+            'Which shop do you mean?',
+            details: <String>[
+              for (final ScoutShop one in match.shops.take(6)) one.name,
+            ],
+            chips: <String>[
+              for (final ScoutShop one in match.shops.take(3))
+                _questionFor(kind, one.name),
+            ],
+          );
+        case ShopMissing():
+          return CopilotAnswer(
+            _notFound(kind, intent.retailer),
+            chips: kCopilotStartChips,
+          );
+      }
+    }
+
+    final ShopFacts facts = book.facts(shop);
+    final ScoutMemory memory = ScoutMemory(shop: shop, topic: kind);
+    switch (kind) {
+      case CopilotIntentKind.whyStop:
+        return _whyStop(facts, memory);
+      case CopilotIntentKind.whatToSay:
+        return _whatToSay(facts, memory);
+      case CopilotIntentKind.visitBrief:
+        return _visitBrief(facts, memory);
+      case CopilotIntentKind.usualOrderDay:
+        return _usualOrderDay(facts, memory);
+      default:
+        return _lastOrder(facts, memory);
+    }
+  }
+
+  CopilotAnswer _whyStop(ShopFacts facts, ScoutMemory memory) {
+    final String name = facts.shop.name;
+    final AssignedRouteStop? stop = facts.stop;
+    if (stop == null) {
+      return CopilotAnswer(
+        '$name is not on your route.',
+        chips: _afterShopChips(CopilotIntentKind.whyStop),
+        remember: memory,
+      );
+    }
+    final DateTime? date = facts.stopDay?.date;
+    final String day = facts.stopIsToday
+        ? 'today'
+        : date != null
+        ? 'on ${DateFormat('EEEE d MMM').format(date)}'
+        : 'this week';
+    final List<String> reason = plainStopReasonParts(stop.priorityReason);
     return CopilotAnswer(
-      when == null
-          ? 'Last order for $retailer.'
-          : 'Last order for $retailer was on '
-                '${DateFormat('d MMM y').format(when)}.',
+      reason.isEmpty
+          ? '$name is on your route $day. No reason is saved for this stop.'
+          : '$name is on your route $day for this reason.',
+      details: reason,
+      open: CopilotDestination.route,
+      openLabel: 'Open route',
+      chips: _afterShopChips(CopilotIntentKind.whyStop),
+      remember: memory,
+    );
+  }
+
+  CopilotAnswer _whatToSay(ShopFacts facts, ScoutMemory memory) {
+    final String name = facts.shop.name;
+    final VisitBrief? brief = facts.brief;
+    if (brief == null) {
+      return CopilotAnswer(
+        _notFound(CopilotIntentKind.whatToSay, name),
+        chips: _afterShopChips(CopilotIntentKind.whatToSay),
+        remember: memory,
+      );
+    }
+    final List<VisitFocusItem> focus = brief.fieldFocusItems;
+    if (focus.isEmpty) {
+      return CopilotAnswer(
+        'There is no special point to raise at $name.',
+        details: _noFocusLines(brief),
+        chips: _afterShopChips(CopilotIntentKind.whatToSay),
+        remember: memory,
+      );
+    }
+    return CopilotAnswer(
+      focus.length == 1
+          ? 'At $name, talk about this point.'
+          : 'At $name, talk about these points.',
       details: <String>[
-        for (final Object? raw in items.take(5))
-          if (raw is Map) _itemLine(raw),
-        if (items.length > 5) 'and ${items.length - 5} more',
-        if (total > 0) 'Total RM ${total.toStringAsFixed(2)}',
-        'Status: ${resolveMobileOrderStatus(match)}',
+        for (final VisitFocusItem item in focus.take(3)) ...<String>[
+          _focusLine(item),
+          for (final String question in item.questions) 'Ask: $question',
+          if (item.action.isNotEmpty) 'Next: ${item.action}',
+        ],
+      ],
+      chips: _afterShopChips(CopilotIntentKind.whatToSay),
+      remember: memory,
+    );
+  }
+
+  static List<String> _noFocusLines(VisitBrief brief) => <String>[
+    if (brief.hasNoPriorityIssues) ...<String>[
+      brief.noPriorityHeadline,
+      brief.noPriorityBody,
+    ] else
+      'No focus items in this brief.',
+  ];
+
+  CopilotAnswer _visitBrief(ShopFacts facts, ScoutMemory memory) {
+    final String name = facts.shop.name;
+    final VisitBrief? brief = facts.brief;
+    if (brief == null) {
+      return CopilotAnswer(
+        _notFound(CopilotIntentKind.visitBrief, name),
+        chips: kCopilotStartChips,
+        remember: memory,
+      );
+    }
+    final List<VisitFocusItem> focus = brief.fieldFocusItems;
+    final ({String freshness, List<String> reorders}) stored = scoutBriefFacts(
+      brief,
+      lastOrder: facts.lastOrder,
+      now: DateTime.now(),
+    );
+    return CopilotAnswer(
+      'Visit brief for ${brief.retailerName}',
+      details: <String>[
+        if (stored.freshness.isNotEmpty) stored.freshness,
+        if (focus.isEmpty)
+          ..._noFocusLines(brief)
+        else
+          for (final VisitFocusItem item in focus.take(3))
+            '${item.title}: ${item.signal}${item.action.isEmpty ? '' : ' Next: ${item.action}'}',
+        ...stored.reorders,
+      ],
+      chips: const <String>[
+        'What should I say there?',
+        'What did they order last time?',
+        'What is my next stop?',
+      ],
+      remember: memory,
+    );
+  }
+
+  CopilotAnswer _usualOrderDay(ShopFacts facts, ScoutMemory memory) {
+    final String name = facts.shop.name;
+    final VisitBrief? brief = facts.brief;
+    final String? day = brief == null
+        ? null
+        : scoutUsualOrderDay(brief.usualOrderWeekday);
+    return CopilotAnswer(
+      day == null
+          ? 'I do not have a usual order day for $name yet.'
+          : '$name usually orders on $day.',
+      chips: _afterShopChips(CopilotIntentKind.usualOrderDay),
+      remember: memory,
+    );
+  }
+
+  CopilotAnswer _lastOrder(ShopFacts facts, ScoutMemory memory) {
+    final LastOrder? match = facts.lastOrder;
+    if (match == null) {
+      return CopilotAnswer(
+        _notFound(CopilotIntentKind.lastOrder, facts.shop.name),
+        chips: kCopilotStartChips,
+        remember: memory,
+      );
+    }
+    final String retailer = match.retailerName.isEmpty
+        ? facts.shop.name
+        : match.retailerName;
+    final DateTime when = match.orderedAt.toLocal();
+    return CopilotAnswer(
+      'Last order for $retailer was on '
+      '${DateFormat('d MMM y').format(when)}, '
+      '${scoutDaysAgo(when, DateTime.now())}.',
+      details: <String>[
+        ...scoutLastOrderLines(match),
+        if (match.totalRm > 0) 'Total RM ${match.totalRm.toStringAsFixed(2)}',
+        if (match.status.isNotEmpty) 'Status: ${match.status}',
       ],
       open: CopilotDestination.orders,
       openLabel: 'Open orders',
@@ -440,73 +745,34 @@ class MobileCopilotAnswers {
         if (!kBasicEdition) 'Show the visit brief for $retailer',
         'Open my orders',
       ],
+      remember: memory,
     );
   }
 
-  static String _itemLine(Map<Object?, Object?> item) {
-    final Object? name = item['name'] ?? item['productName'];
-    final int qty =
-        (dataNumberOrNull(
-                  item['qty'] ?? item['orderQty'] ?? item['quantity'],
-                ) ??
-                0)
-            .toInt();
-    return '${name ?? 'Item'}: '
-        '${quantityLabel(qty, uomOf(Map<String, dynamic>.from(item)))}';
-  }
-
-  static DateTime? _when(Object? value) {
-    if (value is Timestamp) return value.toDate();
-    if (value is DateTime) return value;
-    return DateTime.tryParse(value?.toString() ?? '');
-  }
-
-  Future<CopilotAnswer> _visitBrief(String requested) async {
-    if (kBasicEdition) {
+  Future<CopilotAnswer> _followUps() async {
+    final List<FollowUpPromise> open = await FollowUpService(
+      firestore: _db,
+    ).openPromises(user.uid, online: _isOnline());
+    if (open.isEmpty) {
       return const CopilotAnswer(
-        kNotInEditionMessage,
+        'You have no open follow-ups.',
         chips: kCopilotStartChips,
       );
     }
-    final List<VisitBrief> briefs = await _firstNonEmpty(
-      _briefs.watchAssignedBriefs(user),
-    );
-    final String wanted = normaliseCopilotText(requested);
-    VisitBrief? match;
-    for (final VisitBrief brief in briefs) {
-      final String name = normaliseCopilotText(brief.retailerName);
-      if (name == wanted) {
-        match = brief;
-        break;
-      }
-      if (match == null &&
-          wanted.length >= 3 &&
-          (name.contains(wanted) || wanted.contains(name))) {
-        match = brief;
-      }
-    }
-    if (match == null) {
-      return CopilotAnswer(
-        'I could not find a visit brief for "$requested" among your assigned retailers.',
-        chips: kCopilotStartChips,
-      );
-    }
-    final List<VisitFocusItem> focus = match.fieldFocusItems;
+    final DateTime now = DateTime.now();
     return CopilotAnswer(
-      'Visit brief for ${match.retailerName}',
-      details: focus.isEmpty
-          ? <String>[
-              if (match.hasNoPriorityIssues) ...<String>[
-                match.noPriorityHeadline,
-                match.noPriorityBody,
-              ] else
-                'No focus items in this brief.',
-            ]
-          : <String>[
-              for (final VisitFocusItem item in focus.take(3))
-                '${item.title}: ${item.signal}${item.action.isEmpty ? '' : ' Next: ${item.action}'}',
-            ],
+      open.length == 1
+          ? 'You have 1 open follow-up.'
+          : 'You have ${open.length} open follow-ups.',
+      details: <String>[
+        for (final FollowUpPromise one in open.take(8))
+          '${scoutDayMonth(one.date, now)}: ${one.shop}'
+              '${one.about.isEmpty ? '' : ', ${one.about}'}',
+        if (open.length > 8) 'and ${open.length - 8} more',
+      ],
       chips: const <String>['What is my next stop?', 'Open my route'],
     );
   }
+
+  static DateTime? _when(Object? value) => scoutWhen(value);
 }

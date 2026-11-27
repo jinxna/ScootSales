@@ -71,7 +71,7 @@ void main() {
     ];
     const Map<String, bool> normalAccessByAdminRole = <String, bool>{
       'system_health': false,
-      'trust_impact': false,
+      'trust_impact': true,
     };
 
     for (final String key in hiddenForTesting) {

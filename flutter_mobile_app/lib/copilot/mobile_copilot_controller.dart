@@ -83,6 +83,7 @@ class MobileCopilotController extends ChangeNotifier {
   final List<CopilotMessage> _messages = <CopilotMessage>[];
   List<String> _followUps = const <String>[];
   String _firstRetailer = '';
+  ScoutMemory _memory = const ScoutMemory();
   bool _retailerLoaded = false;
   bool _busy = false;
   bool _listening = false;
@@ -160,8 +161,7 @@ class MobileCopilotController extends ChangeNotifier {
       if (_user?.uid != user.uid) return;
       _firstRetailer = name;
       notifyListeners();
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   void attachScreen(CopilotScreenContext? screen) {
@@ -201,6 +201,7 @@ class MobileCopilotController extends ChangeNotifier {
     _cancelPendingCommands();
     _speech?.cancel();
     _messages.clear();
+    _memory = const ScoutMemory();
     _followUps = const <String>[];
     _busy = false;
     _endListening();
@@ -244,7 +245,12 @@ class MobileCopilotController extends ChangeNotifier {
     _server ??= MobileCopilotServer.fromEnvironment();
     CopilotIntent? intent = interpretCopilotText(text);
     CopilotServerFailure? failure;
-    if (intent.kind == CopilotIntentKind.unknown && _server != null) {
+    if (intent.kind == CopilotIntentKind.unknown &&
+        _server != null &&
+        !online) {
+      intent = null;
+      failure = CopilotServerFailure.offline;
+    } else if (intent.kind == CopilotIntentKind.unknown && _server != null) {
       final CopilotServerResult result = await _server!.interpret(text);
       intent = result.intent;
       failure = result.failure == CopilotServerFailure.unreachable && !online
@@ -259,10 +265,12 @@ class MobileCopilotController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    final CopilotAnswer answer = await _answers!.answer(intent);
+    final CopilotIntent resolved = resolveCopilotIntent(intent, _memory);
+    final CopilotAnswer answer = await _answers!.answer(resolved);
     if (generation != _generation) return;
+    _memory = answer.remember ?? _memory;
     _messages.add(CopilotMessage.answer(answer));
-    _followUps = _followUpsFor(intent, answer);
+    _followUps = _followUpsFor(resolved, answer);
     _busy = false;
     notifyListeners();
     final CopilotDestination? destination = answer.open;
@@ -349,8 +357,7 @@ class MobileCopilotController extends ChangeNotifier {
     try {
       await Future<void>.delayed(Duration.zero);
       await navigate(action, outcome);
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   Future<void> confirmCommand(CopilotPendingCommand command) async {
@@ -454,6 +461,13 @@ class MobileCopilotController extends ChangeNotifier {
           'What is my next stop?',
           'Open my planner',
         ];
+      case CopilotIntentKind.whyStop:
+      case CopilotIntentKind.whatToSay:
+      case CopilotIntentKind.usualOrderDay:
+      case CopilotIntentKind.followUp:
+      case CopilotIntentKind.whichShop:
+        return answer.chips.isEmpty ? kCopilotBasicFollowUps : answer.chips;
+      case CopilotIntentKind.followUps:
       case CopilotIntentKind.lastOrder:
       case CopilotIntentKind.sales:
         return const <String>[

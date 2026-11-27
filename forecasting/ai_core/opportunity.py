@@ -13,7 +13,7 @@ from .forecast_contract import (
     observed_reference_units,
 )
 
-EXPECTED_ORDER_VALUE_VERSION = "expected-order-value/2.1.0"
+EXPECTED_ORDER_VALUE_VERSION = "expected-order-value/2.1.1"
 
 PLANNING_HORIZON_DAYS = 7.0
 

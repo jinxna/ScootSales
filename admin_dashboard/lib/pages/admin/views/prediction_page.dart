@@ -11,6 +11,7 @@ import '../../../services/forecasting_api_service.dart';
 import '../../../services/forecast_snapshot_cache.dart';
 import '../../../services/weekly_ai_report_service.dart';
 import '../../../theme/dso_theme.dart';
+import '../../../utils/count_label.dart';
 import '../../../utils/forecast_catalogue_provenance.dart';
 import '../../../utils/local_service_guard.dart';
 import '../../../utils/order_data_utils.dart';
@@ -1629,9 +1630,10 @@ class _PredictionPageState extends State<PredictionPage>
               ),
               const SizedBox(height: 10),
               Text(
-                'Measured from weekly evaluation records, which may cover an earlier '
-                'catalogue than the current operational forecast rows above. Across '
-                '${rollup.evaluatedForecastCount} evaluated forecast(s).',
+                'Latest evaluated week only'
+                '${latestWeek == null ? '' : ', the week of ${readableForecastDate(latestWeek)}'}: '
+                '${countLabel(rollup.evaluatedForecastCount, 'evaluated forecast')}. '
+                'Trust & Impact combines every stored week, so its number differs.',
                 style: TextStyle(
                   fontSize: 11,
                   color: scheme.onSurfaceVariant,
@@ -1694,12 +1696,13 @@ class _PredictionPageState extends State<PredictionPage>
           Icons.table_rows_outlined,
           const Color(0xFF2563EB),
         ),
-        _metricCard(
-          'Models in use',
-          '${summary.modelCount}',
-          Icons.show_chart_outlined,
-          const Color(0xFF9333EA),
-        ),
+        if (summary.modelCount > 0)
+          _metricCard(
+            'Models in use',
+            '${summary.modelCount}',
+            Icons.show_chart_outlined,
+            const Color(0xFF9333EA),
+          ),
         _metricCard(
           'With an interval',
           '${summary.intervalCount}',
@@ -1779,7 +1782,8 @@ class _PredictionPageState extends State<PredictionPage>
       if (_historyWeeks != null)
         'Based on the last $_historyWeeks weeks'
             '${_windowEvaluated == false ? ' (Not evaluated)' : ''}',
-      if (_setGeneratedAt.isNotEmpty) 'run $_setGeneratedAt',
+      if (_setGeneratedAt.isNotEmpty)
+        'made ${readableForecastTimeText(_setGeneratedAt)}',
     ];
     return parts.join(' \u00b7 ');
   }
@@ -1985,7 +1989,9 @@ class _PredictionPageState extends State<PredictionPage>
                       ),
                       Expanded(
                         child: Text(
-                          hasForecast ? '$point units' : '—',
+                          hasForecast
+                              ? '${forecastUnitsLabel(point)} units'
+                              : '—',
                           style: TextStyle(
                             fontSize: 13.5,
                             fontWeight: FontWeight.w800,
@@ -1997,7 +2003,8 @@ class _PredictionPageState extends State<PredictionPage>
                         child: Text(
                           lower == null || upper == null
                               ? '—'
-                              : '$lower–$upper',
+                              : '${forecastUnitsLabel(lower)}–'
+                                    '${forecastUnitsLabel(upper)}',
                           style: TextStyle(
                             fontSize: 12.5,
                             color: scheme.onSurfaceVariant,

@@ -6,8 +6,11 @@ import 'package:scoot_design/scoot_design.dart';
 
 import '../../../../models/route_plan.dart';
 import '../../../../theme/dso_colors.dart';
+import '../../../../utils/count_label.dart';
 import '../../../../utils/retailer_readiness.dart';
 import 'route_day_map.dart';
+import 'route_plan_checks.dart';
+import 'route_road_refresh.dart';
 
 const List<Color> _dayColors = <Color>[
   Color(0xFF2F9E6E),
@@ -62,10 +65,22 @@ const List<String> _months = <String>[
   'Dec',
 ];
 
-int _travelMinutes(RouteDay day) => day.stops.fold<int>(
-  0,
-  (int sum, RouteStop s) => sum + s.travelMinutesFromPrevious,
-);
+class RouteOrderHint {
+  const RouteOrderHint({
+    required this.extraMinutes,
+    required this.straightLine,
+    required this.exact,
+  });
+
+  final int extraMinutes;
+  final bool straightLine;
+  final bool exact;
+
+  String get message =>
+      'This order takes $extraMinutes minute${extraMinutes == 1 ? '' : 's'} '
+      'more than ${exact ? 'the shortest order' : 'a shorter order found'}.'
+      '${straightLine ? ' Estimated from straight-line distance.' : ''}';
+}
 
 class RoutePlanWorkspace extends StatefulWidget {
   const RoutePlanWorkspace({
@@ -79,10 +94,14 @@ class RoutePlanWorkspace extends StatefulWidget {
     required this.segmentBadgeFor,
     required this.onRemoveStop,
     required this.onReorderStop,
-    this.roadNotes = const <String>[],
-    this.onDismissRoadNotes,
-    this.roadRoutingConfigured = false,
-    this.onRefreshRoadRoute,
+    this.orderHint,
+    this.onUseShortestOrder,
+    this.header,
+    this.onMoveStop,
+    this.roadStateFor,
+    this.lastRoadDayFor,
+    this.onRetryRoad,
+    this.onOpenBranches,
   });
 
   final RoutePlan plan;
@@ -95,13 +114,15 @@ class RoutePlanWorkspace extends StatefulWidget {
   final Widget? Function(String retailerId) segmentBadgeFor;
   final void Function(int dayIndex, RouteStop stop) onRemoveStop;
   final void Function(int dayIndex, int oldIndex, int newIndex) onReorderStop;
+  final RouteOrderHint? orderHint;
+  final void Function(int dayIndex)? onUseShortestOrder;
+  final Widget? header;
+  final void Function(int dayIndex, RouteStop stop, int toDayIndex)? onMoveStop;
 
-  final List<String> roadNotes;
-  final VoidCallback? onDismissRoadNotes;
-
-  final bool roadRoutingConfigured;
-
-  final Future<String?> Function(int dayIndex)? onRefreshRoadRoute;
+  final RouteRoadState Function(String dayId)? roadStateFor;
+  final RouteDay? Function(String dayId)? lastRoadDayFor;
+  final void Function(int dayIndex)? onRetryRoad;
+  final VoidCallback? onOpenBranches;
 
   @override
   State<RoutePlanWorkspace> createState() => _RoutePlanWorkspaceState();
@@ -110,30 +131,18 @@ class RoutePlanWorkspace extends StatefulWidget {
 class _RoutePlanWorkspaceState extends State<RoutePlanWorkspace> {
   final ValueNotifier<int?> _hovered = ValueNotifier<int?>(null);
   int? _focused;
-  final Set<String> _refreshing = <String>{};
-  final Map<String, String> _refreshErrors = <String, String>{};
-  final Map<String, DateTime> _lastRefresh = <String, DateTime>{};
 
-  Future<void> _refreshRoad(int dayIndex, RouteDay day) async {
-    final Future<String?> Function(int)? refresh = widget.onRefreshRoadRoute;
-    if (refresh == null || _refreshing.contains(day.dayId)) return;
-    final DateTime now = DateTime.now();
-    final DateTime? last = _lastRefresh[day.dayId];
-    if (last != null && now.difference(last) < const Duration(seconds: 1)) {
-      return;
-    }
-    _lastRefresh[day.dayId] = now;
-    setState(() {
-      _refreshing.add(day.dayId);
-      _refreshErrors.remove(day.dayId);
-    });
-    final String? error = await refresh(dayIndex);
-    if (!mounted) return;
-    setState(() {
-      _refreshing.remove(day.dayId);
-      if (error != null) _refreshErrors[day.dayId] = error;
-    });
-  }
+  RouteRoadState _roadState(RouteDay day) =>
+      widget.roadStateFor?.call(day.dayId) ?? RouteRoadState.settled;
+
+  RouteDay _shown(RouteDay day) =>
+      widget.lastRoadDayFor?.call(day.dayId) ?? day;
+
+  bool _estimate(RouteDay day) => routeDayIsEstimate(
+    day,
+    start: widget.plan.startPoint,
+    state: _roadState(day),
+  );
 
   @override
   void didUpdateWidget(RoutePlanWorkspace old) {
@@ -154,36 +163,53 @@ class _RoutePlanWorkspaceState extends State<RoutePlanWorkspace> {
     if (_hovered.value != seq) _hovered.value = seq;
   }
 
-  _RoadRefreshState? _roadRefreshState(RouteDay day, int dayIndex) {
-    if (widget.onRefreshRoadRoute == null) return null;
-    return _RoadRefreshState(
-      locked: widget.plan.status == 'published',
-      configured: widget.roadRoutingConfigured,
-      busy: _refreshing.contains(day.dayId),
-      error: _refreshErrors[day.dayId],
-      onRefresh: () => _refreshRoad(dayIndex, day),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final RoutePlan plan = widget.plan;
     final int dayIndex = widget.selectedDay.clamp(0, plan.days.length - 1);
     final RouteDay day = plan.days[dayIndex];
+    final List<RouteDay> shownDays = <RouteDay>[
+      for (final RouteDay d in plan.days) _shown(d),
+    ];
+    final bool updating = plan.days.any(
+      (RouteDay d) => _roadState(d) == RouteRoadState.updating,
+    );
+    final bool mixed =
+        !updating &&
+        plan.days.any(_estimate) &&
+        plan.days.any(routeDayHasRoadMetrics);
     final double screenH = MediaQuery.sizeOf(context).height;
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints box) {
         final double w = box.maxWidth;
-        final bool wide = w >= 1120;
-        final bool medium = w >= 720 && !wide;
-        final double bodyH = math.max(520, screenH - 440);
+        final bool twoPane = w >= 900;
+        final double mapH = math.min(720, math.max(440, screenH - 160));
+        final int capacity = math.max(
+          math.max(1, widget.maxPerDay),
+          shownDays.fold<int>(
+            0,
+            (int m, RouteDay d) => math.max(m, d.stops.length),
+          ),
+        );
 
         final Widget timeline = _Timeline(
           key: ValueKey<String>('timeline_${plan.id}_$dayIndex'),
           day: day,
+          start: plan.startPoint,
+          legacy: plan.predatesStartPoints,
+          orderHint: widget.editable ? widget.orderHint : null,
+          onUseShortestOrder: widget.onUseShortestOrder == null
+              ? null
+              : () => widget.onUseShortestOrder!(dayIndex),
           dayColor: routeDayColor(dayIndex),
           editable: widget.editable,
-          roadRefresh: _roadRefreshState(day, dayIndex),
+          shownDay: _shown(day),
+          roadState: _roadState(day),
+          estimate: _estimate(day),
+          onRetryRoad: widget.onRetryRoad == null
+              ? null
+              : () => widget.onRetryRoad!(dayIndex),
+          onOpenBranches: widget.editable ? widget.onOpenBranches : null,
           hovered: _hovered,
           onHover: _setHover,
           onFocus: (int seq) => setState(() => _focused = seq),
@@ -191,81 +217,92 @@ class _RoutePlanWorkspaceState extends State<RoutePlanWorkspace> {
           segmentBadgeFor: widget.segmentBadgeFor,
           onRemove: (RouteStop s) => widget.onRemoveStop(dayIndex, s),
           onReorder: (int a, int b) => widget.onReorderStop(dayIndex, a, b),
+          moveTargets: <(int, String)>[
+            for (int i = 0; i < plan.days.length; i++)
+              if (i != dayIndex) (i, plan.days[i].dayLabel),
+          ],
+          onMove: widget.onMoveStop == null
+              ? null
+              : (RouteStop s, int toDay) =>
+                    widget.onMoveStop!(dayIndex, s, toDay),
         );
         final Widget map = RouteDayMapView(
           key: ValueKey<String>(
             'map_${plan.salesmanUid}_${day.dayId}_${day.stops.length}',
           ),
           day: day,
+          start: plan.startPoint,
           color: routeDayColor(dayIndex),
           hoveredSequence: _hovered,
           onHover: _setHover,
           onStopTap: (int seq) => setState(() => _focused = seq),
           focusedSequence: _focused,
         );
-        final Widget rail = _DayRail(
-          plan: plan,
-          selected: dayIndex,
-          maxPerDay: widget.maxPerDay,
-          vertical: wide,
-          onSelect: widget.onSelectDay,
-        );
-
-        final Widget body;
-        if (wide) {
-          body = SizedBox(
-            height: bodyH,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                SizedBox(width: 216, child: rail),
-                const SizedBox(width: 12),
-                SizedBox(width: 400, child: timeline),
-                const SizedBox(width: 12),
-                Expanded(child: map),
-              ],
-            ),
-          );
-        } else if (medium) {
-          body = Column(
-            children: <Widget>[
-              rail,
-              const SizedBox(height: 12),
-              SizedBox(
-                height: bodyH,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    SizedBox(width: 340, child: timeline),
-                    const SizedBox(width: 12),
-                    Expanded(child: map),
-                  ],
-                ),
+        final Widget list = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            for (int i = 0; i < shownDays.length; i++) ...<Widget>[
+              if (i > 0) const SizedBox(height: 8),
+              _DayCard(
+                day: shownDays[i],
+                index: i,
+                selected: i == dayIndex,
+                capacity: capacity,
+                onTap: () => widget.onSelectDay(i),
               ),
+              if (i == dayIndex) ...<Widget>[
+                const SizedBox(height: 8),
+                if (!twoPane) ...<Widget>[
+                  SizedBox(height: 300, child: map),
+                  const SizedBox(height: 8),
+                ],
+                timeline,
+              ],
             ],
-          );
-        } else {
-          body = Column(
-            children: <Widget>[
-              rail,
-              const SizedBox(height: 12),
-              SizedBox(height: 320, child: map),
-              const SizedBox(height: 12),
-              SizedBox(height: 520, child: timeline),
-            ],
-          );
-        }
+          ],
+        );
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            if (widget.roadNotes.isNotEmpty)
-              _RoadNotesNotice(
-                notes: widget.roadNotes,
-                onDismiss: widget.onDismissRoadNotes,
+            if (widget.header != null) ...<Widget>[
+              widget.header!,
+              const SizedBox(height: 12),
+            ],
+            _KpiStrip(
+              plan: plan.copyWith(days: shownDays),
+              updating: updating,
+              mixed: mixed,
+            ),
+            if (plan.status.toLowerCase() == 'draft') ...<Widget>[
+              const SizedBox(height: 12),
+              _ChecksBox(
+                checks: routePlanChecks(
+                  plan,
+                  maxPerDay: widget.maxPerDay,
+                  coordinateStatusFor: widget.coordinateStatusFor,
+                  roadStateFor: (String id) =>
+                      widget.roadStateFor?.call(id) ?? RouteRoadState.settled,
+                ),
+                dayLabels: <String>[
+                  for (final RouteDay d in plan.days) d.dayLabel,
+                ],
+                onSelectDay: widget.onSelectDay,
               ),
-            _KpiStrip(plan: plan),
+            ],
             const SizedBox(height: 12),
-            body,
+            if (twoPane)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  SizedBox(width: (w * 0.4).clamp(380.0, 560.0), child: list),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(height: mapH, child: map),
+                  ),
+                ],
+              )
+            else
+              list,
           ],
         );
       },
@@ -274,8 +311,14 @@ class _RoutePlanWorkspaceState extends State<RoutePlanWorkspace> {
 }
 
 class _KpiStrip extends StatelessWidget {
-  const _KpiStrip({required this.plan});
+  const _KpiStrip({
+    required this.plan,
+    required this.updating,
+    required this.mixed,
+  });
   final RoutePlan plan;
+  final bool updating;
+  final bool mixed;
 
   @override
   Widget build(BuildContext context) {
@@ -289,7 +332,7 @@ class _KpiStrip extends StatelessWidget {
     );
     final int travel = plan.days.fold<int>(
       0,
-      (int sum, RouteDay d) => sum + _travelMinutes(d),
+      (int sum, RouteDay d) => sum + d.travelMinutes,
     );
     final List<(String, String, IconData)> items = <(String, String, IconData)>[
       ('Stops', '${plan.totalStops}', ScootIcons.store),
@@ -309,57 +352,77 @@ class _KpiStrip extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: dso.hairline),
       ),
-      child: Wrap(
-        alignment: WrapAlignment.spaceEvenly,
-        runSpacing: 10,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          for (final (String, String, IconData) k in items)
-            Semantics(
-              label: '${k.$1}: ${k.$2}',
-              excludeSemantics: true,
-              child: SizedBox(
-                width: 168,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    const SizedBox(width: 12),
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: dso.brandSurface,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(k.$3, size: 18, color: dso.accentText),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            k.$2,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 17,
-                              height: 1.15,
-                              fontWeight: FontWeight.w800,
-                              color: dso.ink,
-                              fontFeatures: const <FontFeature>[
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
+          Wrap(
+            alignment: WrapAlignment.spaceEvenly,
+            runSpacing: 10,
+            children: <Widget>[
+              for (final (String, String, IconData) k in items)
+                Semantics(
+                  label: '${k.$1}: ${k.$2}',
+                  excludeSemantics: true,
+                  child: SizedBox(
+                    width: 168,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        const SizedBox(width: 12),
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: dso.brandSurface,
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          Text(
-                            k.$1,
-                            style: TextStyle(fontSize: 11.5, color: dso.muted),
+                          child: Icon(k.$3, size: 18, color: dso.accentText),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                k.$2,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  height: 1.15,
+                                  fontWeight: FontWeight.w800,
+                                  color: dso.ink,
+                                  fontFeatures: const <FontFeature>[
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                k.$1,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: dso.muted,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
+            ],
+          ),
+          if (updating || mixed)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Text(
+                updating
+                    ? 'Updating road distances…'
+                    : 'Some days are straight-line estimates.',
+                key: const ValueKey<String>('route_kpi_distance_note'),
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11.5, color: dso.muted),
               ),
             ),
         ],
@@ -368,57 +431,113 @@ class _KpiStrip extends StatelessWidget {
   }
 }
 
-class _DayRail extends StatelessWidget {
-  const _DayRail({
-    required this.plan,
-    required this.selected,
-    required this.maxPerDay,
-    required this.vertical,
-    required this.onSelect,
+class _ChecksBox extends StatelessWidget {
+  const _ChecksBox({
+    required this.checks,
+    required this.dayLabels,
+    required this.onSelectDay,
   });
 
-  final RoutePlan plan;
-  final int selected;
-  final int maxPerDay;
-  final bool vertical;
-  final ValueChanged<int> onSelect;
+  final List<RouteCheck> checks;
+  final List<String> dayLabels;
+  final ValueChanged<int> onSelectDay;
 
   @override
   Widget build(BuildContext context) {
-    final int capacity = math.max(
-      math.max(1, maxPerDay),
-      plan.days.fold<int>(
-        0,
-        (int m, RouteDay d) => math.max(m, d.stops.length),
+    final DsoColors dso = context.dso;
+    final bool clear = checks.isEmpty;
+    return Container(
+      key: const ValueKey<String>('route_checks_box'),
+      decoration: BoxDecoration(
+        color: dso.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: dso.hairline),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(color: clear ? dso.accent : dso.warning, width: 4),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Semantics(
+              header: true,
+              child: Text(
+                clear
+                    ? 'Things to check'
+                    : 'Things to check (${checks.length})',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: dso.ink,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            if (clear)
+              _CheckLine(
+                icon: Icons.check_circle_outline,
+                color: dso.accentText,
+                text: 'Nothing to check.',
+              )
+            else
+              for (final RouteCheck check in checks)
+                _CheckLine(
+                  icon: Icons.error_outline,
+                  color: dso.warningText,
+                  text: check.message,
+                  action: check.dayIndex == null
+                      ? null
+                      : TextButton(
+                          onPressed: () => onSelectDay(check.dayIndex!),
+                          child: Text('Show ${dayLabels[check.dayIndex!]}'),
+                        ),
+                ),
+          ],
+        ),
       ),
     );
-    final List<Widget> cards = <Widget>[
-      for (int i = 0; i < plan.days.length; i++)
-        _DayCard(
-          day: plan.days[i],
-          index: i,
-          selected: selected == i,
-          capacity: capacity,
-          compact: !vertical,
-          onTap: () => onSelect(i),
-        ),
-    ];
-    if (vertical) {
-      return ListView.separated(
-        padding: EdgeInsets.zero,
-        itemCount: cards.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 8),
-        itemBuilder: (_, int i) => cards[i],
-      );
-    }
-    return SizedBox(
-      height: 92,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.zero,
-        itemCount: cards.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (_, int i) => SizedBox(width: 132, child: cards[i]),
+  }
+}
+
+class _CheckLine extends StatelessWidget {
+  const _CheckLine({
+    required this.icon,
+    required this.color,
+    required this.text,
+    this.action,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String text;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final DsoColors dso = context.dso;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Text(
+                text,
+                style: TextStyle(fontSize: 13, height: 1.35, color: dso.body),
+              ),
+            ),
+          ),
+          if (action != null) ...<Widget>[const SizedBox(width: 8), action!],
+        ],
       ),
     );
   }
@@ -430,7 +549,6 @@ class _DayCard extends StatelessWidget {
     required this.index,
     required this.selected,
     required this.capacity,
-    required this.compact,
     required this.onTap,
   });
 
@@ -438,7 +556,6 @@ class _DayCard extends StatelessWidget {
   final int index;
   final bool selected;
   final int capacity;
-  final bool compact;
   final VoidCallback onTap;
 
   @override
@@ -451,12 +568,12 @@ class _DayCard extends StatelessWidget {
     final String detail = free
         ? 'Free day'
         : '${day.totalDistanceKm.toStringAsFixed(1)} km · '
-              '${routeFormatDuration(_travelMinutes(day))}';
+              '${routeFormatDuration(day.travelMinutes)}';
     return Semantics(
       button: true,
       selected: selected,
       label:
-          '${day.dayLabel} $date, $stops stops, ${day.totalDistanceKm.toStringAsFixed(1)} kilometres',
+          '${day.dayLabel} $date, ${countLabel(stops, 'stop')}, ${day.totalDistanceKm.toStringAsFixed(1)} kilometres',
       excludeSemantics: true,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
@@ -475,7 +592,7 @@ class _DayCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             onTap: onTap,
             child: Padding(
-              padding: EdgeInsets.fromLTRB(12, compact ? 8 : 10, 12, 10),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -500,11 +617,14 @@ class _DayCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        date,
-                        style: TextStyle(fontSize: 11.5, color: dso.muted),
+                      Expanded(
+                        child: Text(
+                          date,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 11.5, color: dso.muted),
+                        ),
                       ),
-                      const Spacer(),
                       Text(
                         '$stops',
                         style: TextStyle(
@@ -553,9 +673,17 @@ class _Timeline extends StatelessWidget {
   const _Timeline({
     super.key,
     required this.day,
+    required this.start,
+    required this.legacy,
+    required this.orderHint,
+    required this.onUseShortestOrder,
     required this.dayColor,
     required this.editable,
-    required this.roadRefresh,
+    required this.shownDay,
+    required this.roadState,
+    required this.estimate,
+    required this.onRetryRoad,
+    required this.onOpenBranches,
     required this.hovered,
     required this.onHover,
     required this.onFocus,
@@ -563,12 +691,24 @@ class _Timeline extends StatelessWidget {
     required this.segmentBadgeFor,
     required this.onRemove,
     required this.onReorder,
+    required this.moveTargets,
+    required this.onMove,
   });
 
+  final List<(int, String)> moveTargets;
+  final void Function(RouteStop stop, int toDayIndex)? onMove;
   final RouteDay day;
+  final RouteStartPoint? start;
+  final bool legacy;
+  final RouteOrderHint? orderHint;
+  final VoidCallback? onUseShortestOrder;
   final Color dayColor;
   final bool editable;
-  final _RoadRefreshState? roadRefresh;
+  final RouteDay shownDay;
+  final RouteRoadState roadState;
+  final bool estimate;
+  final VoidCallback? onRetryRoad;
+  final VoidCallback? onOpenBranches;
   final ValueListenable<int?> hovered;
   final ValueChanged<int?> onHover;
   final ValueChanged<int> onFocus;
@@ -581,6 +721,11 @@ class _Timeline extends StatelessWidget {
   Widget build(BuildContext context) {
     final DsoColors dso = context.dso;
     final List<RouteStop> stops = day.stops;
+    final bool updating = roadState == RouteRoadState.updating;
+    final String totals =
+        '${shownDay.totalDistanceKm.toStringAsFixed(1)} km · '
+        '${routeFormatDuration(shownDay.travelMinutes)} travel';
+    final bool lateReturn = routeDayEndsLate(day, start: start);
     int unusable = 0;
     int review = 0;
     for (final RouteStop s in stops) {
@@ -623,9 +768,23 @@ class _Timeline extends StatelessWidget {
                       ),
                       if (stops.isNotEmpty)
                         Text(
-                          '${stops.first.arrival} start · ${stops.last.departure} finish · '
-                          '${isProviderRoadGeometry(day.geometrySource) ? 'Road distances' : 'Estimated distances'}',
-                          style: TextStyle(fontSize: 11.5, color: dso.muted),
+                          updating
+                              ? '$totals · Updating road distances\u2026'
+                              : totals,
+                          key: const ValueKey<String>('route_day_totals'),
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: updating ? dso.subtle : dso.muted,
+                          ),
+                        ),
+                      if (lateReturn)
+                        Text(
+                          'Back after 18:00',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: dso.warningText,
+                          ),
                         ),
                     ],
                   ),
@@ -658,116 +817,130 @@ class _Timeline extends StatelessWidget {
                   '$review stop${review == 1 ? ' has' : 's have'} unverified coordinates. '
                   'Verify them in Coordinate Review for confident routing.',
             ),
-          if (roadRefresh != null && stops.isNotEmpty)
-            _RoadRefreshBar(state: roadRefresh!),
+          if (legacy)
+            Padding(
+              key: const ValueKey<String>('route_legacy_note'),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'This plan was made before route start points. '
+                'Regenerate it to use the start point.',
+                style: TextStyle(fontSize: 11.5, color: dso.muted),
+              ),
+            ),
+          if (orderHint != null && onUseShortestOrder != null)
+            _OrderHintBar(hint: orderHint!, onUseShortest: onUseShortestOrder!),
+          if (estimate && stops.isNotEmpty) _EstimateLine(onRetry: onRetryRoad),
+          if (start == null && stops.isNotEmpty)
+            _NoStartLine(onOpenBranches: onOpenBranches),
           Divider(height: 1, color: dso.hairline),
-          Expanded(
-            child: stops.isEmpty
-                ? const _DayEmpty()
-                : ReorderableListView.builder(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
-                    buildDefaultDragHandles: false,
-                    itemCount: stops.length,
-                    onReorder: (int oldIndex, int newIndex) {
-                      if (!editable) return;
-                      onReorder(oldIndex, newIndex);
-                    },
-                    proxyDecorator:
-                        (Widget child, int _, Animation<double> a) => Material(
-                          color: Colors.transparent,
-                          elevation: 6,
-                          borderRadius: BorderRadius.circular(14),
-                          child: child,
-                        ),
-                    itemBuilder: (BuildContext context, int i) {
-                      final RouteStop s = stops[i];
-                      return _StopTile(
-                        key: ValueKey<String>('stop_${s.retailerId}'),
-                        index: i,
-                        stop: s,
-                        showConnector: i > 0 || s.legDistanceKm > 0,
-                        first: i == 0,
-                        dayColor: dayColor,
-                        editable: editable,
-                        hovered: hovered,
-                        onHover: onHover,
-                        onFocus: onFocus,
-                        status: coordinateStatusFor(s),
-                        segmentBadge: segmentBadgeFor(s.retailerId),
-                        onRemove: () => onRemove(s),
-                      );
-                    },
-                  ),
-          ),
+          stops.isEmpty
+              ? const _DayEmpty()
+              : ReorderableListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+                  buildDefaultDragHandles: false,
+                  itemCount: stops.length,
+                  header: start == null
+                      ? null
+                      : _StartRow(start: start!, day: day, dayColor: dayColor),
+                  footer: start == null
+                      ? null
+                      : _ReturnLeg(start: start!, day: day, dayColor: dayColor),
+                  onReorder: (int oldIndex, int newIndex) {
+                    if (!editable) return;
+                    onReorder(oldIndex, newIndex);
+                  },
+                  proxyDecorator: (Widget child, int _, Animation<double> a) =>
+                      Material(
+                        color: Colors.transparent,
+                        elevation: 6,
+                        borderRadius: BorderRadius.circular(14),
+                        child: child,
+                      ),
+                  itemBuilder: (BuildContext context, int i) {
+                    final RouteStop s = stops[i];
+                    return _StopTile(
+                      key: ValueKey<String>('stop_${s.retailerId}'),
+                      index: i,
+                      stop: s,
+                      showConnector:
+                          i > 0 || start != null || s.legDistanceKm > 0,
+                      first: i == 0,
+                      firstLegLabel: start == null
+                          ? 'From the old route centre'
+                          : 'From ${start!.name}',
+                      dayColor: dayColor,
+                      editable: editable,
+                      hovered: hovered,
+                      onHover: onHover,
+                      onFocus: onFocus,
+                      status: coordinateStatusFor(s),
+                      segmentBadge: segmentBadgeFor(s.retailerId),
+                      onRemove: () => onRemove(s),
+                      moveTargets: moveTargets,
+                      onMove: onMove == null
+                          ? null
+                          : (int toDay) => onMove!(s, toDay),
+                    );
+                  },
+                ),
         ],
       ),
     );
   }
 }
 
-class _RoadRefreshState {
-  const _RoadRefreshState({
-    required this.locked,
-    required this.configured,
-    required this.busy,
-    required this.error,
-    required this.onRefresh,
-  });
+class _EstimateLine extends StatelessWidget {
+  const _EstimateLine({required this.onRetry});
 
-  final bool locked;
-  final bool configured;
-  final bool busy;
-  final String? error;
-  final VoidCallback onRefresh;
-}
-
-class _RoadRefreshBar extends StatelessWidget {
-  const _RoadRefreshBar({required this.state});
-  final _RoadRefreshState state;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
     final DsoColors dso = context.dso;
-    if (state.locked) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-        child: Text(
-          'Published plans are locked; regenerate as a new draft to get road routes',
-          style: TextStyle(fontSize: 11.5, color: dso.muted),
-        ),
-      );
-    }
-    final bool enabled = state.configured && !state.busy;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      key: const ValueKey<String>('route_estimate_line'),
+      padding: const EdgeInsets.fromLTRB(16, 0, 8, 6),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 4,
         children: <Widget>[
-          Tooltip(
-            message: state.configured
-                ? 'Fetch road distances and the road line for this day'
-                : 'No Geoapify key is configured for this build',
-            child: OutlinedButton.icon(
-              onPressed: enabled ? state.onRefresh : null,
-              icon: state.busy
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.alt_route, size: 16),
-              label: Text(
-                state.busy ? 'Refreshing road route...' : 'Refresh road route',
-              ),
-            ),
+          Text(
+            'Distances are straight-line estimates.',
+            style: TextStyle(fontSize: 11.5, color: dso.muted),
           ),
-          if (state.error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                'Road route unavailable: ${state.error}',
-                style: TextStyle(fontSize: 11.5, color: dso.dangerText),
-              ),
+          if (onRetry != null)
+            TextButton(onPressed: onRetry, child: const Text('Try again')),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoStartLine extends StatelessWidget {
+  const _NoStartLine({required this.onOpenBranches});
+
+  final VoidCallback? onOpenBranches;
+
+  @override
+  Widget build(BuildContext context) {
+    final DsoColors dso = context.dso;
+    return Padding(
+      key: const ValueKey<String>('route_no_start_line'),
+      padding: const EdgeInsets.fromLTRB(16, 0, 8, 6),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 4,
+        children: <Widget>[
+          Text(
+            'No start point. Set a start point in Branches.',
+            style: TextStyle(fontSize: 11.5, color: dso.warningText),
+          ),
+          if (onOpenBranches != null)
+            TextButton(
+              onPressed: onOpenBranches,
+              child: const Text('Open Branches'),
             ),
         ],
       ),
@@ -775,51 +948,162 @@ class _RoadRefreshBar extends StatelessWidget {
   }
 }
 
-class _RoadNotesNotice extends StatelessWidget {
-  const _RoadNotesNotice({required this.notes, required this.onDismiss});
-  final List<String> notes;
-  final VoidCallback? onDismiss;
+class _StartRow extends StatelessWidget {
+  const _StartRow({
+    required this.start,
+    required this.day,
+    required this.dayColor,
+  });
+
+  final RouteStartPoint start;
+  final RouteDay day;
+  final Color dayColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final DsoColors dso = context.dso;
+    final RouteStop first = day.stops.first;
+    final int leaves =
+        routeClockMinutes(first.arrival) - first.travelMinutesFromPrevious;
+    String two(int v) => v.toString().padLeft(2, '0');
+    final String leavesAt = '${two(leaves ~/ 60)}:${two(leaves % 60)}';
+    return Container(
+      key: const ValueKey<String>('route_start_row'),
+      margin: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: dso.brandSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: dso.hairline),
+      ),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 26,
+            height: 26,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: dayColor, width: 2.5),
+            ),
+            child: Text(
+              'S',
+              style: TextStyle(
+                color: dayColor,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  'Start: ${start.name}',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: dso.ink,
+                  ),
+                ),
+                Text(
+                  'Leaves $leavesAt · first leg '
+                  '${first.legDistanceKm.toStringAsFixed(1)} km, '
+                  '${first.travelMinutesFromPrevious} min, '
+                  'counted in the day total',
+                  style: TextStyle(fontSize: 11.5, color: dso.muted),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OrderHintBar extends StatelessWidget {
+  const _OrderHintBar({required this.hint, required this.onUseShortest});
+
+  final RouteOrderHint hint;
+  final VoidCallback onUseShortest;
 
   @override
   Widget build(BuildContext context) {
     final DsoColors dso = context.dso;
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
       decoration: BoxDecoration(
         color: dso.warningSoft,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(
-              Icons.warning_amber_rounded,
-              size: 17,
-              color: dso.warningText,
-            ),
-          ),
-          const SizedBox(width: 8),
           Expanded(
             child: Text(
-              notes.join('\n'),
+              hint.message,
               style: TextStyle(
                 fontSize: 12,
-                height: 1.4,
+                height: 1.35,
                 fontWeight: FontWeight.w600,
                 color: dso.warningText,
               ),
             ),
           ),
-          if (onDismiss != null)
-            IconButton(
-              tooltip: 'Dismiss',
-              visualDensity: VisualDensity.compact,
-              icon: Icon(ScootIcons.close, size: 16, color: dso.warningText),
-              onPressed: onDismiss,
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: onUseShortest,
+            child: Text(hint.exact ? 'Use shortest' : 'Use shorter order'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReturnLeg extends StatelessWidget {
+  const _ReturnLeg({
+    required this.start,
+    required this.day,
+    required this.dayColor,
+  });
+
+  final RouteStartPoint start;
+  final RouteDay day;
+  final Color dayColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final DsoColors dso = context.dso;
+    return Padding(
+      padding: const EdgeInsets.only(left: 21, top: 2, bottom: 2),
+      child: Row(
+        children: <Widget>[
+          SizedBox(
+            width: 2,
+            height: 22,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: dayColor.withValues(alpha: 0.45),
+              ),
             ),
+          ),
+          const SizedBox(width: 12),
+          Icon(Icons.trip_origin, size: 12, color: dso.subtle),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'End: back at ${start.name} ${routeDayBackAtLabel(day)} · '
+              '${day.returnLegDistanceKm.toStringAsFixed(1)} km · '
+              '~${day.returnTravelMinutes} min',
+              key: const ValueKey<String>('route_end_row'),
+              style: TextStyle(fontSize: 11.5, color: dso.muted),
+            ),
+          ),
         ],
       ),
     );
@@ -915,6 +1199,7 @@ class _StopTile extends StatelessWidget {
     required this.stop,
     required this.showConnector,
     required this.first,
+    required this.firstLegLabel,
     required this.dayColor,
     required this.editable,
     required this.hovered,
@@ -923,12 +1208,17 @@ class _StopTile extends StatelessWidget {
     required this.status,
     required this.segmentBadge,
     required this.onRemove,
+    required this.moveTargets,
+    required this.onMove,
   });
 
+  final List<(int, String)> moveTargets;
+  final ValueChanged<int>? onMove;
   final int index;
   final RouteStop stop;
   final bool showConnector;
   final bool first;
+  final String firstLegLabel;
   final Color dayColor;
   final bool editable;
   final ValueListenable<int?> hovered;
@@ -941,7 +1231,12 @@ class _StopTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final DsoColors dso = context.dso;
-    final List<String> chips = routeReasonChips(stop.reason);
+    final bool formulaReason = stop.reason.trim().toLowerCase().startsWith(
+      'prioritised:',
+    );
+    final List<String> chips = formulaReason
+        ? routeReasonChips(stop.reason)
+        : const <String>[];
     final String leg =
         stop.legDistanceKm > 0 || stop.travelMinutesFromPrevious > 0
         ? '${stop.legDistanceKm.toStringAsFixed(1)} km · ~${stop.travelMinutesFromPrevious} min'
@@ -970,9 +1265,11 @@ class _StopTile extends StatelessWidget {
                   color: dso.subtle,
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  first ? 'From start point · $leg' : leg,
-                  style: TextStyle(fontSize: 11.5, color: dso.muted),
+                Flexible(
+                  child: Text(
+                    first ? '$firstLegLabel · $leg' : leg,
+                    style: TextStyle(fontSize: 11.5, color: dso.muted),
+                  ),
                 ),
               ],
             ),
@@ -1061,7 +1358,11 @@ class _StopTile extends StatelessWidget {
                           const SizedBox(height: 3),
                           Row(
                             children: <Widget>[
-                              Icon(ScootIcons.clock, size: 13, color: dso.muted),
+                              Icon(
+                                ScootIcons.clock,
+                                size: 13,
+                                color: dso.muted,
+                              ),
                               const SizedBox(width: 4),
                               Text(
                                 '${stop.arrival} – ${stop.departure}',
@@ -1086,15 +1387,51 @@ class _StopTile extends StatelessWidget {
                               for (final String c in chips) _ReasonChip(c),
                             ],
                           ),
+                          if (!formulaReason && stop.reason.trim().isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: _ExpandableReason(stop.reason.trim()),
+                            ),
                         ],
                       ),
                     ),
+                    if (editable && onMove != null && moveTargets.isNotEmpty)
+                      PopupMenuButton<int>(
+                        tooltip: 'Move ${stop.retailerName} to another day',
+                        padding: EdgeInsets.zero,
+                        onSelected: onMove,
+                        itemBuilder: (BuildContext context) =>
+                            <PopupMenuEntry<int>>[
+                              for (final (int dayIndex, String label)
+                                  in moveTargets)
+                                PopupMenuItem<int>(
+                                  value: dayIndex,
+                                  child: Text('Move to $label'),
+                                ),
+                            ],
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                        icon: Icon(
+                          Icons.event_repeat_outlined,
+                          size: 18,
+                          color: dso.muted,
+                        ),
+                      ),
                     if (editable)
                       IconButton(
                         tooltip: 'Remove ${stop.retailerName}',
-                        visualDensity: VisualDensity.compact,
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
                         onPressed: onRemove,
-                        icon: Icon(ScootIcons.close, size: 16, color: dso.muted),
+                        icon: Icon(
+                          ScootIcons.close,
+                          size: 18,
+                          color: dso.muted,
+                        ),
                       ),
                   ],
                 ),
@@ -1103,6 +1440,66 @@ class _StopTile extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ExpandableReason extends StatefulWidget {
+  const _ExpandableReason(this.text);
+  final String text;
+
+  @override
+  State<_ExpandableReason> createState() => _ExpandableReasonState();
+}
+
+class _ExpandableReasonState extends State<_ExpandableReason> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final DsoColors dso = context.dso;
+    final TextStyle style = TextStyle(
+      fontSize: 11.5,
+      height: 1.35,
+      color: dso.body,
+    );
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints box) {
+        final TextPainter painter = TextPainter(
+          text: TextSpan(text: widget.text, style: style),
+          maxLines: 2,
+          textDirection: Directionality.of(context),
+        )..layout(maxWidth: box.maxWidth);
+        final bool long = painter.didExceedMaxLines;
+        painter.dispose();
+        final Widget text = Text(
+          widget.text,
+          maxLines: _open || !long ? null : 2,
+          overflow: _open || !long ? null : TextOverflow.ellipsis,
+          style: style,
+        );
+        if (!long) return text;
+        return Semantics(
+          button: true,
+          label: _open ? 'Show less' : 'Show the full reason',
+          child: InkWell(
+            onTap: () => setState(() => _open = !_open),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                text,
+                Text(
+                  _open ? 'Show less' : 'Show more',
+                  style: style.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: dso.accentText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -1214,10 +1611,12 @@ class RoutePlanFooter extends StatelessWidget {
     required this.onPublish,
     required this.onWithdraw,
     required this.onBackToDraft,
+    this.onDeleteDraft,
     this.readOnly = false,
   });
 
   final bool readOnly;
+  final VoidCallback? onDeleteDraft;
 
   final String status;
   final String title;
@@ -1279,6 +1678,12 @@ class RoutePlanFooter extends StatelessWidget {
                   label: const Text('Withdraw to edit'),
                 )
               else ...<Widget>[
+                if (draft && saved && onDeleteDraft != null)
+                  TextButton.icon(
+                    onPressed: saving ? null : onDeleteDraft,
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Delete draft'),
+                  ),
                 if (approved)
                   OutlinedButton.icon(
                     onPressed: saving ? null : onBackToDraft,

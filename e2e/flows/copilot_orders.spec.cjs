@@ -40,7 +40,7 @@ const SHOPS = {
   emart: { id: RETAILERS[1].id, name: RETAILERS[1].name },
   formula: { id: 'ret-formula', name: '=SUM(1,2) Kedai Formula' },
 };
-const SUBMITTED = new Set(['', 'submitted', 'pending', 'pending_approval']);
+const SUBMITTED = new Set(['submitted', 'pending', 'pending_approval', 'held_for_review']);
 const WAITING = new Set(['submitted', 'pending', 'pending_approval', 'held_for_review']);
 
 module.exports = {
@@ -175,7 +175,7 @@ module.exports = {
         const mine = pick((o) => o.who === 'ahmadAli' && thisWeek(o));
         expectEqual(mine.length, 12, 'expected orders');
         await ask('the first one', resultLine(12, 'Ahmad bin Ali \\(S002\\)', 'this week \\('));
-        await B.see(page(), /4 submitted, 6 approved, 2 rejected/);
+        await B.see(page(), /3 submitted, 6 approved, 2 rejected, 1 other/);
         await t.shot(adminS, 'ahmad-this-week');
       });
 
@@ -302,7 +302,36 @@ module.exports = {
         await B.see(page(), new RegExp(`${shop.length} orders, ${rm(total).replace('.', '\\.')} \\(average ${rm(total / live.length).replace('.', '\\.')}\\)`));
         await B.see(page(), new RegExp(`Waiting for approval: ${waiting.length} orders, ${rm(waitingValue).replace('.', '\\.')}`));
         await B.see(page(), /Ordered by: Ahmad bin Ali \(4\), Gopal a\/l Muthu \(3\)/);
-        await B.see(page(), /1\. ORD-E2E-/);
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const two = (n) => String(n).padStart(2, '0');
+        const rowText = (o, i) => {
+          const kl = new Date(o.ts + KL_MS);
+          const when = `${dayNames[kl.getUTCDay()]} ${kl.getUTCDate()} ${monthNames[kl.getUTCMonth()]} ${two(kl.getUTCHours())}:${two(kl.getUTCMinutes())}`;
+          return `${i + 1}. ${when} · ${rm(value(o))} · ${o.status === '' ? 'no status' : o.status}`;
+        };
+        for (const [i, o] of shop.entries()) {
+          await B.see(page(), new RegExp(`^${rowText(o, i).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
+          await buttons(`Open order ${o.id}`).waitFor();
+        }
+        expectEqual(await page().getByText(new RegExp(`^\\d+\\. ORD-E2E-`)).count(), 0, 'order ids inside the brief rows');
+        const last = shop[shop.length - 1];
+        const dialogs = page().getByRole('dialog');
+        const dialogsBefore = await dialogs.count();
+        await buttons(`Open order ${last.id}`).click();
+        const opened = Date.now() + 20000;
+        while (Date.now() < opened && (await dialogs.count()) <= dialogsBefore) await page().waitForTimeout(150);
+        expectEqual((await dialogs.count()) > dialogsBefore, true, 'the open-order button opened a dialog');
+        const dialog = dialogs.last();
+        const lastKl = new Date(last.ts + KL_MS);
+        const submittedAt = `${two(lastKl.getUTCDate())}/${two(lastKl.getUTCMonth() + 1)}/${lastKl.getUTCFullYear()} ${two(lastKl.getUTCHours())}:${two(lastKl.getUTCMinutes())}`;
+        for (const text of [PEOPLE[last.who].name, submittedAt, rm(value(last))]) {
+          await dialog.getByText(text).or(dialog.getByLabel(text)).first().waitFor({ timeout: 20000 });
+        }
+        await page().keyboard.press('Escape');
+        const closed = Date.now() + 10000;
+        while (Date.now() < closed && (await dialogs.count()) > dialogsBefore) await page().waitForTimeout(150);
+        expectEqual(await dialogs.count(), dialogsBefore, 'dialogs after closing the opened order');
         await say('export these');
         await B.see(page(), new RegExp(`Download ${shop.length} orders`));
         await buttons('Cancel').click();

@@ -9,15 +9,12 @@ const KEYS = {
   termsAndConditions: { english: 'termsEnglish', malay: 'termsMalay' },
 };
 const BUTTONS = { english: 'English', malay: 'Bahasa Malaysia' };
+const REMOVED_LINES = /legal review|semakan undang-undang|semakan peguam|versioned application|This text is a draft|Teks ini ialah draf/i;
 
 function expectedLegal() {
   const text = fs.readFileSync(SOURCE, 'utf8');
   const version = /const String legalVersion = '([^']+)';/.exec(text)[1];
   const date = /const String legalDate = '([^']+)';/.exec(text)[1];
-  const statuses = {
-    english: /const String _englishStatus = '([^']+)';/.exec(text)[1],
-    malay: /const String _malayStatus = '([^']+)';/.exec(text)[1],
-  };
   const starts = [...text.matchAll(/const LegalText (\w+) = LegalText\(/g)];
   const blocks = {};
   starts.forEach((match, index) => {
@@ -37,7 +34,6 @@ function expectedLegal() {
       documents[document][language] = {
         ...block,
         versionLine: `${block.versionLabel} ${version} · ${date}`,
-        status: statuses[language],
       };
     }
   }
@@ -79,11 +75,15 @@ async function checkLegalDocument(page, document, shot) {
     await page.getByRole('button', { name: BUTTONS[language], exact: true }).first().click();
     await page.waitForTimeout(600);
     if (shot) await shot(`${document}-${language}`);
-    const wanted = [want.title, want.versionLine, want.status, ...want.headings];
+    const wanted = [want.title, want.versionLine, ...want.headings];
     const lines = await readWhileScrolling(page, wanted);
     const missing = wanted.filter((item) => !lines.some((line) => line.includes(item)));
     if (missing.length) {
       throw new Error(`${document} in ${language} is missing ${missing.length} of ${wanted.length} expected lines: ${JSON.stringify(missing.slice(0, 5))}`);
+    }
+    const removed = lines.filter((line) => REMOVED_LINES.test(line));
+    if (removed.length) {
+      throw new Error(`${document} in ${language} still shows removed text: ${JSON.stringify(removed.slice(0, 3))}`);
     }
     report[language] = { versionLine: want.versionLine, title: want.title, headings: want.headings.length };
   }

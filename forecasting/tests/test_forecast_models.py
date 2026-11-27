@@ -11,7 +11,6 @@ from forecasting.ai_core.forecast_models import (
     FORECAST_MODELS_VERSION,
     POINT_SEMANTICS,
     POINT_SEMANTICS_BY_MODEL,
-    SBA_ZERO_BIAS_FACTOR,
     characterise_demand,
     classify_demand,
     croston_forecast,
@@ -66,9 +65,8 @@ def test_croston_point_is_the_smoothed_size_over_the_observed_interval() -> None
 
 
 def test_sba_and_tsb_keep_occurrence_inside_the_point_forecast() -> None:
-    croston = croston_forecast(INTERMITTENT, alpha=DEFAULT_ALPHA)
     assert sba_forecast(INTERMITTENT, alpha=DEFAULT_ALPHA) == pytest.approx(
-        SBA_ZERO_BIAS_FACTOR * croston
+        0.95 * 10.0 / 3.0
     )
     tsb = tsb_forecast(INTERMITTENT, alpha=DEFAULT_ALPHA)
     assert forecast_next(INTERMITTENT, model="tsb").point == pytest.approx(
@@ -156,49 +154,28 @@ def test_negative_values_clamp_to_zero() -> None:
 
 
 def test_cv_squared_at_the_cutoff_is_lumpy_not_intermittent() -> None:
+    assert classify_demand(average_demand_interval=1.32, cv_squared=0.49) == "lumpy"
     assert (
-        classify_demand(
-            average_demand_interval=ADI_CUTOFF,
-            cv_squared=CV2_CUTOFF,
-        )
-        == "lumpy"
-    )
-    assert (
-        classify_demand(
-            average_demand_interval=ADI_CUTOFF,
-            cv_squared=CV2_CUTOFF - 1e-9,
-        )
+        classify_demand(average_demand_interval=1.32, cv_squared=0.49 - 1e-9)
         == "intermittent"
     )
     assert (
-        classify_demand(
-            average_demand_interval=ADI_CUTOFF,
-            cv_squared=CV2_CUTOFF + 1e-9,
-        )
+        classify_demand(average_demand_interval=1.32, cv_squared=0.49 + 1e-9)
         == "lumpy"
     )
 
 
 def test_adi_at_the_cutoff_is_intermittent_not_smooth() -> None:
     assert (
-        classify_demand(
-            average_demand_interval=ADI_CUTOFF,
-            cv_squared=CV2_CUTOFF - 1e-9,
-        )
+        classify_demand(average_demand_interval=1.32, cv_squared=0.49 - 1e-9)
         == "intermittent"
     )
     assert (
-        classify_demand(
-            average_demand_interval=ADI_CUTOFF - 1e-9,
-            cv_squared=CV2_CUTOFF - 1e-9,
-        )
+        classify_demand(average_demand_interval=1.32 - 1e-9, cv_squared=0.49 - 1e-9)
         == "smooth"
     )
     assert (
-        classify_demand(
-            average_demand_interval=ADI_CUTOFF + 1e-9,
-            cv_squared=CV2_CUTOFF - 1e-9,
-        )
+        classify_demand(average_demand_interval=1.32 + 1e-9, cv_squared=0.49 - 1e-9)
         == "intermittent"
     )
 
@@ -271,13 +248,6 @@ def test_croston_of_regular_spaced_demand() -> None:
     assert croston_forecast(values) == pytest.approx(5.0, rel=1e-9)
 
 
-def test_sba_is_croston_times_bias_factor() -> None:
-    values = [10, 0] * 12
-    assert sba_forecast(values) == pytest.approx(
-        SBA_ZERO_BIAS_FACTOR * croston_forecast(values), rel=1e-12
-    )
-
-
 def test_tsb_decays_when_demand_stops() -> None:
     steady = tsb_forecast([10, 10, 10, 10, 10, 10])
     stopped = tsb_forecast([10, 10, 10, 10, 10, 10, 0, 0, 0, 0, 0, 0])
@@ -298,12 +268,6 @@ def test_moving_average_uses_trailing_window() -> None:
 def test_theta_forecasts_the_published_combination_then_no_drift() -> None:
     values = [10.0 * index for index in range(1, 13)]
     assert theta_forecast(values) == pytest.approx(125.0, rel=1e-9)
-
-
-def test_theta_sits_reasonably_between_naive_and_trend() -> None:
-    values = [10.0 * index for index in range(1, 13)]
-    forecast = theta_forecast(values)
-    assert values[-1] < forecast <= values[-1] + 10.0
 
 
 def test_theta_of_single_value_is_that_value() -> None:

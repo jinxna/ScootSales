@@ -310,7 +310,7 @@ const List<ScootNavGroup> supervisorNav = <ScootNavGroup>[
       ),
       ScootNavItem(
         id: 'weekly-summary',
-        label: 'Weekly AI summary',
+        label: 'Weekly summary',
         icon: ScootIcons.copilot,
       ),
       ScootNavItem(id: 'reports', label: 'Reports', icon: ScootIcons.reports),

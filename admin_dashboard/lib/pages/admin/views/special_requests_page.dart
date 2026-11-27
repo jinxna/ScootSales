@@ -7,6 +7,7 @@ import '../../../models/user_profile.dart';
 import '../../../repositories/cms_repository.dart';
 import '../../../repositories/catalogue_product_repository.dart';
 import '../../../utils/app_logger.dart';
+import '../../../utils/person_display_name.dart';
 import '../../../utils/snapshot_load_state.dart';
 import '../../../utils/user_facing_error.dart';
 import '../widgets/order_details_dialog.dart';
@@ -375,6 +376,41 @@ class _SpecialRequestsPageState extends State<SpecialRequestsPage> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _usersStream,
+      builder:
+          (
+            BuildContext context,
+            AsyncSnapshot<List<Map<String, dynamic>>> people,
+          ) => _requestsView(people.data ?? const <Map<String, dynamic>>[]),
+    );
+  }
+
+  List<Map<String, dynamic>> _withSalespersonNames(
+    List<Map<String, dynamic>> rows,
+    List<Map<String, dynamic>> people,
+  ) {
+    if (people.isEmpty) return rows;
+    return <Map<String, dynamic>>[
+      for (final Map<String, dynamic> row in rows)
+        if (_text(row['salesmanName']).isEmpty ||
+            _text(row['salesmanName']).contains('@'))
+          <String, dynamic>{
+            ...row,
+            'salesmanName': _nameOrEmpty(_text(row['salesmanCode']), people),
+          }
+        else
+          row,
+    ];
+  }
+
+  String _nameOrEmpty(String code, List<Map<String, dynamic>> people) {
+    final String name = personNameForCode(code, people);
+    if (name == code) return '';
+    return name.startsWith('No name set') ? 'No name set' : name;
+  }
+
+  Widget _requestsView(List<Map<String, dynamic>> people) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _requestsStream,
       builder:
           (
@@ -395,7 +431,10 @@ class _SpecialRequestsPageState extends State<SpecialRequestsPage> {
               onRetry: () => setState(() {
                 _requestsStream = _openRequests();
               }),
-              rows: snapshot.data ?? <Map<String, dynamic>>[],
+              rows: _withSalespersonNames(
+                snapshot.data ?? <Map<String, dynamic>>[],
+                people,
+              ),
               isBranchManager: widget.currentUser.isBranchManager,
               isAdmin: widget.currentUser.isAdmin,
               canDecide: (Map<String, dynamic> row) =>

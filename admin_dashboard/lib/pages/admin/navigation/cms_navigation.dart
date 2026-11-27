@@ -16,6 +16,7 @@ class CmsNavItem {
     this.basicDescription,
     this.section = '',
     this.keywords = const <String>[],
+    this.factInHeader = true,
   }) : _description = description;
 
   final DashboardPage page;
@@ -34,6 +35,8 @@ class CmsNavItem {
 
   final List<String> keywords;
 
+  final bool factInHeader;
+
   String get key => page.key;
 
   CmsNavItem inSection(String title) => CmsNavItem(
@@ -45,10 +48,13 @@ class CmsNavItem {
     basicDescription: basicDescription,
     section: title,
     keywords: keywords,
+    factInHeader: factInHeader,
   );
 
   String get description =>
       isBasicEdition ? basicDescription ?? _description : _description;
+
+  String get headerFact => factInHeader ? description : '';
 
   String get searchText =>
       '$label $title $description $section ${keywords.join(' ')}'.toLowerCase();
@@ -353,7 +359,8 @@ const List<CmsNavItem> _adminItems = <CmsNavItem>[
     icon: ScootIcons.privacy,
     section: sectionSettings,
     title: 'Privacy Policy',
-    description: 'Read the versioned application privacy notice.',
+    description: 'How Scoot Sales collects, uses and protects your data.',
+    factInHeader: false,
   ),
   CmsNavItem(
     page: DashboardPage.termsConditions,
@@ -361,7 +368,8 @@ const List<CmsNavItem> _adminItems = <CmsNavItem>[
     icon: ScootIcons.document,
     section: sectionSettings,
     title: 'Terms & Conditions',
-    description: 'Read the versioned application terms.',
+    description: 'The terms for using Scoot Sales.',
+    factInHeader: false,
   ),
   CmsNavItem(
     page: DashboardPage.banner,
@@ -473,9 +481,9 @@ const List<CmsNavItem> _supervisorItems = <CmsNavItem>[
   ),
   CmsNavItem(
     page: DashboardPage.teamAiSummary,
-    label: 'Weekly AI Summary',
+    label: 'Weekly Summary',
     icon: ScootIcons.reports,
-    title: 'Weekly AI Summary',
+    title: 'Weekly Summary',
     section: sectionMyTeam,
     description: 'Team AI outcomes, forecast accuracy and weekly risk history.',
   ),
@@ -571,6 +579,7 @@ const List<CmsNavItem> _supervisorItems = <CmsNavItem>[
     title: 'Privacy Policy',
     section: sectionSettings,
     description: 'How Scoot Sales collects, uses and protects your data.',
+    factInHeader: false,
   ),
   CmsNavItem(
     page: DashboardPage.termsConditions,
@@ -579,6 +588,7 @@ const List<CmsNavItem> _supervisorItems = <CmsNavItem>[
     title: 'Terms & Conditions',
     section: sectionSettings,
     description: 'The terms for using Scoot Sales.',
+    factInHeader: false,
   ),
   CmsNavItem(
     page: DashboardPage.product,
@@ -736,6 +746,7 @@ const List<CmsNavItem> _branchManagerItems = <CmsNavItem>[
     title: 'Privacy Policy',
     section: sectionSettings,
     description: 'How Scoot Sales collects, uses and protects your data.',
+    factInHeader: false,
   ),
   CmsNavItem(
     page: DashboardPage.termsConditions,
@@ -744,6 +755,7 @@ const List<CmsNavItem> _branchManagerItems = <CmsNavItem>[
     title: 'Terms & Conditions',
     section: sectionSettings,
     description: 'The terms for using Scoot Sales.',
+    factInHeader: false,
   ),
   CmsNavItem(
     page: DashboardPage.product,

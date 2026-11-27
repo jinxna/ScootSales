@@ -125,7 +125,6 @@ class _MobileCopilotPageState extends State<MobileCopilotPage> {
   final ScrollController _scroll = ScrollController();
   bool _wasListening = false;
   bool _expanded = true;
-  int _shownItems = 0;
   int _pendingConfirms = 0;
 
   int _ownRoutes = 0;
@@ -242,19 +241,15 @@ class _MobileCopilotPageState extends State<MobileCopilotPage> {
       setState(() => _expanded = false);
     }
     _pendingConfirms = confirms;
-    final int items = _c.messages.length + (_c.busy ? 1 : 0);
-    if (items != _shownItems) {
-      _shownItems = items;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scroll.hasClients) {
-          _scroll.animateTo(
-            _scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          );
-        }
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.animateTo(
+          _scroll.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   void _ask(String text) {

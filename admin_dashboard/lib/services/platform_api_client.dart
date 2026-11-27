@@ -918,6 +918,17 @@ class PlatformApiClient {
     );
   }
 
+  Future<void> removeProfile(
+    String docId, {
+    required String idempotencyKey,
+  }) async {
+    await _send(
+      'POST',
+      _adminUri(<String>['profiles', docId, 'remove']),
+      idempotencyKey: idempotencyKey,
+    );
+  }
+
   Future<PlanUsage> getUsage() async => PlanUsage.fromJson(
     _map(await _send('GET', _adminUri(<String>['usage']))),
   );

@@ -60,6 +60,8 @@ Map<String, dynamic> hydrateCartDraftItemForRuntime(
     'stock': stock,
     'expiry': data['expiry']?.toString() ?? '',
     'remarks': data['remarks']?.toString() ?? '',
+    if (data['suggestedReorderQty'] is int)
+      'suggestedReorderQty': data['suggestedReorderQty'],
     'shelfBatches': shelfBatches,
     'stockController': TextEditingController(text: stock.toString()),
   };

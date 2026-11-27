@@ -2,8 +2,28 @@
 
 const http = require('node:http');
 
-const PORT = 18765;
+const { ACCOUNTS, RETAILERS } = require('./seed.cjs');
+
+const PORT = require('./lane.cjs').ports.copilot;
 const ANSWERS = {
+  [`what made you put ${RETAILERS[0].name} on ${ACCOUNTS.salesman.name}'s route`.toLowerCase()]: {
+    name: 'route_why',
+    args: { retailer: RETAILERS[0].name, salesperson: ACCOUNTS.salesman.name },
+  },
+  [`give me the rundown on ${RETAILERS[1].name} before i go in`.toLowerCase()]: {
+    name: 'brief_retailer',
+    args: { retailer: RETAILERS[1].name },
+  },
+  [`where should ${ACCOUNTS.salesman.name} be heading next week`.toLowerCase()]: {
+    name: 'salesperson_visits',
+    args: { salesperson: ACCOUNTS.salesman.name, week: 'next_week' },
+  },
+  'any customers going quiet on us': { name: 'due_overview', args: {} },
+  [`bring up next week's schedule for ${ACCOUNTS.salesman.name}`.toLowerCase()]: {
+    name: 'open_planner',
+    args: { salesperson: ACCOUNTS.salesman.name, week: 'next_week' },
+  },
+  'which reps still need a schedule next week': { name: 'no_route', args: { week: 'next_week' } },
   'anything urgent for me right now': { name: 'daily_briefing', args: {} },
   'tell me more about number two': { name: 'explain_item', args: { position: 2 } },
   'park number two for later': { name: 'set_item_status', args: { position: 2, status: 'in_review' } },
@@ -13,6 +33,8 @@ const ANSWERS = {
   'send that to a spreadsheet': { name: 'export_results', args: {} },
   'what did choice supermarket sell': { name: 'search_orders', args: { salesperson: 'Choice Supermarket' } },
   'somewhere to see what customers sent us':{ name: 'navigate_to_page', args: { page: 'all_orders' } },
+  'refresh inventory': { name: 'navigate_to_page', args: { page: 'product' } },
+  'is there a report for returns': { name: 'navigate_to_page', args: { page: 'reports' } },
 };
 
 function start() {

@@ -299,7 +299,10 @@ TrustImpactReport deriveTrustImpactReport({
             ? 'Unavailable'
             : 'MAE ${weighted('meanAbsoluteError', 'mae').toStringAsFixed(2)} · MAPE ${mape == null ? 'not available' : '${mape.toStringAsFixed(1)}%'}',
         sampleSize: evaluated,
-        explanation: 'Forecasts compared with subsequently ordered quantity.',
+        explanation:
+            'Forecasts compared with the quantity ordered later. This '
+            'combines every stored week, so it differs from the latest-week '
+            'number on Demand Forecast.',
         available: evaluated > 0,
       ),
       ratioMetric(

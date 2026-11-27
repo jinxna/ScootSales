@@ -53,7 +53,9 @@ enum CopilotServerFailure {
   salespeopleLimit(
     'The salespeople at your company have used their share of assistant requests for today. It resets at midnight, Malaysia time.',
   ),
-  assistantUnavailable('The assistant is not available now. Try again later.'),
+  assistantUnavailable(
+    'The assistant did not answer this time. Ask again, or try one of these.',
+  ),
   waking('The server is waking up. Try again in a few seconds.'),
   requestRefused(
     'The assistant refused this request. Change the question and try again.',
@@ -61,7 +63,11 @@ enum CopilotServerFailure {
   assistantProblem('The assistant had a problem. Try again.'),
 
   unreachable('The Scout server is not available right now.'),
-  offline('No internet connection.');
+  offline(
+    kBasicEdition
+        ? 'This question needs a signal. Try: next stop, last order, follow-ups.'
+        : 'This question needs a signal. Try: next stop, brief, last order, follow-ups.',
+  );
 
   const CopilotServerFailure(this.message);
   final String message;
@@ -205,17 +211,15 @@ class MobileCopilotServer {
         : const <String, dynamic>{};
     switch (call['name']) {
       case 'navigate_to_page':
-        switch (a['page']) {
-          case 'route':
-            return const CopilotIntent(CopilotIntentKind.openRoute);
-          case 'orders':
-            return const CopilotIntent(CopilotIntentKind.openOrders);
-          case 'planner':
-            return const CopilotIntent(CopilotIntentKind.openPlanner);
-          case 'profile':
-            return const CopilotIntent(CopilotIntentKind.openProfile);
-        }
-        return none;
+        final CopilotIntentKind? page = switch (a['page']) {
+          'route' => CopilotIntentKind.openRoute,
+          'orders' => CopilotIntentKind.openOrders,
+          'planner' => CopilotIntentKind.openPlanner,
+          'profile' => CopilotIntentKind.openProfile,
+          _ => null,
+        };
+        if (page == null || !copilotAsksForPage(text, page)) return none;
+        return CopilotIntent(page);
       case 'search_orders':
         if ('${a['salesperson'] ?? ''}'.trim().isNotEmpty) {
           return const CopilotIntent(CopilotIntentKind.refuse);

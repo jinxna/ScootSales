@@ -64,6 +64,9 @@ class _SuccessfulRepository:
     def write_generation(self, result):
         return {"patterns": 0, "insights": 0, "runs": 1}
 
+    def read_scorecard_enabled(self):
+        return False
+
 
 def test_cli_returns_nonzero_and_records_structured_failure(
     monkeypatch,

@@ -6,6 +6,8 @@ from typing import Any, Mapping
 
 _PRODUCT_ID = re.compile(r"^[A-Za-z0-9_-]{1,200}$")
 _ENCODED_NAME = re.compile(r"^[A-Za-z0-9_-]{1,800}$")
+_QUANTITY = re.compile(r"[1-9][0-9]{0,2}")
+_UNIT_PRICE_CENTS = re.compile(r"[1-9][0-9]{0,8}")
 
 
 def authoritative_order_items(order: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -30,13 +32,13 @@ def authoritative_order_items(order: Mapping[str, Any]) -> list[dict[str, Any]]:
             or _ENCODED_NAME.fullmatch(parts[1]) is None
         ):
             return []
-        try:
-            quantity = int(parts[2])
-            unit_price_cents = int(parts[3])
-        except ValueError:
+        if (
+            _QUANTITY.fullmatch(parts[2]) is None
+            or _UNIT_PRICE_CENTS.fullmatch(parts[3]) is None
+        ):
             return []
-        if not 1 <= quantity <= 5 or not 1 <= unit_price_cents <= 999_999_999:
-            return []
+        quantity = int(parts[2])
+        unit_price_cents = int(parts[3])
         result.append(
             {
                 "productId": parts[0],

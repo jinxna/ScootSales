@@ -7,9 +7,9 @@ const mobile = require('../lib/mobile.cjs');
 const platform = require('../lib/platform.cjs');
 const directory = require('../lib/platform_api.cjs');
 
-const BUILD_PORT = 18765;
-const RECORD_PORT = 18780;
-const QUESTION = 'qwzx plorf blimmo';
+const BUILD_PORT = require('../lib/lane.cjs').ports.copilot;
+const RECORD_PORT = require('../lib/lane.cjs').ports.scoutRecord;
+const QUESTION = 'where can i look at my past work';
 
 function equal(actual, expected, label) {
   if (actual !== expected) throw new Error(`${label}: ${actual} != ${expected}`);
@@ -98,7 +98,7 @@ module.exports = {
         equal(buildServer.requests.length, 0, 'build address requests');
         const failed = await phone.page.evaluate(() => Array.from(document.querySelectorAll('flt-semantics'))
           .map((n) => (n.getAttribute('aria-label') || n.textContent || '').trim()).filter(Boolean));
-        equal(failed.some((x) => /Scout server is not available|No internet|waking up|had a problem/.test(x)), false, 'server error text shown');
+        equal(failed.some((x) => /Scout server is not available|No internet|This question needs a signal|waking up|had a problem/.test(x)), false, 'server error text shown');
       });
     } finally {
       await buildServer.close();

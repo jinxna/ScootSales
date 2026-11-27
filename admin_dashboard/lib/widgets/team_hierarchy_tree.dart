@@ -11,6 +11,9 @@ typedef TeamMoveHandler =
       TeamTreeSupervisor to,
     );
 
+typedef TeamOrphanHandler =
+    void Function(TeamTreeSalesman orphan, TeamTreeSupervisor supervisor);
+
 class TeamHierarchyTree extends StatelessWidget {
   const TeamHierarchyTree({
     super.key,
@@ -19,6 +22,7 @@ class TeamHierarchyTree extends StatelessWidget {
     this.title,
     this.branchLabel = 'your branch',
     this.onMove,
+    this.onRemoveOrphan,
   });
 
   final String managerName;
@@ -26,6 +30,7 @@ class TeamHierarchyTree extends StatelessWidget {
   final String? title;
   final String branchLabel;
   final TeamMoveHandler? onMove;
+  final TeamOrphanHandler? onRemoveOrphan;
 
   String get branchId =>
       hierarchy.supervisors.isEmpty ? '' : hierarchy.supervisors.first.branchId;
@@ -47,11 +52,7 @@ class TeamHierarchyTree extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _label(
-            dso,
-            ScootIcons.team,
-            title ?? '$managerName (you)',
-          ),
+          _label(dso, ScootIcons.team, title ?? '$managerName (you)'),
           if (sups.isEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 26, top: 6),
@@ -186,6 +187,18 @@ class TeamHierarchyTree extends StatelessWidget {
         ),
       ),
     );
+    final TeamOrphanHandler? removeOrphan = onRemoveOrphan;
+    if (!s.profileFound && from != null && removeOrphan != null) {
+      return Row(
+        children: <Widget>[
+          Flexible(child: text),
+          TextButton(
+            onPressed: () => removeOrphan(s, from),
+            child: const Text('Remove from team'),
+          ),
+        ],
+      );
+    }
     final TeamMoveHandler? move = onMove;
     if (move == null || s.uid.isEmpty || s.invited) return text;
     final String who = s.name.isEmpty ? s.code : s.name;

@@ -12,10 +12,11 @@ const PYTHON = process.env.E2E_PYTHON || (process.platform === 'win32' ? 'python
 const KEY_ID = 'e2e-1';
 const OTHER_KEY_ID = 'e2e-2';
 
-const PLATFORM_API_PORT = Number(process.env.PLATFORM_API_PORT) || 18790;
+const lane = require('./lane.cjs');
+const PLATFORM_API_PORT = Number(process.env.PLATFORM_API_PORT) || lane.ports.platformApi;
 const PLATFORM_API_URL = `http://127.0.0.1:${PLATFORM_API_PORT}`;
 
-const SERVICES = { copilotUrl: 'http://127.0.0.1:18765', forecastingUrl: 'http://127.0.0.1:18766' };
+const SERVICES = { copilotUrl: `http://127.0.0.1:${lane.ports.copilot}`, forecastingUrl: `http://127.0.0.1:${lane.ports.forecast}` };
 
 function python(args, { input, env } = {}) {
   const result = spawnSync(PYTHON, args, {

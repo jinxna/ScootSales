@@ -195,12 +195,27 @@ def test_remove_deletes_records_clears_lists_and_frees_the_seat(app, grid):
     assert not grid["db"].collection("user_access").document(made["uid"]).get().exists
     assert not grid["db"].collection("users").document("S100").get().exists
     assert doc(grid, "user_access", "sup-a")["assignedSalesmanCodes"] == []
-    user = company(PROJECT_A).auth.get_user(made["uid"])
-    assert user.disabled
+    with pytest.raises(admin_auth.UserNotFoundError):
+        company(PROJECT_A).auth.get_user(made["uid"])
     listed = app.get("/v1/w/northwind/accounts/reconcile", headers=bearer(admin)).json()
-    assert [row["uid"] for row in listed["authOnly"]] == [made["uid"]]
+    assert listed["authOnly"] == []
     assert post(app, admin, "accounts/admin-a/remove").status_code == 409
     assert post(app, admin, "accounts/nobody-here/remove").status_code == 404
+
+
+def test_remove_takes_the_code_out_of_every_team_list_that_holds_it(app, grid):
+    db = grid["db"]
+    db.collection("user_access").document("sup-a").update({"assignedSalesmanCodes": ["s001"]})
+    db.collection("users").document("SUP1").update({"assignedSalesmanCodes": ["s001"]})
+    db.collection("users").document("SUP2").set(
+        {"role": "supervisor", "employeeCode": "SUP2", "name": "SUP2", "assignedSalesmanCodes": ["S001", "S009"]}
+    )
+    done = post(app, grid["admin"], "accounts/sales-a/remove")
+    assert done.status_code == 200, done.text
+    assert not db.collection("users").document("S001").get().exists
+    assert doc(grid, "user_access", "sup-a")["assignedSalesmanCodes"] == []
+    assert doc(grid, "users", "SUP1")["assignedSalesmanCodes"] == []
+    assert doc(grid, "users", "SUP2")["assignedSalesmanCodes"] == ["S009"]
 
 
 

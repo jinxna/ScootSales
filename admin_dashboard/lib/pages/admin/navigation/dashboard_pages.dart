@@ -162,6 +162,7 @@ const List<NavSectionSpec> _adminSectionsBeforeSettings = <NavSectionSpec>[
   NavSectionSpec(sectionInsights, <DashboardPage>[
     DashboardPage.reports,
     DashboardPage.prediction,
+    DashboardPage.trustImpact,
   ]),
   NavSectionSpec(sectionCatalogue, <DashboardPage>[
     DashboardPage.product,
@@ -225,7 +226,6 @@ const Map<DashboardRole, RoleNav> kRoleNav = <DashboardRole, RoleNav>{
         DashboardPage.systemGovernance,
         DashboardPage.systemHealth,
         DashboardPage.auditLog,
-        DashboardPage.trustImpact,
       ]),
     ],
     deepLinks: _adminDeepLinks,

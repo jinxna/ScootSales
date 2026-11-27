@@ -9,7 +9,7 @@ const OUTPUT_TAG = process.env.E2E_OUTPUT_TAG || '';
 if (OUTPUT_TAG && !/^[a-z0-9][a-z0-9_-]{0,79}$/.test(OUTPUT_TAG)) {
   throw new Error('E2E_OUTPUT_TAG must be a single alphanumeric directory name');
 }
-const OUTPUT_DIR = path.resolve(__dirname, '..', 'output', OUTPUT_TAG);
+const OUTPUT_DIR = path.resolve(require('./lane.cjs').outputRoot, OUTPUT_TAG);
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
 
 function hostOf(value) {
@@ -44,8 +44,12 @@ function requireEmulators() {
   };
 }
 
+const STORED_DOUBLE = Symbol('stored double');
+const double = (value) => ({ [STORED_DOUBLE]: value });
+
 function toValue(x) {
   if (x === null || x === undefined) return { nullValue: null };
+  if (typeof x === 'object' && STORED_DOUBLE in x) return { doubleValue: x[STORED_DOUBLE] };
   if (typeof x === 'string') return { stringValue: x };
   if (typeof x === 'boolean') return { booleanValue: x };
   if (typeof x === 'number') return Number.isInteger(x) ? { integerValue: String(x) } : { doubleValue: x };
@@ -151,4 +155,4 @@ function client(project = PROJECT) {
   return { ...ep, put, get, del, list, waitForDoc, waitForQuery, reset, ensureUser };
 }
 
-module.exports = { PROJECT, PASSWORD, OUTPUT_DIR, requireEmulators, client, toValue, toFields, fromValue, fromFields };
+module.exports = { PROJECT, PASSWORD, OUTPUT_DIR, requireEmulators, client, double, toValue, toFields, fromValue, fromFields };

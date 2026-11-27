@@ -16,7 +16,7 @@ from .forecast_models import (
 )
 from .models import require_supported_series
 
-FORECAST_CONTRACT_VERSION = "operational-forecast/1.4.0"
+FORECAST_CONTRACT_VERSION = "operational-forecast/1.4.1"
 
 STATUS_OK = "ok"
 STATUS_INSUFFICIENT_HISTORY = "insufficient_history"
